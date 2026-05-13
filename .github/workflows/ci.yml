@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch / PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─── 1. Lint + build ───────────────────────────────────────────────────
+  lint-and-build:
+    name: Lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --all-targets
+
+  # ─── 2. Test (depends on lint-and-build) ───────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Unit + integration tests
+        run: cargo test --all-targets
+
+      - name: Doctests
+        run: cargo test --doc
+
+  # ─── 3. Docs (rustdoc build + doctests) ────────────────────────────────
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # `#![deny(rustdoc::broken_intra_doc_links)]` in lib.rs makes this fail
+      # the build on any broken intra-doc link.
+      - name: Build rustdoc
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Doctests
+        run: cargo test --doc
+
+  # ─── 4. Fuzz every target (matrix; short smoke runs) ───────────────────
+  fuzz:
+    name: Fuzz / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - zq_reduce
+          - zq_ops
+          - zq_const_vs_dyn
+          - zq_pow2_match
+          - zq_roundtrip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "fuzz -> fuzz/target"
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      - name: Fuzz ${{ matrix.target }} for 60s
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=60
+
+      # Persist any crashes / hangs / leaks as artifacts so they survive the
+      # runner being torn down.
+      - name: Upload fuzz artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+
+  # ─── 5. no_std compatibility ───────────────────────────────────────────
+  no-std:
+    name: no_std build
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Bare-metal target with neither `std` nor `alloc`. Building here
+          # catches any accidental `std::` / `alloc::` import in the crate
+          # or its dependency tree.
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build for thumbv7em-none-eabihf
+        run: cargo build --target thumbv7em-none-eabihf
