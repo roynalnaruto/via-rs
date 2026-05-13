@@ -68,6 +68,19 @@ jobs:
         run: cargo test --doc
 
   # ─── 4. Fuzz every target (matrix; short smoke runs) ───────────────────
+  #
+  # NOTE on the explicit `--target x86_64-unknown-linux-gnu`:
+  # `taiki-e/install-action` ships a musl-static `cargo-fuzz` binary, and
+  # cargo-fuzz's `default_target()` returns the triple it was compiled
+  # against — so without an override it would try to build the fuzz target
+  # for `x86_64-unknown-linux-musl`, which requires `x86_64-linux-musl-g++`
+  # (not present on ubuntu-latest). Forcing the gnu triple matches the
+  # runner's actual toolchain and uses the pre-installed `g++` for the
+  # libFuzzer C++ shim built by `libfuzzer-sys`.
+  #
+  # Alternative: drop the `--target` flag and instead install the musl
+  # toolchain (`sudo apt-get install -y musl-tools` + add the musl target
+  # via `dtolnay/rust-toolchain`). Slower; not chosen here.
   fuzz:
     name: Fuzz / ${{ matrix.target }}
     runs-on: ubuntu-latest
@@ -94,7 +107,11 @@ jobs:
           tool: cargo-fuzz
 
       - name: Fuzz ${{ matrix.target }} for 60s
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=60
+        run: |
+          cargo +nightly fuzz run \
+            --target x86_64-unknown-linux-gnu \
+            ${{ matrix.target }} \
+            -- -max_total_time=60
 
       # Persist any crashes / hangs / leaks as artifacts so they survive the
       # runner being torn down.
