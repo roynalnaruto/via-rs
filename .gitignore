@@ -1,5 +1,3 @@
-target
-
-.references
-
-.docs
+target/
+.references/
+.docs/
