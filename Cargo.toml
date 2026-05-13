@@ -4,3 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rand_core = { version = "0.6", default-features = false }
+subtle = { version = "2.6", default-features = false }
+zeroize = { version = "1.8", default-features = false, features = ["derive"] }
+
+# Keep the fuzz harness in its own workspace so libFuzzer's instrumentation
+# does not contaminate the main crate. `cargo +nightly fuzz run ...` operates
+# inside `fuzz/`; `cargo build` / `cargo test` from the repo root skip it.
+[workspace]
+members = ["."]
+exclude = ["fuzz"]
+
+[package.metadata.docs.rs]
+rustdoc-args = [
+    "--html-in-header",
+    "katex-header.html",
+]
