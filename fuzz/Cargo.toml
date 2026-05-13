@@ -1,0 +1,55 @@
+[package]
+name = "via-rs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Mark this as its own (empty) workspace so cargo doesn't try to fold it into
+# the main crate's workspace. The main Cargo.toml's `workspace.exclude` and
+# this empty table together produce a clean separation: the main crate ignores
+# fuzz/, and the fuzz crate ignores the main crate.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.4", features = ["derive"] }
+
+[dependencies.via-rs]
+path = ".."
+
+# Each fuzz target gets its own [[bin]] entry. `cargo fuzz add <name>` will
+# extend this list; we register the §0.1 targets up front so the harness is
+# self-contained from day one.
+
+[[bin]]
+name = "zq_reduce"
+path = "fuzz_targets/zq_reduce.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "zq_ops"
+path = "fuzz_targets/zq_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "zq_const_vs_dyn"
+path = "fuzz_targets/zq_const_vs_dyn.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "zq_pow2_match"
+path = "fuzz_targets/zq_pow2_match.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "zq_roundtrip"
+path = "fuzz_targets/zq_roundtrip.rs"
+test = false
+doc = false
