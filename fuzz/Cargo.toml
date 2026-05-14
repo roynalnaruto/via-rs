@@ -53,3 +53,29 @@ name = "zq_roundtrip"
 path = "fuzz_targets/zq_roundtrip.rs"
 test = false
 doc = false
+
+# §0.2 — RNS / double-CRT.
+
+[[bin]]
+name = "rns_roundtrip"
+path = "fuzz_targets/rns_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rns_ops"
+path = "fuzz_targets/rns_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rns_const_vs_dyn"
+path = "fuzz_targets/rns_const_vs_dyn.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rns_slice_ops"
+path = "fuzz_targets/rns_slice_ops.rs"
+test = false
+doc = false
