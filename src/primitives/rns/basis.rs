@@ -89,6 +89,14 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
     /// The subtraction is computed via [`Modulus::sub`] on the `m1()` modulus,
     /// which handles the unsigned wrap branchlessly. The lift then fits in
     /// `u128` by the range argument in [`RnsBasis::big_q`].
+    ///
+    /// The `a0_mod_q1 = m1.reduce_u64(a0)` step before the subtraction is
+    /// necessary precisely when `q0 ≥ q1` — then `a0 ∈ [0, q0)` may exceed
+    /// `q1` and must be reduced first so that [`Modulus::sub`]'s
+    /// `debug_assert!(a < q)` precondition holds. The paper convention places
+    /// the smaller prime as `q0`, making this a no-op for paper bases; the
+    /// `reconstruct_with_q0_greater_than_q1` test (`basis.rs`) exercises the
+    /// reverse-ordering path that [`DynRnsBasis::new`] also accepts.
     #[inline(always)]
     fn reconstruct(self, a0: u64, a1: u64) -> u128 {
         let q0 = self.m0().q();

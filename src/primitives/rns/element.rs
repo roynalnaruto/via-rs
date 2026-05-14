@@ -67,6 +67,21 @@ impl<B: RnsBasis> RnsZq<B> {
         unsafe { Self::from_reduced_unchecked(basis, v0, v1) }
     }
 
+    /// Construct an [`RnsZq`] from a signed `i64`, lifting into $[0, Q)$.
+    ///
+    /// Convenience over `from_i128(basis, x as i128)` — §1.x samplers
+    /// (ternary, bounded-uniform, discrete Gaussian) produce `i64` and
+    /// going through `i128` is awkward. Delegates to [`Modulus::reduce_i64`]
+    /// for each component, which is constant-time over `x` (see
+    /// `.docs/review.md` item 5 and the CT contract on the trait).
+    #[inline(always)]
+    pub fn from_i64(basis: B, x: i64) -> Self {
+        let v0 = basis.m0().reduce_i64(x);
+        let v1 = basis.m1().reduce_i64(x);
+        // SAFETY: `reduce_i64` always returns a value in `[0, q)`.
+        unsafe { Self::from_reduced_unchecked(basis, v0, v1) }
+    }
+
     /// Construct an [`RnsZq`] from a signed `i128`, lifting into $[0, Q)$.
     ///
     /// Useful at boundaries where samplers or centred representations produce
@@ -394,6 +409,30 @@ mod tests {
         assert_eq!((x * 7u64).to_u128(), (23 * 7) % 55);
         // Scalar 100 > both q0 and q1 — reduction kicks in.
         assert_eq!((x * 100u64).to_u128(), (23 * 100) % 55);
+    }
+
+    /// `from_i64` convenience constructor must agree with the equivalent
+    /// `from_i128(basis, x as i128)` path for every representative i64
+    /// input — including `i64::MIN` (which exercises the
+    /// `unsigned_abs → neg` CT path on the smaller integer width). Closes
+    /// review item 25.
+    #[test]
+    fn from_i64_matches_from_i128() {
+        let b = Z55::default();
+        for x in [0i64, 1, -1, 3, -3, 60, -60, 100, -100, i64::MAX, i64::MIN] {
+            let via_i64 = RnsZq::from_i64(b, x);
+            let via_i128 = RnsZq::from_i128(b, x as i128);
+            assert_eq!(via_i64, via_i128, "x = {x}");
+        }
+        // Paper basis sanity at the realistic 57-bit Q.
+        let b = paper::ViaQ1Rns::default();
+        for x in [0i64, 1, -1, 1234567890, -1234567890, i64::MAX, i64::MIN] {
+            assert_eq!(
+                RnsZq::from_i64(b, x),
+                RnsZq::from_i128(b, x as i128),
+                "x = {x}",
+            );
+        }
     }
 
     #[test]

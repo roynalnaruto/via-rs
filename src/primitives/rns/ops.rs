@@ -33,7 +33,9 @@ use super::basis::RnsBasis;
 ///
 /// # Panics
 ///
-/// Any per-prime length mismatch panics — see module-level docs.
+/// Any per-prime length mismatch panics — see module-level docs. Also
+/// panics if the two per-prime destinations differ in length, which would
+/// otherwise slip past the inner `zq::ops` triple-length checks.
 #[inline]
 pub fn add_slice<B: RnsBasis>(
     basis: B,
@@ -44,6 +46,11 @@ pub fn add_slice<B: RnsBasis>(
     rhs0: &[u64],
     rhs1: &[u64],
 ) {
+    assert_eq!(
+        dst0.len(),
+        dst1.len(),
+        "add_slice: cross-prime length mismatch (dst0 vs dst1)",
+    );
     zq::ops::add_slice(basis.m0(), dst0, lhs0, rhs0);
     zq::ops::add_slice(basis.m1(), dst1, lhs1, rhs1);
 }
@@ -59,6 +66,11 @@ pub fn sub_slice<B: RnsBasis>(
     rhs0: &[u64],
     rhs1: &[u64],
 ) {
+    assert_eq!(
+        dst0.len(),
+        dst1.len(),
+        "sub_slice: cross-prime length mismatch (dst0 vs dst1)",
+    );
     zq::ops::sub_slice(basis.m0(), dst0, lhs0, rhs0);
     zq::ops::sub_slice(basis.m1(), dst1, lhs1, rhs1);
 }
@@ -79,6 +91,11 @@ pub fn mul_slice<B: RnsBasis>(
     rhs0: &[u64],
     rhs1: &[u64],
 ) {
+    assert_eq!(
+        dst0.len(),
+        dst1.len(),
+        "mul_slice: cross-prime length mismatch (dst0 vs dst1)",
+    );
     zq::ops::mul_slice(basis.m0(), dst0, lhs0, rhs0);
     zq::ops::mul_slice(basis.m1(), dst1, lhs1, rhs1);
 }
@@ -92,6 +109,11 @@ pub fn neg_slice<B: RnsBasis>(
     src0: &[u64],
     src1: &[u64],
 ) {
+    assert_eq!(
+        dst0.len(),
+        dst1.len(),
+        "neg_slice: cross-prime length mismatch (dst0 vs dst1)",
+    );
     zq::ops::neg_slice(basis.m0(), dst0, src0);
     zq::ops::neg_slice(basis.m1(), dst1, src1);
 }
@@ -115,6 +137,11 @@ pub fn scalar_mul_slice<B: RnsBasis>(
     scalar0: u64,
     scalar1: u64,
 ) {
+    assert_eq!(
+        dst0.len(),
+        dst1.len(),
+        "scalar_mul_slice: cross-prime length mismatch (dst0 vs dst1)",
+    );
     zq::ops::scalar_mul_slice(basis.m0(), dst0, src0, scalar0);
     zq::ops::scalar_mul_slice(basis.m1(), dst1, src1, scalar1);
 }
@@ -452,5 +479,70 @@ mod tests {
         let mut dst1 = [0u64; 3];
         let src = [0u128; 4];
         decompose_slice(b, &mut dst0, &mut dst1, &src);
+    }
+
+    /// Cross-prime length mismatch: each prime side is internally
+    /// consistent (its triple matches), but the two destinations differ.
+    /// Without the new top-of-kernel guard this would have slipped past the
+    /// inner `zq::ops` triple-length checks. Closes review item 28.
+    #[test]
+    #[should_panic(expected = "cross-prime length mismatch")]
+    fn add_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3]; // different from dst0.len()
+        let lhs0 = [0u64; 4];
+        let lhs1 = [0u64; 3];
+        let rhs0 = [0u64; 4];
+        let rhs1 = [0u64; 3];
+        add_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime length mismatch")]
+    fn sub_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3];
+        let lhs0 = [0u64; 4];
+        let lhs1 = [0u64; 3];
+        let rhs0 = [0u64; 4];
+        let rhs1 = [0u64; 3];
+        sub_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime length mismatch")]
+    fn mul_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3];
+        let lhs0 = [0u64; 4];
+        let lhs1 = [0u64; 3];
+        let rhs0 = [0u64; 4];
+        let rhs1 = [0u64; 3];
+        mul_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime length mismatch")]
+    fn neg_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3];
+        let src0 = [0u64; 4];
+        let src1 = [0u64; 3];
+        neg_slice(b, &mut dst0, &mut dst1, &src0, &src1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime length mismatch")]
+    fn scalar_mul_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3];
+        let src0 = [0u64; 4];
+        let src1 = [0u64; 3];
+        scalar_mul_slice(b, &mut dst0, &mut dst1, &src0, &src1, 0, 0);
     }
 }

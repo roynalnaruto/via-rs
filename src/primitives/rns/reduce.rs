@@ -40,13 +40,16 @@ pub const fn gcd_u64(a: u64, b: u64) -> u64 {
 /// $r \in [0, n)$ with $r \cdot x \equiv 1 \pmod{n}$, or **`0`** when
 /// $\gcd(x, n) \ne 1$ (i.e. no inverse exists).
 ///
-/// # Invariants
+/// # Input handling
 ///
-/// Caller-side contracts:
-/// - `n >= 2`.
-/// - `x < n` (callers can enforce via `x % n` before invocation).
+/// - `n` must be `≥ 2`. `n ∈ {0, 1}` returns the `0` sentinel.
+/// - `x` may be **any** `u64` — the algorithm's first Euclidean step
+///   effectively reduces `x mod n`, so callers do not need to pre-reduce.
+///   Passing `x ≥ n` and passing `x % n` produce the same result.
+/// - Returns `0` when `x == 0` or `gcd(x mod n, n) > 1` (no inverse exists).
+///   Also returns `0` for `x == n` (the gcd test fails).
 ///
-/// The "return 0 on failure" sentinel lets the caller use a `const`-evaluated
+/// The `0` sentinel lets callers use a `const`-evaluated
 /// `assert!(mod_inverse_u64(...) != 0, ...)` to fail-fast at compile time —
 /// see [`super::basis::ConstRnsBasis`]'s `_CHECK` block.
 ///

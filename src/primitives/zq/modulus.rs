@@ -55,11 +55,15 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// # Invariants
     ///
-    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$.
+    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$. The precondition is
+    /// `debug_assert!`'d — release builds trust the caller. Use
+    /// [`Modulus::reduce_u64`] first if the inputs are unreduced.
     ///
     /// Requires $q < 2^{63}$ so that the unreduced sum fits in `u64`.
     #[inline(always)]
     fn add(self, a: u64, b: u64) -> u64 {
+        debug_assert!(a < self.q(), "Modulus::add: a >= q");
+        debug_assert!(b < self.q(), "Modulus::add: b >= q");
         cond_sub(a.wrapping_add(b), self.q())
     }
 
@@ -67,9 +71,12 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// # Invariants
     ///
-    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$.
+    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$. Precondition
+    /// `debug_assert!`'d.
     #[inline(always)]
     fn sub(self, a: u64, b: u64) -> u64 {
+        debug_assert!(a < self.q(), "Modulus::sub: a >= q");
+        debug_assert!(b < self.q(), "Modulus::sub: b >= q");
         let (diff, borrow) = a.overflowing_sub(b);
         cond_add(diff, self.q(), Choice::from(u8::from(borrow)))
     }
@@ -79,8 +86,10 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     /// # Invariants
     ///
     /// Input: $a \in [0, q)$. Output: $\in [0, q)$. Maps $0 \mapsto 0$.
+    /// Precondition `debug_assert!`'d.
     #[inline(always)]
     fn neg(self, a: u64) -> u64 {
+        debug_assert!(a < self.q(), "Modulus::neg: a >= q");
         // Branchless: q - a if a != 0, else 0. Use overflowing_sub and select.
         let (diff, _borrow) = self.q().overflowing_sub(a);
         let is_zero = Choice::from(u8::from(a == 0));
@@ -91,18 +100,27 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// # Invariants
     ///
-    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$. The intermediate
-    /// $a \cdot b$ is computed in `u128`, so no overflow occurs for any
-    /// $q \le 2^{64} - 1$.
+    /// Inputs: $a, b \in [0, q)$. Output: $\in [0, q)$. Precondition
+    /// `debug_assert!`'d. The intermediate $a \cdot b$ is computed in
+    /// `u128`, so no overflow occurs for any $q \le 2^{64} - 1$.
     #[inline(always)]
     fn mul(self, a: u64, b: u64) -> u64 {
+        debug_assert!(a < self.q(), "Modulus::mul: a >= q");
+        debug_assert!(b < self.q(), "Modulus::mul: b >= q");
         self.reduce_u128(u128::from(a) * u128::from(b))
     }
 
     /// Reduce an arbitrary `u64` value into $[0, q)$.
+    ///
+    /// Inputs in `[q, 2^64)` are explicitly accepted — samplers (§1.x) and
+    /// raw-bytes-to-Zq paths pass unreduced u64s. The default routes through
+    /// [`Modulus::reduce_u128`] (Barrett), which is correct for the full
+    /// u64 range under the §0.1 `q < 2^63` contract; the
+    /// [`PowerOfTwoModulus`] specialisation collapses to an unconditional
+    /// mask. Distinct from [`Modulus::add`] / `sub` / `mul`, which
+    /// `debug_assert!` that their inputs are already reduced.
     #[inline(always)]
     fn reduce_u64(self, x: u64) -> u64 {
-        // Use reduce_u128 so we cover x in [q, 2^64) uniformly.
         self.reduce_u128(u128::from(x))
     }
 
@@ -133,7 +151,8 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// # Invariants
     ///
-    /// Input: $a \in [0, q)$. Output: $\in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
+    /// Input: $a \in [0, q)$ (`debug_assert!`'d). Output:
+    /// $\in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
     /// Specifically, returns $a$ when $a \le \lfloor q/2 \rfloor$, else $a - q$.
     ///
     /// # Not constant-time
@@ -144,6 +163,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     /// `ModSwitch`) where the value is about to be revealed.
     #[inline(always)]
     fn to_centered_i64(self, a: u64) -> i64 {
+        debug_assert!(a < self.q(), "Modulus::to_centered_i64: a >= q");
         let q = self.q();
         if a <= q / 2 {
             a as i64
@@ -166,6 +186,14 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// at that boundary. Violations fail at monomorphisation via [`Self::_CHECK`],
 /// which is reached from every trait method ([`Modulus::q`] for the add /
 /// sub / neg path, [`Self::MU`] → [`barrett_mu`] for mul / reduce).
+///
+/// # Pow2 `Q`: prefer [`PowerOfTwoModulus`]
+///
+/// `ConstModulus<{1u64 << L}>` *compiles* — `_CHECK` is satisfied — but it
+/// silently uses Barrett reduction even though a single mask AND would
+/// suffice. Use [`PowerOfTwoModulus<L>`] for power-of-two moduli; the
+/// paper aliases already route correctly (`ViaQ4 = PowerOfTwoModulus<15>`,
+/// `ViaCP = PowerOfTwoModulus<4>`, etc.).
 ///
 /// # Example
 ///
@@ -282,17 +310,22 @@ impl<const LOG2_Q: u32> Modulus for PowerOfTwoModulus<LOG2_Q> {
 
     #[inline(always)]
     fn add(self, a: u64, b: u64) -> u64 {
+        debug_assert!(a < Self::Q, "PowerOfTwoModulus::add: a >= q");
+        debug_assert!(b < Self::Q, "PowerOfTwoModulus::add: b >= q");
         // Wrap-around plus mask is enough; no conditional subtract needed.
         a.wrapping_add(b) & Self::MASK
     }
 
     #[inline(always)]
     fn sub(self, a: u64, b: u64) -> u64 {
+        debug_assert!(a < Self::Q, "PowerOfTwoModulus::sub: a >= q");
+        debug_assert!(b < Self::Q, "PowerOfTwoModulus::sub: b >= q");
         a.wrapping_sub(b) & Self::MASK
     }
 
     #[inline(always)]
     fn neg(self, a: u64) -> u64 {
+        debug_assert!(a < Self::Q, "PowerOfTwoModulus::neg: a >= q");
         a.wrapping_neg() & Self::MASK
     }
 
@@ -627,6 +660,19 @@ mod tests {
         // Just under the boundary.
         assert_eq!(m.add(a, 1), 0);
         assert_eq!(m.add(a, 0), a);
+    }
+
+    /// `Modulus::add` `debug_assert!` precondition fires on unreduced input.
+    /// Locks the contract added in item 24: every release-build call site is
+    /// expected to pass `a, b ∈ [0, q)`; debug builds enforce it. (Only
+    /// included under `cfg(debug_assertions)` since the assert is compiled
+    /// out in release.)
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "Modulus::add: a >= q")]
+    fn modulus_add_debug_asserts_lhs_in_range() {
+        let m = DynModulus::new(17);
+        let _ = m.add(17, 5); // a == q violates the precondition.
     }
 
     /// `Modulus::mul` for inputs close to `q - 1` at the largest paper prime
