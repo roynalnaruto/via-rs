@@ -94,6 +94,10 @@ jobs:
           - zq_const_vs_dyn
           - zq_pow2_match
           - zq_roundtrip
+          - rns_roundtrip
+          - rns_ops
+          - rns_const_vs_dyn
+          - rns_slice_ops
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
