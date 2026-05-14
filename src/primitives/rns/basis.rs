@@ -136,8 +136,13 @@ pub struct ConstRnsBasis<const Q0: u64, const Q1: u64>;
 
 impl<const Q0: u64, const Q1: u64> ConstRnsBasis<Q0, Q1> {
     /// Compile-time validation block — see the struct docs for the asserted
-    /// invariants. Touched by [`Self::BIG_Q`] so that referencing the basis at
-    /// monomorphisation forces these checks.
+    /// invariants. Touched by both [`Self::BIG_Q`] and [`Self::Q0_INV_MOD_Q1`]
+    /// so that every reconstruction path (which routes through
+    /// `Q0_INV_MOD_Q1`) forces these checks at monomorphisation. Without the
+    /// `Q0_INV_MOD_Q1` trigger, a user with non-coprime `(Q0, Q1)` would
+    /// silently get `Q0_INV_MOD_Q1 = 0` and produce wrong reconstructions —
+    /// `BIG_Q` alone is not enough because the default
+    /// [`RnsBasis::big_q`] method bypasses it.
     const _CHECK: () = {
         assert!(Q0 >= 2, "ConstRnsBasis: Q0 >= 2");
         assert!(Q1 >= 2, "ConstRnsBasis: Q1 >= 2");
@@ -163,7 +168,16 @@ impl<const Q0: u64, const Q1: u64> ConstRnsBasis<Q0, Q1> {
     /// Precomputed Garner inverse $(Q_0 \bmod Q_1)^{-1} \bmod Q_1$, evaluated
     /// at compile time. Const-folds into immediate operands at every
     /// reconstruction call site.
-    pub const Q0_INV_MOD_Q1: u64 = mod_inverse_u64(Q0 % Q1, Q1);
+    ///
+    /// Touches [`Self::_CHECK`] before computing the inverse so that any
+    /// caller reaching this constant (the trait method
+    /// [`RnsBasis::q0_inv_mod_q1`] is the canonical path) fires the
+    /// coprimality / range invariants at monomorphisation rather than
+    /// silently producing the `0` sentinel.
+    pub const Q0_INV_MOD_Q1: u64 = {
+        let () = Self::_CHECK;
+        mod_inverse_u64(Q0 % Q1, Q1)
+    };
 
     /// First component modulus value (also reachable via [`RnsBasis::m0`]).
     pub const Q0: u64 = Q0;
