@@ -110,16 +110,22 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// Used by the ternary / bounded-uniform / discrete-Gaussian samplers
     /// (§1.x), which produce small signed integers that must be lifted into
-    /// $\mathbb{Z}_q$.
+    /// $\mathbb{Z}_q$. The *sign* of those samples is secret data (it
+    /// determines a coefficient of the secret key or error polynomial), so
+    /// this lift must not leak it through timing.
+    ///
+    /// # Constant-time
+    ///
+    /// Constant-time over `x`: both branches (magnitude and its negation
+    /// modulo `q`) are computed unconditionally and the result is selected
+    /// via [`subtle::ConditionallySelectable`]. `i64::unsigned_abs` is
+    /// itself branchless in `std` and correctly maps `i64::MIN` to `2^63`.
     #[inline(always)]
     fn reduce_i64(self, x: i64) -> u64 {
-        // `i64::unsigned_abs()` correctly handles `i64::MIN` (returns `2^63`).
         let magnitude = self.reduce_u64(x.unsigned_abs());
-        if x >= 0 {
-            magnitude
-        } else {
-            self.neg(magnitude)
-        }
+        let neg = self.neg(magnitude);
+        let is_negative = Choice::from(x.is_negative() as u8);
+        u64::conditional_select(&magnitude, &neg, is_negative)
     }
 
     /// Centered representation $\tilde a \in (-q/2, q/2]$ with
@@ -453,6 +459,25 @@ mod tests {
         assert_eq!(m.reduce_i64(-3), 14); // 17 - 3
         assert_eq!(m.reduce_i64(20), 3); // 20 mod 17
         assert_eq!(m.reduce_i64(-20), 14); // -(20 mod 17) mod 17 = -3 mod 17 = 14
+    }
+
+    /// `reduce_i64(i64::MIN)` exercises the `unsigned_abs → neg` path at its
+    /// most adversarial input — `i64::MIN.unsigned_abs() == 2^63`, one bit
+    /// above the largest representable signed magnitude. Closes the
+    /// `.docs/review.md` item 8 gap (and verifies the constant-time
+    /// rewrite preserves value semantics on the boundary).
+    #[test]
+    fn reduce_i64_min_extreme() {
+        // Several moduli to triangulate: a small prime, a paper $q_3$, and
+        // a pow2 (which routes through the mask `reduce_u64` override).
+        for q in [17u64, 8380417, 4096] {
+            let m = DynModulus::new(q);
+            let got = m.reduce_i64(i64::MIN);
+            let want = i64::MIN.rem_euclid(q as i64) as u64;
+            assert_eq!(got, want, "q = {q}");
+        }
+        // Pin the well-known case: 2^63 mod 17 = 9, so -2^63 mod 17 = 8.
+        assert_eq!(ConstModulus::<17>.reduce_i64(i64::MIN), 8);
     }
 
     #[test]

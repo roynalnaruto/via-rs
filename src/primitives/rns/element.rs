@@ -71,10 +71,21 @@ impl<B: RnsBasis> RnsZq<B> {
     ///
     /// Useful at boundaries where samplers or centred representations produce
     /// signed integers that must be lifted into $\mathbb{Z}_Q$.
+    ///
+    /// # Constant-time
+    ///
+    /// Constant-time over `x`: both branches (magnitude and its negation
+    /// modulo `Q`) are computed unconditionally and the result is selected
+    /// via [`subtle::ConditionallySelectable`]. `i128::unsigned_abs` is
+    /// itself branchless in `std` and correctly maps `i128::MIN` to
+    /// `2^127`. Mirrors the §0.1 [`Modulus::reduce_i64`] discipline; the
+    /// sign of `x` may be secret sampler output and must not leak.
     #[inline(always)]
     pub fn from_i128(basis: B, x: i128) -> Self {
         let magnitude = Self::from_u128(basis, x.unsigned_abs());
-        if x >= 0 { magnitude } else { -magnitude }
+        let neg = -magnitude;
+        let is_negative = Choice::from(x.is_negative() as u8);
+        Self::conditional_select(&magnitude, &neg, is_negative)
     }
 
     /// Construct an [`RnsZq`] from two `u64`s that are **already in canonical
@@ -396,6 +407,28 @@ mod tests {
         assert_eq!(RnsZq::from_i128(b, 0).to_u128(), 0);
         // 100 in Z_55 is 45.
         assert_eq!(RnsZq::from_i128(b, 100).to_u128(), 45);
+    }
+
+    /// `from_i128(i128::MIN)` exercises the `unsigned_abs → neg` path on
+    /// the most adversarial signed input — `i128::MIN.unsigned_abs() ==
+    /// 2^127`. Closes the `.docs/review.md` item 11 gap and verifies the
+    /// constant-time rewrite preserves value semantics on the boundary.
+    #[test]
+    fn from_i128_min_extreme() {
+        // Z_55 (toy) and the VIA q_1 paper basis (75-bit Q) — the latter
+        // confirms the path is well-defined at the realistic scale.
+        let b = Z55::default();
+        let got = RnsZq::from_i128(b, i128::MIN).to_u128();
+        let want = i128::MIN.rem_euclid(55) as u128;
+        assert_eq!(got, want);
+        // 2^127 mod 55 = 18, so -2^127 mod 55 = 37.
+        assert_eq!(got, 37);
+
+        let b = paper::ViaQ1Rns::default();
+        let q = b.big_q() as i128; // VIA q_1 ≈ 2^57 < 2^126, fits in i128.
+        let got = RnsZq::from_i128(b, i128::MIN).to_u128();
+        let want = i128::MIN.rem_euclid(q) as u128;
+        assert_eq!(got, want);
     }
 
     #[test]
