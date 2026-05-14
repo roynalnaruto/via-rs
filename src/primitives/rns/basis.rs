@@ -131,6 +131,18 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
 /// assert_eq!(b.decompose_u128(42), (2, 9));    // 42 mod 5, 42 mod 11
 /// assert_eq!(b.reconstruct(2, 9), 42);
 /// ```
+///
+/// # Compile-time rejection of invalid bases
+///
+/// Non-coprime moduli fail to compile because every reconstruction path
+/// routes through [`Self::Q0_INV_MOD_Q1`], which triggers the `_CHECK`
+/// validation block at monomorphisation:
+///
+/// ```compile_fail
+/// use via_rs::primitives::rns::basis::ConstRnsBasis;
+/// // gcd(6, 10) = 2 — fails the coprimality assertion in `_CHECK`.
+/// const _: u64 = ConstRnsBasis::<6, 10>::Q0_INV_MOD_Q1;
+/// ```
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct ConstRnsBasis<const Q0: u64, const Q1: u64>;
 
