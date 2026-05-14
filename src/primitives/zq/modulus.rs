@@ -153,6 +153,14 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// dispatch. The associated [`ConstModulus::MU`] is the Barrett constant
 /// $\mu = \lfloor 2^{128} / Q \rfloor$, evaluated at compile time.
 ///
+/// # Compile-time invariants
+///
+/// `Q ∈ [2, 2^63)`. For $Q = 2^{63}$ use [`PowerOfTwoModulus<63>`] instead —
+/// the mask reduction path does not need the Barrett slack and is correct
+/// at that boundary. Violations fail at monomorphisation via [`Self::_CHECK`],
+/// which is reached from every trait method ([`Modulus::q`] for the add /
+/// sub / neg path, [`Self::MU`] → [`barrett_mu`] for mul / reduce).
+///
 /// # Example
 ///
 /// ```rust
@@ -161,15 +169,41 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// assert_eq!(m.add(10, 12), 5); // (10 + 12) mod 17 = 22 mod 17 = 5
 /// assert_eq!(m.mul(5, 7), 1);   // (5 * 7) mod 17 = 35 mod 17 = 1
 /// ```
+///
+/// # Compile-time rejection of out-of-range `Q`
+///
+/// ```compile_fail
+/// use via_rs::primitives::zq::modulus::{ConstModulus, Modulus};
+/// // Q = 2^63 violates the §0.1 modulus range contract; barrett_mu refuses
+/// // to const-evaluate, so any use of `ConstModulus::<{1u64 << 63}>::MU`
+/// // fails to compile. Use `PowerOfTwoModulus<63>` instead.
+/// const _: u128 = ConstModulus::<{ 1u64 << 63 }>::MU;
+/// ```
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct ConstModulus<const Q: u64>;
 
 impl<const Q: u64> ConstModulus<Q> {
+    /// Compile-time validation block — see the struct docs. Touched by
+    /// [`Modulus::q`] (for the add / sub / neg path) and by [`Self::MU`]
+    /// (for the mul / reduce path, indirectly via [`barrett_mu`]) so every
+    /// monomorphised use of `ConstModulus<Q>` fires the range check.
+    const _CHECK: () = {
+        assert!(Q >= 2, "ConstModulus: Q >= 2");
+        assert!(
+            Q < 1u64 << 63,
+            "ConstModulus: Q < 2^63 (§0.1 modulus range contract); for Q = 2^63 use PowerOfTwoModulus<63>",
+        );
+    };
+
     /// Precomputed Barrett constant for $Q$ — see [`barrett_mu`].
     ///
     /// Compile-time evaluated; const-folds into immediate operands at every
-    /// call site.
-    pub const MU: u128 = barrett_mu(Q);
+    /// call site. Touches [`Self::_CHECK`] so the range invariants fire even
+    /// for trait paths that never reach [`barrett_mu`].
+    pub const MU: u128 = {
+        let () = Self::_CHECK;
+        barrett_mu(Q)
+    };
 
     /// The modulus value (also available via [`Modulus::q`]).
     pub const Q: u64 = Q;
@@ -178,6 +212,9 @@ impl<const Q: u64> ConstModulus<Q> {
 impl<const Q: u64> Modulus for ConstModulus<Q> {
     #[inline(always)]
     fn q(self) -> u64 {
+        // Force `_CHECK` evaluation at monomorphisation so the add / sub /
+        // neg path (which never touches `Self::MU`) still validates `Q`.
+        let () = Self::_CHECK;
         Q
     }
 
@@ -433,5 +470,51 @@ mod tests {
         assert_eq!(paper::ViaCQ1P1::Q, 274810798081);
         assert_eq!(paper::ViaCQ4::Q, 4096);
         assert_eq!(paper::ViaCP::Q, 16);
+    }
+
+    /// Pow2 `q = 2^63` is valid: the mask path doesn't need Barrett slack.
+    /// Documents the boundary policy paired with the `barrett_mu` panic
+    /// tests in `reduce.rs`.
+    #[test]
+    fn pow2_modulus_at_log63_boundary() {
+        let m = PowerOfTwoModulus::<63>;
+        assert_eq!(m.q(), 1u64 << 63);
+        // Worst-case add: (q-1) + (q-1) = 2q - 2; for q = 2^63 the unreduced
+        // sum is 2^64 - 2, which fits in u64 without wrapping. Mask to q-1.
+        let a = (1u64 << 63) - 1;
+        assert_eq!(m.add(a, a), (1u64 << 63) - 2);
+        assert_eq!(m.sub(0, 1), (1u64 << 63) - 1);
+        assert_eq!(m.mul(a, 2), (1u64 << 63) - 2); // ((2^63 - 1) * 2) mod 2^63
+        assert_eq!(m.neg(1), (1u64 << 63) - 1);
+    }
+
+    /// `DynModulus::new` at the pow2 boundary `q = 2^63` succeeds and agrees
+    /// with [`PowerOfTwoModulus<63>`]. Confirms the early-return branch is
+    /// not over-fenced.
+    #[test]
+    fn dyn_modulus_pow2_at_2_63_boundary_works() {
+        let pow = PowerOfTwoModulus::<63>;
+        let dyn_ = DynModulus::new(1u64 << 63);
+        assert_eq!(dyn_.q(), 1u64 << 63);
+        for (a, b) in [
+            (0u64, 0u64),
+            (1, 1),
+            ((1u64 << 63) - 1, 1),
+            ((1u64 << 63) - 1, (1u64 << 63) - 1),
+            (1u64 << 62, 1u64 << 62),
+        ] {
+            assert_eq!(pow.add(a, b), dyn_.add(a, b));
+            assert_eq!(pow.sub(a, b), dyn_.sub(a, b));
+            assert_eq!(pow.mul(a, b), dyn_.mul(a, b));
+        }
+    }
+
+    /// `DynModulus::new` for a non-pow2 modulus at-or-above `2^63` must
+    /// reject at construction — without this the non-pow2 Barrett path
+    /// would silently break the §0.1 add / mul correctness.
+    #[test]
+    #[should_panic(expected = "q < 2^63")]
+    fn dyn_modulus_panics_on_non_pow2_q_at_2_63() {
+        let _ = DynModulus::new((1u64 << 63) | 1);
     }
 }

@@ -32,14 +32,21 @@ use subtle::{Choice, ConditionallySelectable};
 ///
 /// # Invariants
 ///
-/// Input: $q \ge 2$. Output: $\mu = \lfloor 2^{128} / q \rfloor$ with
-/// $\mu < 2^{127}$ (since $q \ge 2$).
+/// Input: $q \in [2, 2^{63})$. Output: $\mu = \lfloor 2^{128} / q \rfloor$
+/// with $\mu < 2^{127}$ (since $q \ge 2$).
 ///
 /// # Panics
 ///
-/// Panics in `const` evaluation if `q < 2`. $q = 0$ has no residue ring;
-/// $q = 1$ has a trivial one (always returns 0) and should be short-circuited
-/// by the caller.
+/// Panics in `const` evaluation if either bound is violated:
+/// - `q < 2` — no residue ring ($q = 0$) or a trivial one ($q = 1$, always
+///   returns 0; callers should short-circuit).
+/// - `q >= 2^63` — would break the §0.1 modulus range contract (see the
+///   module-level "Modulus range constraints" note): the unreduced sum
+///   `a + b` in [`super::modulus::Modulus::add`] could overflow `u64`, and
+///   the Barrett slack proof (`q_hat ∈ {⌊x/q⌋ − 1, ⌊x/q⌋}`) no longer
+///   holds. Power-of-two moduli at $q = 2^{63}$ are still valid via
+///   [`super::modulus::PowerOfTwoModulus<63>`]'s mask path, which does not
+///   go through this constant.
 ///
 /// # Algorithm
 ///
@@ -51,6 +58,10 @@ use subtle::{Choice, ConditionallySelectable};
 #[inline]
 pub const fn barrett_mu(q: u64) -> u128 {
     assert!(q >= 2, "barrett_mu requires q >= 2");
+    assert!(
+        q < (1u64 << 63),
+        "barrett_mu requires q < 2^63 (§0.1 modulus range contract)",
+    );
     let q = q as u128;
     let approx = u128::MAX / q;
     // r = 2^128 mod q, computed as ((2^128 - 1) mod q + 1) mod q.
@@ -264,5 +275,38 @@ mod tests {
         assert_eq!(mask_reduce(0xDEADBEEFu128, 4), 0xF);
         assert_eq!(mask_reduce(0xDEADBEEFu128, 12), 0xEEF);
         assert_eq!(mask_reduce(u128::MAX, 32), u32::MAX as u64);
+    }
+
+    /// `barrett_mu` accepts `q` just under the §0.1 upper bound (`2^63 - 1`,
+    /// the largest representable non-pow2 modulus). Pairs with the panic
+    /// tests below to pin both boundaries.
+    #[test]
+    fn barrett_mu_accepts_just_below_bound() {
+        let q = (1u64 << 63) - 1; // 2^63 - 1, non-pow2.
+        let mu = barrett_mu(q);
+        // Sanity-check against the same reference used elsewhere.
+        assert_eq!(mu, reference_mu(q));
+        // Reduction round-trip at an extreme x.
+        let got = barrett_reduce(u128::MAX, q, mu);
+        let want = (u128::MAX % u128::from(q)) as u64;
+        assert_eq!(got, want);
+    }
+
+    /// `barrett_mu(2^63)` must panic — the slack proof for
+    /// [`barrett_reduce`] (and the §0.1 `Modulus::add` contract) require
+    /// `q < 2^63`. Pow2 `q = 2^63` is still valid via the mask path
+    /// ([`super::modulus::PowerOfTwoModulus<63>`]), which does not call
+    /// `barrett_mu`.
+    #[test]
+    #[should_panic(expected = "q < 2^63")]
+    fn barrett_mu_panics_on_q_at_2_63() {
+        let _ = barrett_mu(1u64 << 63);
+    }
+
+    /// Even one above the bound must panic — exercises the strict inequality.
+    #[test]
+    #[should_panic(expected = "q < 2^63")]
+    fn barrett_mu_panics_on_q_above_2_63() {
+        let _ = barrett_mu((1u64 << 63) | 1);
     }
 }
