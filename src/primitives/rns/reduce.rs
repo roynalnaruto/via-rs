@@ -173,4 +173,30 @@ mod tests {
         const INV: u64 = mod_inverse_u64(2, 17);
         assert_eq!((2 * INV) % 17, 1);
     }
+
+    /// The docstring claims callers can enforce `x < n` themselves, but the
+    /// implementation actually accepts `x ≥ n` and returns the inverse of
+    /// `x mod n`. Pin that behaviour. Closes review item 6.
+    #[test]
+    fn mod_inverse_handles_x_greater_than_or_equal_n() {
+        // 17 mod 11 = 6; 6^{-1} mod 11 = 2 (since 6 * 2 = 12 ≡ 1 mod 11).
+        let inv = mod_inverse_u64(17, 11);
+        assert_eq!(inv, 2);
+        assert_eq!((17 * inv) % 11, 1);
+        // Larger x: x = 3*n + r with r coprime to n.
+        let inv = mod_inverse_u64(3 * 17 + 4, 17);
+        // 3*17 + 4 mod 17 = 4; 4^{-1} mod 17 = 13 (4 * 13 = 52 = 3*17 + 1).
+        assert_eq!(inv, 13);
+    }
+
+    /// `mod_inverse_u64(x, x)` for `x ≥ 2` must return 0 — the algorithm
+    /// reaches `old_r = x`, fails the `old_r == 1` check, and falls through
+    /// to the sentinel. The existing zero-return tests cover `n ∈ {0, 1}`
+    /// and `gcd(x, n) > 1` cases but never `x == n`. Closes review item 7.
+    #[test]
+    fn mod_inverse_x_equals_n_returns_zero() {
+        for n in [2u64, 3, 17, 8380417, 274_810_798_081] {
+            assert_eq!(mod_inverse_u64(n, n), 0, "n={n}");
+        }
+    }
 }

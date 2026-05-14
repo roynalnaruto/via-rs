@@ -542,4 +542,110 @@ mod tests {
     fn dyn_modulus_panics_on_non_pow2_q_at_2_63() {
         let _ = DynModulus::new((1u64 << 63) | 1);
     }
+
+    /// `to_centered_i64` at the smallest legal modulus `q = 2`: residues
+    /// `{0, 1}` centre to `{0, 1}` (the (-1, 1] interval includes 1). Closes
+    /// review item 9 (lower boundary).
+    #[test]
+    fn to_centered_i64_q2_minimum() {
+        let m = DynModulus::new(2);
+        assert_eq!(m.to_centered_i64(0), 0);
+        assert_eq!(m.to_centered_i64(1), 1);
+    }
+
+    /// `to_centered_i64` at an even q (`q = 256`, the VIA plaintext modulus).
+    /// The boundary case: `a = 128 = q/2` maps to `128` (≤ q/2 path), and
+    /// `a = 129` maps to `129 - 256 = -127`. Closes review item 9 (even-q
+    /// boundary).
+    #[test]
+    fn to_centered_i64_even_q_boundary() {
+        let m = DynModulus::new(256);
+        assert_eq!(m.to_centered_i64(0), 0);
+        assert_eq!(m.to_centered_i64(128), 128);
+        assert_eq!(m.to_centered_i64(129), -127);
+        assert_eq!(m.to_centered_i64(255), -1);
+    }
+
+    /// `PowerOfTwoModulus<1>` is the smallest legal pow2 modulus (`q = 2`).
+    /// Closes review item 12 (lower boundary; the upper boundary `<63>` is
+    /// pinned by `pow2_modulus_at_log63_boundary` above).
+    #[test]
+    fn pow2_modulus_at_log1_boundary() {
+        let m = PowerOfTwoModulus::<1>;
+        assert_eq!(m.q(), 2);
+        // Z_2 arithmetic: addition is XOR.
+        assert_eq!(m.add(0, 0), 0);
+        assert_eq!(m.add(0, 1), 1);
+        assert_eq!(m.add(1, 1), 0);
+        assert_eq!(m.sub(0, 1), 1);
+        assert_eq!(m.mul(1, 1), 1);
+        assert_eq!(m.neg(0), 0);
+        assert_eq!(m.neg(1), 1);
+    }
+
+    /// `PowerOfTwoModulus::mul` uses the default `Modulus::mul` body, which
+    /// routes through `reduce_u128` → `mask_reduce` for the pow2
+    /// specialisation. The existing tests only exercise this indirectly via
+    /// `dyn_matches_pow2_for_power_of_two`. Closes review item 13.
+    #[test]
+    fn pow2_modulus_mul_direct() {
+        let m = PowerOfTwoModulus::<12>; // q = 4096 (VIA-C q_4).
+        // (q - 1) * (q - 1) = q^2 - 2q + 1 ≡ 1 (mod q).
+        assert_eq!(m.mul(4095, 4095), 1);
+        // 5 * 1000 = 5000 mod 4096 = 904.
+        assert_eq!(m.mul(5, 1000), 904);
+        // Both zero is zero.
+        assert_eq!(m.mul(0, 4095), 0);
+    }
+
+    /// Direct test of `Modulus::sub`'s borrow path (`a < b`) at the modulus
+    /// level. Existing coverage only goes through `Zq::sub`. Closes review
+    /// item 15.
+    #[test]
+    fn modulus_sub_borrow_path() {
+        let m = DynModulus::new(17);
+        assert_eq!(m.sub(3, 10), 10); // (3 - 10) mod 17 = -7 mod 17 = 10
+        assert_eq!(m.sub(0, 1), 16);
+        assert_eq!(m.sub(0, 16), 1);
+        // Paper q_3 boundary.
+        let m = DynModulus::new(8380417);
+        assert_eq!(m.sub(0, 1), 8380416);
+        assert_eq!(m.sub(1, 2), 8380416);
+    }
+
+    /// `Modulus::add` near the u64-sum boundary: with `q` just under `2^63`
+    /// and `a = b = q - 1`, the unreduced sum `a + b = 2q - 2 ≈ 2^64 - 4`
+    /// fits in u64 without wrapping and `cond_sub` must trigger. Closes
+    /// review item 16.
+    #[test]
+    fn modulus_add_near_u64_sum_boundary() {
+        let q = (1u64 << 63) - 1; // largest non-pow2 q under §0.1 contract.
+        let m = DynModulus::new(q);
+        let a = q - 1;
+        // 2(q − 1) mod q = q − 2.
+        assert_eq!(m.add(a, a), q - 2);
+        // Just under the boundary.
+        assert_eq!(m.add(a, 1), 0);
+        assert_eq!(m.add(a, 0), a);
+    }
+
+    /// `Modulus::mul` for inputs close to `q - 1` at the largest paper prime
+    /// (VIA-C / VIA-B q_1 second RNS prime, ≈ 2^38). The product `a · b ≈
+    /// q^2 ≈ 2^76` exercises Barrett at full u128 width. Closes review item 17.
+    #[test]
+    fn modulus_mul_near_q_squared_paper_prime() {
+        let q = 274_810_798_081u64; // ViaCQ1P1, ≈ 2^38.
+        let m = DynModulus::new(q);
+        let qu = u128::from(q);
+        // (q - 1)^2 ≡ 1 (mod q).
+        assert_eq!(m.mul(q - 1, q - 1), 1);
+        // (q - 1)(q - 2) ≡ 2 (mod q).
+        assert_eq!(m.mul(q - 1, q - 2), 2);
+        // Cross-check a handful against u128 reference.
+        for (a, b) in [(q - 1, q / 2), (q / 3, q - 7), (q - 17, q - 19)] {
+            let got = m.mul(a, b);
+            let want = ((u128::from(a) * u128::from(b)) % qu) as u64;
+            assert_eq!(got, want, "a={a}, b={b}");
+        }
+    }
 }

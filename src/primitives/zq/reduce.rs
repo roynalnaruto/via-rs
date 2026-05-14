@@ -309,4 +309,65 @@ mod tests {
     fn barrett_mu_panics_on_q_above_2_63() {
         let _ = barrett_mu((1u64 << 63) | 1);
     }
+
+    /// `umul128_hi` carry-propagation across all 256 product bits. The full-
+    /// range case `(u128::MAX, u128::MAX)` is the most adversarial input — the
+    /// per-lane sums hit `2^64` exactly, which must contribute `1` of carry
+    /// into the high half. Closes review item 2.
+    #[test]
+    fn umul128_hi_full_range() {
+        // (2^128 − 1)^2 = 2^256 − 2·2^128 + 1, so the high 128 bits are
+        // 2^128 − 2 = u128::MAX − 1.
+        assert_eq!(umul128_hi(u128::MAX, u128::MAX), u128::MAX - 1);
+    }
+
+    /// `barrett_reduce` at the upper slack boundary `q < 2^63`. The slack
+    /// proof `q_hat ∈ {⌊x/q⌋ − 1, ⌊x/q⌋}` is tightest here; this pins the
+    /// worst case for the §0.1 modulus range. Closes review item 3 — existing
+    /// tests stopped at ~2^38 and the fuzz target generates q ≤ 2^38, so this
+    /// regime was un-exercised by both unit and fuzz coverage.
+    #[test]
+    fn barrett_reduce_slack_boundary_near_2_63() {
+        let q = (1u64 << 63) - 1; // i64::MAX — odd, non-pow2, max non-pow2 q.
+        let mu = barrett_mu(q);
+        let qu = u128::from(q);
+        for x in [
+            0u128,
+            1,
+            qu - 1,
+            qu,
+            qu + 1,
+            qu * 2 - 1,
+            qu * 2,
+            qu * 17 + 5,
+            (qu * (qu - 1)).saturating_sub(1), // near q^2
+            u128::MAX / 2,
+            u128::MAX - 1,
+            u128::MAX,
+        ] {
+            let got = barrett_reduce(x, q, mu);
+            let want = (x % qu) as u64;
+            assert_eq!(got, want, "x={x}");
+        }
+    }
+
+    /// Direct test of [`cond_add`] — the existing coverage is only via
+    /// `Modulus::sub`'s borrow path. Closes review item 14.
+    #[test]
+    fn cond_add_branchless() {
+        // No-op when the condition is 0.
+        assert_eq!(cond_add(5, 7, Choice::from(0)), 5);
+        // Adds when the condition is 1.
+        assert_eq!(cond_add(5, 7, Choice::from(1)), 12);
+        // x = 0 path.
+        assert_eq!(cond_add(0, 17, Choice::from(1)), 17);
+        assert_eq!(cond_add(0, 17, Choice::from(0)), 0);
+        // Wrapping behaviour is intentional: x + q is computed via
+        // wrapping_add. Pin that contract too.
+        assert_eq!(
+            cond_add(u64::MAX, 1, Choice::from(1)),
+            0,
+            "cond_add uses wrapping_add by design",
+        );
+    }
 }

@@ -381,4 +381,106 @@ mod tests {
         z.zeroize();
         assert_eq!(z.to_u64(), 0);
     }
+
+    /// `Zq::new(m, q)` — a value exactly at the modulus must reduce to 0.
+    /// Trivial edge case but not previously pinned; closes review item 10.
+    #[test]
+    fn zq_new_at_modulus_reduces_to_zero() {
+        let m = ConstModulus::<17>;
+        assert_eq!(Zq::new(m, 17).to_u64(), 0);
+        let m = DynModulus::new(8380417);
+        assert_eq!(Zq::new(m, 8380417).to_u64(), 0);
+        let m = PowerOfTwoModulus::<4>;
+        assert_eq!(Zq::new(m, 16).to_u64(), 0);
+    }
+
+    /// Distributivity `(a + b) * c = a*c + b*c` at both a small prime and a
+    /// paper prime. Single sanity check that locks the ring axioms against
+    /// any future kernel regression. Closes review item 23 (Zq side).
+    #[test]
+    fn zq_ring_axiom_distributivity() {
+        for q in [17u64, 8380417, 274_810_798_081] {
+            let m = DynModulus::new(q);
+            let a = Zq::new(m, 12345 % q);
+            let b = Zq::new(m, 67890 % q);
+            let c = Zq::new(m, 13579 % q);
+            assert_eq!((a + b) * c, (a * c) + (b * c), "q={q}");
+        }
+    }
+
+    /// `Zq::add` between two `DynModulus` instances with different `q` must
+    /// panic via the modulus-equality assert. Locks the cross-modulus
+    /// guardrail. Closes review item 22 (Zq side).
+    #[test]
+    #[should_panic(expected = "modulus mismatch")]
+    fn zq_add_panics_on_modulus_mismatch() {
+        let m17 = DynModulus::new(17);
+        let m19 = DynModulus::new(19);
+        let a = Zq::new(m17, 5);
+        let b = Zq::new(m19, 3);
+        let _ = a + b;
+    }
+
+    /// `Zq::random` distribution-uniformity smoke test. Uses SplitMix64
+    /// (a well-known low-bias PRG) as the underlying byte source and runs a
+    /// Pearson chi-squared statistic on 10 000 samples mod 17. The 99%
+    /// threshold for χ² with 16 d.f. is ~32; we set a generous 50 to avoid
+    /// flaky tests while still catching gross bias (e.g. accidentally
+    /// truncating the high bits via a too-small mask). Closes review item 18
+    /// (Zq side).
+    #[test]
+    fn zq_random_uniformity_chi_squared() {
+        let m = ConstModulus::<17>;
+        let mut rng = SplitMix64::new(0xCAFEF00DD15EA5E5);
+        let mut counts = [0u64; 17];
+        const N: u64 = 10_000;
+        for _ in 0..N {
+            let z = Zq::random(m, &mut rng);
+            counts[z.to_u64() as usize] += 1;
+        }
+        let expected = N as f64 / 17.0;
+        let chi2: f64 = counts
+            .iter()
+            .map(|&o| {
+                let d = o as f64 - expected;
+                d * d / expected
+            })
+            .sum();
+        assert!(chi2 < 50.0, "chi^2 = {chi2}, counts = {counts:?}");
+    }
+
+    /// SplitMix64 — a small, well-characterised PRG used in the uniformity
+    /// tests. Avoids pulling in `rand_chacha` or similar as a dev-dep for
+    /// just two tests. (Duplicated in `rns::element::tests`; if a third
+    /// caller appears, lift it into a shared `test_util` module.)
+    struct SplitMix64(u64);
+
+    impl SplitMix64 {
+        fn new(seed: u64) -> Self {
+            Self(seed)
+        }
+    }
+
+    impl RngCore for SplitMix64 {
+        fn next_u32(&mut self) -> u32 {
+            self.next_u64() as u32
+        }
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+            z ^ (z >> 31)
+        }
+        fn fill_bytes(&mut self, dst: &mut [u8]) {
+            for chunk in dst.chunks_mut(8) {
+                let bytes = self.next_u64().to_le_bytes();
+                chunk.copy_from_slice(&bytes[..chunk.len()]);
+            }
+        }
+        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
+            self.fill_bytes(dst);
+            Ok(())
+        }
+    }
 }

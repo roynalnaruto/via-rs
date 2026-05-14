@@ -438,4 +438,23 @@ mod tests {
         assert_eq!(core::mem::size_of::<paper::ViaQ1Rns>(), 0);
         assert_eq!(core::mem::size_of::<paper::ViaCQ1Rns>(), 0);
     }
+
+    /// Reconstruction with `q0 > q1` exercises the `a0_mod_q1 =
+    /// m1.reduce_u64(a0)` step in Garner — without it, `a1 - a0` would be
+    /// computed on a value outside `[0, q1)`. Paper bases happen to satisfy
+    /// `q0 < q1` so this path was previously un-exercised. Closes review
+    /// item 19.
+    #[test]
+    fn reconstruct_with_q0_greater_than_q1() {
+        // q0 = 11, q1 = 5. Reversed relative to the toy Z_55 basis used
+        // elsewhere.
+        let b = DynRnsBasis::new(DynModulus::new(11), DynModulus::new(5));
+        let q = b.big_q();
+        assert_eq!(q, 55);
+        for x in 0u128..55 {
+            let (a0, a1) = b.decompose_u128(x);
+            assert!(a0 < 11 && a1 < 5);
+            assert_eq!(b.reconstruct(a0, a1), x, "x = {x}");
+        }
+    }
 }

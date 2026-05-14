@@ -359,4 +359,98 @@ mod tests {
         let rhs1 = [0u64; 4];
         add_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
     }
+
+    /// Empty-slice kernels must no-op. Pairs with the zq-side empty-slice
+    /// test; closes review item 20 (rns side).
+    #[test]
+    fn rns_kernels_empty_slice_noop() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0: [u64; 0] = [];
+        let mut dst1: [u64; 0] = [];
+        let lhs0: [u64; 0] = [];
+        let lhs1: [u64; 0] = [];
+        let rhs0: [u64; 0] = [];
+        let rhs1: [u64; 0] = [];
+        add_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+        sub_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+        mul_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+        neg_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1);
+        scalar_mul_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, 0, 0);
+        let mut dst_u128: [u128; 0] = [];
+        reconstruct_slice(b, &mut dst_u128, &lhs0, &lhs1);
+        let src_u128: [u128; 0] = [];
+        decompose_slice(b, &mut dst0, &mut dst1, &src_u128);
+    }
+
+    /// Length-mismatch panics — one per remaining kernel locks the contract
+    /// at the rns layer (the underlying zq kernels each verify their own
+    /// triple; these tests confirm the RNS wrapper surfaces it). Closes
+    /// review item 21 (rns side).
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn sub_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 4];
+        let lhs0 = [0u64; 4];
+        let lhs1 = [0u64; 4];
+        let rhs0 = [0u64; 3];
+        let rhs1 = [0u64; 4];
+        sub_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+    }
+
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn mul_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 4];
+        let lhs0 = [0u64; 4];
+        let lhs1 = [0u64; 4];
+        let rhs0 = [0u64; 4];
+        let rhs1 = [0u64; 3];
+        mul_slice(b, &mut dst0, &mut dst1, &lhs0, &lhs1, &rhs0, &rhs1);
+    }
+
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn neg_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 4];
+        let src0 = [0u64; 3];
+        let src1 = [0u64; 4];
+        neg_slice(b, &mut dst0, &mut dst1, &src0, &src1);
+    }
+
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn scalar_mul_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 4];
+        let src0 = [0u64; 4];
+        let src1 = [0u64; 3];
+        scalar_mul_slice(b, &mut dst0, &mut dst1, &src0, &src1, 0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn reconstruct_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst = [0u128; 4];
+        let src0 = [0u64; 3];
+        let src1 = [0u64; 4];
+        reconstruct_slice(b, &mut dst, &src0, &src1);
+    }
+
+    #[test]
+    #[should_panic(expected = "length mismatch")]
+    fn decompose_slice_panics_on_length_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst0 = [0u64; 4];
+        let mut dst1 = [0u64; 3];
+        let src = [0u128; 4];
+        decompose_slice(b, &mut dst0, &mut dst1, &src);
+    }
 }

@@ -509,4 +509,99 @@ mod tests {
         let _: RnsZq<paper::ViaQ1Rns> = RnsZq::zero(paper::ViaQ1Rns::default());
         let _: RnsZq<paper::ViaCQ1Rns> = RnsZq::zero(paper::ViaCQ1Rns::default());
     }
+
+    /// Distributivity `(a + b) * c = a*c + b*c` on `RnsZq` at the paper
+    /// basis. Locks the ring axioms against future componentwise kernel
+    /// regressions. Closes review item 23 (RnsZq side).
+    #[test]
+    fn rnszq_ring_axiom_distributivity() {
+        let b = paper::ViaQ1Rns::default();
+        let a = RnsZq::from_u128(b, 12345678901234567890);
+        let b_v = RnsZq::from_u128(b, 1357913579135791357);
+        let c = RnsZq::from_u128(b, 9999999999999999999);
+        assert_eq!((a + b_v) * c, (a * c) + (b_v * c));
+    }
+
+    /// `RnsZq::add` between two `DynRnsBasis` instances with different
+    /// primes must panic via the basis-equality assert. Locks the
+    /// cross-basis guardrail. Closes review item 22 (RnsZq side).
+    #[test]
+    #[should_panic(expected = "basis mismatch")]
+    fn rnszq_add_panics_on_basis_mismatch() {
+        let b1 = DynRnsBasis::new(DynModulus::new(5), DynModulus::new(11));
+        let b2 = DynRnsBasis::new(DynModulus::new(7), DynModulus::new(13));
+        let a = RnsZq::from_u128(b1, 10);
+        let bb = RnsZq::from_u128(b2, 10);
+        let _ = a + bb;
+    }
+
+    /// `RnsZq::random` distribution-uniformity smoke test on the per-prime
+    /// components. Runs a Pearson chi-squared on each prime independently
+    /// (since CRT preserves uniformity, this is sufficient). Closes review
+    /// item 18 (RnsZq side).
+    #[test]
+    fn rnszq_random_uniformity_chi_squared() {
+        type Z77 = crate::primitives::rns::basis::ConstRnsBasis<7, 11>;
+        let b = Z77::default();
+        let mut rng = SplitMix64::new(0xDEADBEEF_BAADF00D);
+        let mut counts0 = [0u64; 7];
+        let mut counts1 = [0u64; 11];
+        const N: u64 = 10_000;
+        for _ in 0..N {
+            let z = RnsZq::random(b, &mut rng);
+            counts0[z.value0() as usize] += 1;
+            counts1[z.value1() as usize] += 1;
+        }
+        // χ² at the chosen threshold (50): well above the 99% critical
+        // values for 6 d.f. (~16.8) and 10 d.f. (~23.2), but tight enough
+        // to catch gross bias.
+        let chi2 = |counts: &[u64], q: u64| -> f64 {
+            let expected = N as f64 / q as f64;
+            counts
+                .iter()
+                .map(|&o| {
+                    let d = o as f64 - expected;
+                    d * d / expected
+                })
+                .sum()
+        };
+        let c0 = chi2(&counts0, 7);
+        let c1 = chi2(&counts1, 11);
+        assert!(c0 < 50.0, "m0 chi^2 = {c0}, counts = {counts0:?}");
+        assert!(c1 < 50.0, "m1 chi^2 = {c1}, counts = {counts1:?}");
+    }
+
+    /// SplitMix64 — duplicate of the helper in `zq::element::tests` so the
+    /// uniformity tests don't need a cross-module dependency. Lift to a
+    /// shared `test_util` module if a third caller appears.
+    struct SplitMix64(u64);
+
+    impl SplitMix64 {
+        fn new(seed: u64) -> Self {
+            Self(seed)
+        }
+    }
+
+    impl RngCore for SplitMix64 {
+        fn next_u32(&mut self) -> u32 {
+            self.next_u64() as u32
+        }
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+            z ^ (z >> 31)
+        }
+        fn fill_bytes(&mut self, dst: &mut [u8]) {
+            for chunk in dst.chunks_mut(8) {
+                let bytes = self.next_u64().to_le_bytes();
+                chunk.copy_from_slice(&bytes[..chunk.len()]);
+            }
+        }
+        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
+            self.fill_bytes(dst);
+            Ok(())
+        }
+    }
 }

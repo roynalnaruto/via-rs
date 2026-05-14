@@ -157,4 +157,62 @@ mod tests {
         neg_slice(m, &mut back, &neg);
         assert_eq!(back, src);
     }
+
+    /// Empty-slice kernels must no-op (no panic, no out-of-bounds). The
+    /// polynomial-ring layer at §0.3 will sometimes assemble zero-length
+    /// views during recursive decomposition, so this contract matters.
+    /// Closes review item 20 (zq side).
+    #[test]
+    fn zq_kernels_empty_slice_noop() {
+        let m = ConstModulus::<17>;
+        let mut dst: [u64; 0] = [];
+        let lhs: [u64; 0] = [];
+        let rhs: [u64; 0] = [];
+        add_slice(m, &mut dst, &lhs, &rhs);
+        sub_slice(m, &mut dst, &lhs, &rhs);
+        mul_slice(m, &mut dst, &lhs, &rhs);
+        neg_slice(m, &mut dst, &lhs);
+        scalar_mul_slice(m, &mut dst, &lhs, 0);
+    }
+
+    /// Length-mismatch panics — one assertion per kernel locks the contract.
+    /// `add_slice` is already covered; this adds `sub`, `mul`, `neg`, and
+    /// `scalar_mul`. Closes review item 21 (zq side).
+    #[test]
+    #[should_panic(expected = "sub_slice")]
+    fn sub_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0u64; 4];
+        let lhs = [0u64; 3]; // wrong length.
+        let rhs = [0u64; 4];
+        sub_slice(m, &mut dst, &lhs, &rhs);
+    }
+
+    #[test]
+    #[should_panic(expected = "mul_slice")]
+    fn mul_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0u64; 4];
+        let lhs = [0u64; 4];
+        let rhs = [0u64; 3]; // wrong length.
+        mul_slice(m, &mut dst, &lhs, &rhs);
+    }
+
+    #[test]
+    #[should_panic(expected = "neg_slice")]
+    fn neg_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0u64; 4];
+        let src = [0u64; 3]; // wrong length.
+        neg_slice(m, &mut dst, &src);
+    }
+
+    #[test]
+    #[should_panic(expected = "scalar_mul_slice")]
+    fn scalar_mul_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0u64; 4];
+        let src = [0u64; 3]; // wrong length.
+        scalar_mul_slice(m, &mut dst, &src, 1);
+    }
 }
