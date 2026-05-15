@@ -586,6 +586,91 @@ mod tests {
         assert_eq!(buf[3], eval_at(2));
     }
 
+    /// Bit-reversed convention check, parametric over $(M, N)$. Asserts
+    /// that after `cooley_tukey_dit_forward`, lane $i$ holds the
+    /// evaluation at $\psi^{2 \cdot \mathrm{br}(i, \log_2 N) + 1}$, where
+    /// $\mathrm{br}$ is the bit-reversal permutation of width $\log_2 N$.
+    /// This is the on-the-wire definition that `Poly::eval(i)` relies on
+    /// to mean "the value at the $i$-th NTT point" — see the §0.4 module
+    /// doc.
+    ///
+    /// Returns the forward-NTT buffer so callers can chain a downstream
+    /// check against `Poly::eval(...)` (see
+    /// `poly_eval_pins_bit_reversed_index`).
+    fn assert_bit_reversed_layout<const N: usize, M: NttFriendly<N>>(
+        m: M,
+        input: [u64; N],
+    ) -> [u64; N] {
+        let mut buf = input;
+        cooley_tukey_dit_forward(m, &mut buf, M::TWIDDLES_FORWARD.as_slice());
+        let psi = M::PSI;
+        let log_n = (N as u64).trailing_zeros();
+        let q = m.q() as u128;
+        for (i, &lane) in buf.iter().enumerate() {
+            let br_i = bit_reverse(i, log_n);
+            let exp = (2 * br_i + 1) as u64;
+            let psi_exp = mod_pow(psi, exp, m.q());
+            // Reference: directly evaluate the polynomial at psi_exp.
+            let mut acc = 0u128;
+            let mut xp = 1u128;
+            for &c in input.iter() {
+                acc = (acc + (c as u128) * xp) % q;
+                xp = (xp * (psi_exp as u128)) % q;
+            }
+            assert_eq!(
+                lane as u128, acc,
+                "q={} N={N} lane {i}: bit_reverse({i}, {log_n})={br_i}, exp={exp}",
+                m.q(),
+            );
+        }
+        buf
+    }
+
+    /// Bit-reversed NTT output convention at $(q, N) = (17, 8)$. Pairs
+    /// with `ntt_forward_known_input_q17_n4` to lock the convention at a
+    /// non-trivial $\log_2 N = 3$ (where bit-reversal is no longer
+    /// "swap pairs"). Closes review item 6 (single-prime side).
+    #[test]
+    fn ntt_forward_known_input_q17_n8() {
+        let m = M17::default();
+        let _ = assert_bit_reversed_layout::<8, _>(m, [1u64, 2, 3, 4, 5, 6, 7, 8]);
+        // Also exercise a less-uniform input so a regression that
+        // happens to give a symmetric output on a monotone input still
+        // surfaces.
+        let _ = assert_bit_reversed_layout::<8, _>(m, [16u64, 0, 3, 11, 0, 9, 5, 7]);
+    }
+
+    /// Same check at a paper prime ($q_3$ for VIA-C, $N = 8$). Locks
+    /// the convention at the realistic-modulus / non-trivial-log-N
+    /// regime that the protocol actually consumes.
+    #[test]
+    fn ntt_forward_known_input_paper_via_c_q3_n8() {
+        let m = paper::ViaCQ3::default();
+        let q = m.q();
+        let input: [u64; 8] = core::array::from_fn(|i| (i as u64 * 12345 + 7) % q);
+        let _ = assert_bit_reversed_layout::<8, _>(m, input);
+    }
+
+    /// `Poly::eval(i)` returns the value at the bit-reversed-position
+    /// NTT point. Independent of `ntt_one_is_all_ones_in_eval` (which
+    /// can't distinguish bit-reversed from natural order on a constant
+    /// input). Closes review items 17 / 18 (single-prime side) by
+    /// chaining through the `Poly` accessor onto the kernel-level
+    /// `assert_bit_reversed_layout` reference.
+    #[test]
+    fn poly_eval_pins_bit_reversed_index() {
+        use crate::primitives::ring::element::Poly;
+        use crate::primitives::ring::form::Coefficient;
+        let m = M17::default();
+        let input = [1u64, 2, 3, 4, 5, 6, 7, 8];
+        let expected = assert_bit_reversed_layout::<8, _>(m, input);
+        let p: Poly<8, _, Coefficient> = Poly::new(m, input);
+        let e = p.into_eval();
+        for (i, &want) in expected.iter().enumerate() {
+            assert_eq!(e.eval(i).to_u64(), want, "lane {i}");
+        }
+    }
+
     /// `intt(ntt(f)) == f` at small (N, q).
     #[test]
     fn ntt_intt_roundtrip_small() {
