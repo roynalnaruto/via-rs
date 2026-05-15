@@ -487,11 +487,7 @@ mod tests {
             // Order divides 2N=8.
             assert_eq!(mod_pow(psi, 8, q), 1, "q={q}: psi^8 != 1");
             // Order is not a proper divisor of 2N.
-            assert_ne!(
-                mod_pow(psi, 4, q),
-                1,
-                "q={q}: psi^4 == 1 (order divides 4)"
-            );
+            assert_ne!(mod_pow(psi, 4, q), 1, "q={q}: psi^4 == 1 (order divides 4)");
         }
     }
 
@@ -618,7 +614,8 @@ mod tests {
                 xp = (xp * (psi_exp as u128)) % q;
             }
             assert_eq!(
-                lane as u128, acc,
+                lane as u128,
+                acc,
                 "q={} N={N} lane {i}: bit_reverse({i}, {log_n})={br_i}, exp={exp}",
                 m.q(),
             );
