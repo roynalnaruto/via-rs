@@ -188,6 +188,12 @@ path = "fuzz_targets/ring_embed_iota_zero_homomorphism.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "ring_embed_at_zeroes_other_slots"
+path = "fuzz_targets/ring_embed_at_zeroes_other_slots.rs"
+test = false
+doc = false
+
 # §0.6 — centred / balanced representation.
 
 [[bin]]
