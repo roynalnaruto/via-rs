@@ -175,6 +175,19 @@ impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
     /// Sample a uniformly random polynomial by drawing each lane
     /// independently via [`Zq::random`] on each slot.
     ///
+    /// # Per-slot sampling order
+    ///
+    /// The RNG is consumed in **interleaved per-lane** order:
+    /// `m0[0], m1[0], m0[1], m1[1], …, m0[N-1], m1[N-1]`. Equivalently,
+    /// for each coefficient index $i$ in turn we draw from slot 0 then
+    /// slot 1. The alternative — slot-major (`m0[0..N]` then
+    /// `m1[0..N]`) — would produce a different SHAKE-256 byte
+    /// alignment, so this order is part of the cross-language
+    /// reproducibility contract (`.docs/primitives.md` §1.1). Pin
+    /// this convention when the §1.1 SHAKE-256 PRG lands; deviating
+    /// from it will silently desynchronise test vectors against the
+    /// Python reference.
+    ///
     /// # Evaluation form on non-NTT-friendly bases
     ///
     /// As with [`PolyRns::new`], constructing the `Evaluation` form

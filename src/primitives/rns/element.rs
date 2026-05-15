@@ -241,6 +241,14 @@ impl<B: RnsBasis> RnsZq<B> {
     ///
     /// Equivalent in distribution to $(x \bmod q^{(0)}, x \bmod q^{(1)})$ for
     /// $x$ uniform on $[0, Q)$ — the CRT bijection preserves uniformity.
+    ///
+    /// # Per-slot sampling order
+    ///
+    /// The RNG is consumed in the order `m0, m1` — slot 0 first, then
+    /// slot 1. Same convention as the polynomial-level
+    /// [`super::super::ring::rns_element::PolyRns::random`]; pinned
+    /// here so the §1.1 cross-language reproducibility contract can
+    /// lock against it.
     pub fn random<R: RngCore + ?Sized>(basis: B, rng: &mut R) -> Self {
         let v0 = Zq::random(basis.m0(), rng).to_u64();
         let v1 = Zq::random(basis.m1(), rng).to_u64();
