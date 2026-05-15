@@ -798,5 +798,21 @@ mod tests {
 /// use via_rs::primitives::zq::modulus::ConstModulus;
 /// const _: u64 = <ConstModulus<5> as NttFriendly<4>>::PSI;
 /// ```
+///
+/// Positive companion: `ConstModulus<17>: NttFriendly<4>` satisfies
+/// `17 ≡ 1 (mod 8)` and instantiates with `PSI = 9` (the primitive
+/// $2N$-th root reached by [`find_primitive_2n_th_root`]: $\mathrm{base}
+/// = 3$, $(q - 1) / (2N) = 2$, $3^2 \bmod 17 = 9$, whose order is
+/// exactly $8 = 2N$). Locks the happy path alongside the rejection.
+///
+/// ```
+/// use via_rs::primitives::ring::ntt::NttFriendly;
+/// use via_rs::primitives::zq::modulus::ConstModulus;
+/// const PSI: u64 = <ConstModulus<17> as NttFriendly<4>>::PSI;
+/// const N_INV: u64 = <ConstModulus<17> as NttFriendly<4>>::N_INV;
+/// assert_eq!(PSI, 9);
+/// // 4 * 13 = 52 ≡ 1 (mod 17).
+/// assert_eq!(N_INV, 13);
+/// ```
 #[cfg(doctest)]
 struct NttFriendlyCompileFailDocs;

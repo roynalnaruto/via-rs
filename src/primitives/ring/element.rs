@@ -478,21 +478,24 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
             "pack_slots: expected {d} slot polys, got {}",
             slots.len(),
         );
-        // Build the concatenated source layout `[slot_0 | slot_1 | …]`
-        // on the stack and run the $d$-fold permutation kernel. The
-        // intermediate scratch is the same size as the output (one
-        // `Poly<N_LARGE>` worth) and is dropped after the move.
-        let mut concat = [0u64; N_LARGE];
+        // Direct scatter `packed[d*i + j] = slots[j].values[i]`. The
+        // earlier shape built a `[u64; N_LARGE]` concatenation scratch
+        // and then ran `reshape::pack_slots_slice`; inlining the
+        // permutation removes that intermediate (one `Poly<N_LARGE>`
+        // worth of stack — 16 KiB at paper $N_\mathrm{large} = 2048$).
+        let mut packed = [0u64; N_LARGE];
         for (j, slot_poly) in slots.iter().enumerate() {
             assert!(
                 slot_poly.modulus == modulus,
                 "pack_slots: modulus mismatch at slot {j}",
             );
-            concat[j * N..(j + 1) * N].copy_from_slice(&slot_poly.values);
+            for i in 0..N {
+                packed[d * i + j] = slot_poly.values[i];
+            }
         }
-        let mut packed = [0u64; N_LARGE];
-        reshape::pack_slots_slice(&concat, &mut packed, N);
-        // SAFETY: pack_slots_slice only permutes canonical lanes.
+        // SAFETY: every written lane is an exact copy of a
+        // canonical-form lane from some `slot_poly`; unwritten lanes
+        // are 0. Equivalent to the kernel-based permutation.
         unsafe { Poly::<N_LARGE, M, Coefficient>::from_reduced_unchecked(modulus, packed) }
     }
 
@@ -524,19 +527,19 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
             "unpack_slots: expected {d} slot polys, got {}",
             dsts.len(),
         );
-        // Run the $d$-fold permutation into a scratch buffer in
-        // concatenated layout, then copy each slot's lanes into the
-        // caller's `Poly`.
-        let mut concat = [0u64; N];
-        reshape::unpack_slots_slice(&self.values, &mut concat, N_SMALL);
+        // Direct gather `dsts[j].values[i] = self.values[d*i + j]`.
+        // The earlier shape ran `reshape::unpack_slots_slice` into a
+        // `[u64; N]` concatenation scratch, then `copy_from_slice`d
+        // each slot out; inlining the permutation removes that
+        // intermediate (16 KiB at paper $N = 2048$).
         for (j, slot_poly) in dsts.iter_mut().enumerate() {
             assert!(
                 slot_poly.modulus == self.modulus,
                 "unpack_slots: modulus mismatch at slot {j}",
             );
-            slot_poly
-                .values
-                .copy_from_slice(&concat[j * N_SMALL..(j + 1) * N_SMALL]);
+            for i in 0..N_SMALL {
+                slot_poly.values[i] = self.values[d * i + j];
+            }
         }
     }
 }

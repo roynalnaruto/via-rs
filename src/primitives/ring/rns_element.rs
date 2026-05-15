@@ -447,28 +447,25 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
             "pack_slots: expected {d} slot polys, got {}",
             slots.len(),
         );
-        // Concatenated layout per slot.
-        let mut concat0 = [0u64; N_LARGE];
-        let mut concat1 = [0u64; N_LARGE];
+        // Direct scatter onto both RNS rails: `packed_k[d*i + j] =
+        // slots[j].values_k[i]` for $k \in \{0, 1\}$. Inlining the
+        // permutation removes the two `[u64; N_LARGE]` concatenation
+        // scratch buffers (32 KiB at paper $N_\mathrm{large} = 2048$).
+        let mut packed0 = [0u64; N_LARGE];
+        let mut packed1 = [0u64; N_LARGE];
         for (j, slot_poly) in slots.iter().enumerate() {
             assert!(
                 slot_poly.basis == basis,
                 "pack_slots: basis mismatch at slot {j}",
             );
-            concat0[j * N..(j + 1) * N].copy_from_slice(&slot_poly.values0);
-            concat1[j * N..(j + 1) * N].copy_from_slice(&slot_poly.values1);
+            for i in 0..N {
+                packed0[d * i + j] = slot_poly.values0[i];
+                packed1[d * i + j] = slot_poly.values1[i];
+            }
         }
-        let mut packed0 = [0u64; N_LARGE];
-        let mut packed1 = [0u64; N_LARGE];
-        ring_rns_reshape::pack_slots_slice(
-            basis,
-            &concat0,
-            &concat1,
-            &mut packed0,
-            &mut packed1,
-            N,
-        );
-        // SAFETY: pack_slots_slice only permutes canonical lanes per slot.
+        // SAFETY: every written lane on each rail is an exact copy of
+        // a canonical-form lane from some `slot_poly`; unwritten lanes
+        // are 0. Equivalent to the kernel-based permutation.
         unsafe {
             PolyRns::<N_LARGE, B, Coefficient>::from_reduced_unchecked(basis, packed0, packed1)
         }
@@ -503,27 +500,19 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
             "unpack_slots: expected {d} slot polys, got {}",
             dsts.len(),
         );
-        let mut concat0 = [0u64; N];
-        let mut concat1 = [0u64; N];
-        ring_rns_reshape::unpack_slots_slice(
-            self.basis,
-            &self.values0,
-            &self.values1,
-            &mut concat0,
-            &mut concat1,
-            N_SMALL,
-        );
+        // Direct gather on both rails: `dsts[j].values_k[i] =
+        // self.values_k[d*i + j]` for $k \in \{0, 1\}$. Removes the
+        // two `[u64; N]` concatenation scratch buffers used by the
+        // earlier kernel-based shape.
         for (j, slot_poly) in dsts.iter_mut().enumerate() {
             assert!(
                 slot_poly.basis == self.basis,
                 "unpack_slots: basis mismatch at slot {j}",
             );
-            slot_poly
-                .values0
-                .copy_from_slice(&concat0[j * N_SMALL..(j + 1) * N_SMALL]);
-            slot_poly
-                .values1
-                .copy_from_slice(&concat1[j * N_SMALL..(j + 1) * N_SMALL]);
+            for i in 0..N_SMALL {
+                slot_poly.values0[i] = self.values0[d * i + j];
+                slot_poly.values1[i] = self.values1[d * i + j];
+            }
         }
     }
 }

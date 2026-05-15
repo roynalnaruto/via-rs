@@ -156,6 +156,12 @@ path = "fuzz_targets/ring_rns_ntt_homomorphism.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "ring_rns_ntt_homomorphism_n32"
+path = "fuzz_targets/ring_rns_ntt_homomorphism_n32.rs"
+test = false
+doc = false
+
 # §0.5 — ring embedding ι and projection π.
 
 [[bin]]
