@@ -107,6 +107,7 @@ jobs:
           - ring_const_vs_dyn
           - ring_rns_ops
           - ring_rns_negacyclic_mul
+          - ring_rns_rotate
           - ring_rns_const_vs_dyn
           # §0.4 — negacyclic NTT.
           - ring_ntt_roundtrip

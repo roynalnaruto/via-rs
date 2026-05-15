@@ -119,6 +119,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "ring_rns_rotate"
+path = "fuzz_targets/ring_rns_rotate.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "ring_rns_const_vs_dyn"
 path = "fuzz_targets/ring_rns_const_vs_dyn.rs"
 test = false
