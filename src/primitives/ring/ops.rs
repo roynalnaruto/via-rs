@@ -74,6 +74,24 @@ pub fn negacyclic_mul_slice<M: Modulus>(m: M, dst: &mut [u64], lhs: &[u64], rhs:
         "negacyclic_mul_slice: dst/rhs length mismatch",
     );
     let n = dst.len();
+    // Debug-only canonical-form sweep on the input operands. The
+    // inner `m.mul(li, rhs[j])` call `debug_assert!`s the same
+    // contract per pair, but a top-of-kernel sweep gives a clearer
+    // panic message (which lane is out of range) before the O(n^2)
+    // loop body runs. Zero release-build cost.
+    #[cfg(debug_assertions)]
+    for (i, (&l, &r)) in lhs.iter().zip(rhs.iter()).enumerate() {
+        debug_assert!(
+            l < m.q(),
+            "negacyclic_mul_slice: lhs lane {i} = {l} not in [0, q={})",
+            m.q(),
+        );
+        debug_assert!(
+            r < m.q(),
+            "negacyclic_mul_slice: rhs lane {i} = {r} not in [0, q={})",
+            m.q(),
+        );
+    }
     // Zero the destination — schoolbook accumulates into it.
     for d in dst.iter_mut() {
         *d = 0;
@@ -127,6 +145,19 @@ pub fn rotate_slice<M: Modulus>(m: M, dst: &mut [u64], src: &[u64], k: usize) {
     );
     let n = dst.len();
     assert!(n > 0, "rotate_slice: zero-length input");
+    // Debug-only canonical-form sweep — `m.neg(value)` further down
+    // `debug_assert!`s the same contract per lane, but a top-of-
+    // kernel sweep yields a clearer panic message (which lane was
+    // out of range) before any wrapping logic runs. Zero release-
+    // build cost.
+    #[cfg(debug_assertions)]
+    for (i, &v) in src.iter().enumerate() {
+        debug_assert!(
+            v < m.q(),
+            "rotate_slice: src lane {i} = {v} not in [0, q={})",
+            m.q(),
+        );
+    }
     let k_eff = k % (2 * n);
     let k_red = k_eff % n;
     let neg_global = k_eff >= n;
@@ -344,6 +375,44 @@ mod tests {
         let m = ConstModulus::<17>;
         let mut dst = [0u64; 4];
         let src = [0u64; 3];
+        rotate_slice(m, &mut dst, &src, 1);
+    }
+
+    /// `negacyclic_mul_slice` debug-asserts every input lane is in
+    /// `[0, q)`. Locks the canonical-form contract for direct kernel
+    /// callers (the `Poly` wrapper enforces it via type invariant; a
+    /// future GPU / SIMD adapter that bypasses the wrapper would slip
+    /// without this assert).
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "negacyclic_mul_slice: lhs lane")]
+    fn negacyclic_mul_slice_debug_asserts_canonical_lhs() {
+        let m = ConstModulus::<17>;
+        let lhs = [17u64, 0, 0, 0]; // lane 0 = q, out of [0, q)
+        let rhs = [1u64, 0, 0, 0];
+        let mut dst = [0u64; 4];
+        negacyclic_mul_slice(m, &mut dst, &lhs, &rhs);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "negacyclic_mul_slice: rhs lane")]
+    fn negacyclic_mul_slice_debug_asserts_canonical_rhs() {
+        let m = ConstModulus::<17>;
+        let lhs = [1u64, 0, 0, 0];
+        let rhs = [0u64, 17, 0, 0]; // lane 1 = q
+        let mut dst = [0u64; 4];
+        negacyclic_mul_slice(m, &mut dst, &lhs, &rhs);
+    }
+
+    /// `rotate_slice` debug-asserts every src lane is in `[0, q)`.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "rotate_slice: src lane")]
+    fn rotate_slice_debug_asserts_canonical_src() {
+        let m = ConstModulus::<17>;
+        let src = [0u64, 0, 17, 0]; // lane 2 = q
+        let mut dst = [0u64; 4];
         rotate_slice(m, &mut dst, &src, 1);
     }
 

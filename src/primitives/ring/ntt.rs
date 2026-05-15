@@ -268,6 +268,21 @@ pub(crate) fn cooley_tukey_dit_forward<M: Modulus>(m: M, buf: &mut [u64], twiddl
         n.is_power_of_two() && n >= 2,
         "ntt: buf length power of two"
     );
+    // Debug-only invariant sweep: every lane must already be in
+    // canonical `[0, q)` form. The wrapper layer (`Poly::into_eval` etc.)
+    // enforces this via the `Poly` type invariant, so callers going
+    // through the polynomial API never trigger this. The check fires
+    // for direct GPU / SIMD adapter callers that may bypass the
+    // wrapper. Zero release-build cost — the entire loop is
+    // `cfg(debug_assertions)`-gated.
+    #[cfg(debug_assertions)]
+    for (i, &v) in buf.iter().enumerate() {
+        debug_assert!(
+            v < m.q(),
+            "ntt: input lane {i} = {v} not in [0, q={})",
+            m.q(),
+        );
+    }
     let log_n = n.trailing_zeros();
     for round in 0..log_n {
         let block_count: usize = 1 << round;
@@ -309,6 +324,17 @@ pub(crate) fn cooley_tukey_dif_inverse<M: Modulus>(
         n.is_power_of_two() && n >= 2,
         "intt: buf length power of two"
     );
+    // Debug-only invariant sweep — see the matching note on
+    // [`cooley_tukey_dit_forward`].
+    #[cfg(debug_assertions)]
+    for (i, &v) in buf.iter().enumerate() {
+        debug_assert!(
+            v < m.q(),
+            "intt: input lane {i} = {v} not in [0, q={})",
+            m.q(),
+        );
+    }
+    debug_assert!(n_inv < m.q(), "intt: n_inv >= q");
     let log_n = n.trailing_zeros();
     for round in 0..log_n {
         let block_count: usize = n >> (1 + round);
@@ -537,6 +563,40 @@ mod tests {
         ntt_inplace::<2048, _>(m, &mut buf);
         intt_inplace::<2048, _>(m, &mut buf);
         assert_eq!(buf, original);
+    }
+
+    /// `cooley_tukey_dit_forward` debug-asserts every input lane is in
+    /// `[0, q)`. Pins the canonical-form contract for direct kernel
+    /// callers (the `Poly` wrapper enforces it via its type invariant,
+    /// but a future GPU adapter that bypasses the wrapper would slip
+    /// past without this assert).
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "ntt: input lane")]
+    fn cooley_tukey_dit_forward_debug_asserts_canonical_input() {
+        let m = M17::default();
+        // Lane 0 holds q, which is exactly out of `[0, q)`.
+        let mut buf = [17u64, 0, 0, 0];
+        cooley_tukey_dit_forward(
+            m,
+            &mut buf,
+            <M17 as NttFriendly<4>>::TWIDDLES_FORWARD.as_slice(),
+        );
+    }
+
+    /// Same contract on the inverse NTT.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "intt: input lane")]
+    fn cooley_tukey_dif_inverse_debug_asserts_canonical_input() {
+        let m = M17::default();
+        let mut buf = [0u64, 17, 0, 0];
+        cooley_tukey_dif_inverse(
+            m,
+            &mut buf,
+            <M17 as NttFriendly<4>>::TWIDDLES_INVERSE.as_slice(),
+            <M17 as NttFriendly<4>>::N_INV,
+        );
     }
 
     /// Homomorphism: `(f · g)_schoolbook == NTT^{-1}( NTT(f) ⊙ NTT(g) )`
