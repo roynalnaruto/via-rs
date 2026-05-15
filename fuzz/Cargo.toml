@@ -79,3 +79,113 @@ name = "rns_slice_ops"
 path = "fuzz_targets/rns_slice_ops.rs"
 test = false
 doc = false
+
+# §0.3 — polynomial ring R_{n, q} = Z_q[X] / (X^n + 1).
+
+[[bin]]
+name = "ring_negacyclic_mul"
+path = "fuzz_targets/ring_negacyclic_mul.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rotate"
+path = "fuzz_targets/ring_rotate.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_ops"
+path = "fuzz_targets/ring_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_const_vs_dyn"
+path = "fuzz_targets/ring_const_vs_dyn.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_ops"
+path = "fuzz_targets/ring_rns_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_negacyclic_mul"
+path = "fuzz_targets/ring_rns_negacyclic_mul.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_const_vs_dyn"
+path = "fuzz_targets/ring_rns_const_vs_dyn.rs"
+test = false
+doc = false
+
+# §0.4 — negacyclic NTT.
+
+[[bin]]
+name = "ring_ntt_roundtrip"
+path = "fuzz_targets/ring_ntt_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_ntt_homomorphism"
+path = "fuzz_targets/ring_ntt_homomorphism.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_ntt_roundtrip"
+path = "fuzz_targets/ring_rns_ntt_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_ntt_homomorphism"
+path = "fuzz_targets/ring_rns_ntt_homomorphism.rs"
+test = false
+doc = false
+
+# §0.5 — ring embedding ι and projection π.
+
+[[bin]]
+name = "ring_embed_roundtrip"
+path = "fuzz_targets/ring_embed_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_embed_slot_isolation"
+path = "fuzz_targets/ring_embed_slot_isolation.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_embed_dfold_roundtrip"
+path = "fuzz_targets/ring_embed_dfold_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_rns_embed_roundtrip"
+path = "fuzz_targets/ring_rns_embed_roundtrip.rs"
+test = false
+doc = false
+
+# §0.6 — centred / balanced representation.
+
+[[bin]]
+name = "ring_centered_repr_roundtrip"
+path = "fuzz_targets/ring_centered_repr_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ring_centered_repr_ct_match"
+path = "fuzz_targets/ring_centered_repr_ct_match.rs"
+test = false
+doc = false
