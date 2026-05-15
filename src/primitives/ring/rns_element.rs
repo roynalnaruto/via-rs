@@ -335,6 +335,14 @@ where
 impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
     /// $\iota_j^{N \to N_\text{large}}$ per RNS slot. Place `self` into
     /// slot `slot` of a polynomial in $R_{N_\text{large}, Q}$.
+    ///
+    /// # Panics
+    ///
+    /// Same compile-time vs runtime split as the single-prime
+    /// [`super::element::Poly::embed_at`]: the const-generic
+    /// $N$ / $N_\text{large}$ relationship is checked at
+    /// monomorphisation, but the runtime `slot < d` bound is a
+    /// runtime `assert!`, **not** a compile error.
     pub fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> PolyRns<N_LARGE, B, Coefficient> {
         const {
             assert!(N_LARGE >= N, "embed_at: N_LARGE >= N");
@@ -360,6 +368,11 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
 
     /// $\pi_j^{N \to N_\text{small}}$ per RNS slot. Extract slot `slot`
     /// of `self` into a polynomial in $R_{N_\text{small}, Q}$.
+    ///
+    /// # Panics
+    ///
+    /// Same compile-time vs runtime split as the single-prime
+    /// [`super::element::Poly::project_at`].
     pub fn project_at<const N_SMALL: usize>(
         &self,
         slot: usize,
@@ -392,6 +405,13 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
     /// $d$-fold packing per RNS slot. Pack `slots[0..d]` into one
     /// polynomial in $R_{N_\text{large}, Q}$. All slot polys must share
     /// the basis.
+    ///
+    /// # Panics
+    ///
+    /// Same compile-time vs runtime split as the single-prime
+    /// [`super::element::Poly::pack_slots`]: the const-generic
+    /// $N$ / $N_\text{large}$ checks fire at monomorphisation; the
+    /// `slots.len()` and per-slot `basis` checks are runtime `assert!`s.
     pub fn pack_slots<const N_LARGE: usize>(
         basis: B,
         slots: &[PolyRns<N, B, Coefficient>],
@@ -443,6 +463,11 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
 
     /// $d$-fold unpacking per RNS slot. Split `self` into `d` slot
     /// polynomials in $R_{N_\text{small}, Q}$.
+    ///
+    /// # Panics
+    ///
+    /// Same compile-time vs runtime split as the single-prime
+    /// [`super::element::Poly::unpack_slots`].
     pub fn unpack_slots<const N_SMALL: usize>(
         &self,
         dsts: &mut [PolyRns<N_SMALL, B, Coefficient>],

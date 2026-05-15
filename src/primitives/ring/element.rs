@@ -380,9 +380,19 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     ///
     /// # Panics
     ///
-    /// Panics at compile time (via `const` block) if `N_LARGE < N`,
-    /// `N_LARGE` is not a multiple of `N`, or `N_LARGE` is not a power
-    /// of two. Panics at runtime if `slot >= d = N_LARGE / N`.
+    /// Two distinct failure modes:
+    ///
+    /// - **Compile-time** (via inline `const` block): `N_LARGE < N`,
+    ///   `N_LARGE` not a multiple of `N`, or `N_LARGE` not a power of
+    ///   two. These depend only on the const-generic parameters and
+    ///   are caught at monomorphisation.
+    /// - **Runtime** (via plain `assert!`): `slot >= d = N_LARGE / N`.
+    ///   The `slot` argument is a runtime value, so the const block
+    ///   *cannot* check it. `f.embed_at::<16>(7)` when $d = 4$
+    ///   compiles, then panics when executed. This is by design — the
+    ///   slot index in §3.3 / §5.5 / §6.3 is a loop variable bounded
+    ///   by $d$ at the call site, not a constant known at the type
+    ///   parameter.
     pub fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> Poly<N_LARGE, M, Coefficient> {
         const {
             assert!(N_LARGE >= N, "embed_at: N_LARGE >= N");
@@ -410,10 +420,13 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     ///
     /// # Panics
     ///
-    /// Panics at compile time if `N_SMALL > N`, `N` is not a multiple
-    /// of `N_SMALL`, or `N_SMALL` is not a power of two (when ≥ 2; the
-    /// degenerate `N_SMALL = 1` is rejected by `Poly`'s own `_CHECK`
-    /// which requires `N >= 2`). Panics at runtime if `slot >= d`.
+    /// Same compile-time vs runtime split as [`Self::embed_at`]:
+    ///
+    /// - **Compile-time**: `N_SMALL > N`, `N` not a multiple of
+    ///   `N_SMALL`, or `N_SMALL` not a power of two (when $\ge 2$;
+    ///   the degenerate `N_SMALL = 1` is rejected by `Poly`'s own
+    ///   `_CHECK` which requires `N >= 2`).
+    /// - **Runtime**: `slot >= d`. Runtime panic, not compile error.
     pub fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Poly<N_SMALL, M, Coefficient> {
         const {
             assert!(N_SMALL <= N, "project_at: N_SMALL <= N");
@@ -438,9 +451,11 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     ///
     /// # Panics
     ///
-    /// Panics at compile time if the $N$/$N_\text{large}$ relationship
-    /// is invalid (same checks as [`Self::embed_at`]). Panics at runtime if
-    /// `slots.len() != N_LARGE / N`.
+    /// - **Compile-time**: $N$ / $N_\text{large}$ relationship is
+    ///   invalid (same checks as [`Self::embed_at`]).
+    /// - **Runtime**: `slots.len() != N_LARGE / N` (slot count is a
+    ///   slice length, not a const generic), or any `slots[j]` has a
+    ///   different modulus than `modulus`.
     pub fn pack_slots<const N_LARGE: usize>(
         modulus: M,
         slots: &[Poly<N, M, Coefficient>],
@@ -486,9 +501,10 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     ///
     /// # Panics
     ///
-    /// Panics at compile time on invalid $N$/$N_\text{small}$
-    /// relationship. Panics at runtime if `dsts.len() != N / N_SMALL`
-    /// or any element of `dsts` has the wrong modulus.
+    /// - **Compile-time**: invalid $N$ / $N_\text{small}$ relationship
+    ///   (same checks as [`Self::project_at`]).
+    /// - **Runtime**: `dsts.len() != N / N_SMALL`, or any element of
+    ///   `dsts` has a different modulus than `self`.
     pub fn unpack_slots<const N_SMALL: usize>(&self, dsts: &mut [Poly<N_SMALL, M, Coefficient>]) {
         const {
             assert!(N_SMALL <= N, "unpack_slots: N_SMALL <= N");
