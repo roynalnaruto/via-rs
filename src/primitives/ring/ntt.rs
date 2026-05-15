@@ -111,18 +111,54 @@ const fn bit_reverse(x: usize, log_n: u32) -> usize {
 /// Strategy (per Respire `find_sqrt_primitive_root`,
 /// `.references/respire/src/math/number_theory.rs:15-45`): try each base
 /// $g = 2, 3, \ldots$; compute $\mathrm{candidate} = g^{(q - 1) / 2N}
-/// \bmod q$; verify the candidate has order exactly $2N$ by squaring
-/// $\log_2(2N)$ times — every intermediate power must be $\ne 1$ and the
-/// final power must be $1$.
+/// \bmod q$; verify the candidate has order **exactly** $2N$ by
+/// squaring $\log_2(2N)$ times — every intermediate power must be
+/// $\ne 1$ (rules out a proper divisor of $2N$ being the order) and
+/// the final power must be $1$ (confirms the order divides $2N$, which
+/// is already guaranteed by Lagrange for `candidate = base^((q-1)/2N)`
+/// but is asserted as a defence-in-depth).
+///
+/// # Search cost
+///
+/// For NTT-friendly $q$ (i.e. $q \equiv 1 \pmod{2N}$), the map
+/// $g \mapsto g^{(q-1)/2N}$ sends $\mathbb{Z}_q^*$ onto the $2N$-th
+/// roots of unity in $\mathbb{Z}_q$. Among those roots, $\varphi(2N) = N$
+/// have order exactly $2N$, so a *uniformly random* base hits a
+/// primitive root with probability $\tfrac{1}{2}$. We don't sample
+/// uniformly — we try $g = 2, 3, \ldots$ in order — but in practice
+/// every paper prime in `.docs/primitives.md` §A.1 succeeds within the
+/// first few trials.
+///
+/// # Search cap
+///
+/// The loop is capped at `MAX_BASE_TRIES` candidate bases (1024 today,
+/// chosen large enough for any realistic NTT-friendly prime but small
+/// enough that const-evaluation terminates in milliseconds). If the cap
+/// is exhausted, the function panics at monomorphisation. Without this
+/// cap, a pathological $q$ where all small bases happen to land in the
+/// order-$N$ subgroup would force the search to iterate up to $q$
+/// itself — at paper-scale $q \approx 2^{38}$, that is billions of
+/// const-eval iterations and would either hang the compiler or hit a
+/// `--cap-fn-recursion-limit` analogue.
+///
+/// If a `ConstModulus<Q>: NttFriendly<N>` instantiation ever trips the
+/// cap, the right fix is to inspect $Q$ — either it isn't actually
+/// NTT-friendly (the `_CHECK_NTT` precondition is supposed to catch
+/// this), or it's a degenerate case that warrants raising
+/// `MAX_BASE_TRIES`. Don't silently bump the cap without understanding
+/// why the prior bound failed.
 ///
 /// # Panics
 ///
-/// Panics if no primitive $2N$-th root is found (i.e. $q$ is not prime,
-/// or $q \not\equiv 1 \pmod{2N}$, or the search exhausts the candidate
-/// space). Caller is responsible for asserting $q \equiv 1 \pmod{2N}$
-/// before invocation (`_CHECK_NTT` does this).
+/// Panics if no primitive $2N$-th root is found within `MAX_BASE_TRIES`
+/// trials. Caller is responsible for asserting $q \equiv 1 \pmod{2N}$
+/// before invocation (`check_ntt` does this).
 #[inline]
 const fn find_primitive_2n_th_root(q: u64, two_n: u64) -> u64 {
+    /// Upper bound on the number of candidate bases. See the function-
+    /// level doc for the rationale.
+    const MAX_BASE_TRIES: u64 = 1024;
+
     assert!(q >= 2, "find_primitive_2n_th_root: q >= 2");
     debug_assert_pow2_u64(two_n);
     assert!(
@@ -131,8 +167,13 @@ const fn find_primitive_2n_th_root(q: u64, two_n: u64) -> u64 {
     );
     let quotient = (q - 1) / two_n;
     let log_two_n = log2_pow2(two_n);
+    let cap = if q < MAX_BASE_TRIES + 2 {
+        q
+    } else {
+        MAX_BASE_TRIES + 2
+    };
     let mut base: u64 = 2;
-    while base < q {
+    while base < cap {
         let candidate = mod_pow(base, quotient, q);
         // Verify order is exactly two_n: every intermediate power must
         // be != 1, and candidate^two_n must be 1.
@@ -153,7 +194,9 @@ const fn find_primitive_2n_th_root(q: u64, two_n: u64) -> u64 {
         }
         base += 1;
     }
-    panic!("find_primitive_2n_th_root: no primitive 2N-th root in Z_q");
+    panic!(
+        "find_primitive_2n_th_root: cap exhausted; check that q ≡ 1 (mod 2N), or raise MAX_BASE_TRIES if this prime is genuinely pathological",
+    );
 }
 
 /// Build the bit-reversed table of `root^k mod q` for `k in 0..N`.
@@ -417,6 +460,39 @@ mod tests {
         assert_eq!(bit_reverse(1, 3), 4);
         assert_eq!(bit_reverse(2, 3), 2);
         assert_eq!(bit_reverse(3, 3), 6);
+    }
+
+    /// `find_primitive_2n_th_root` returns a value of order exactly $2N$
+    /// at every paper prime / paper $N$ pair. This is the corner the
+    /// `MAX_BASE_TRIES` cap protects: a regression that requires more
+    /// trials than the cap would fail at compile time, not silently
+    /// produce a wrong twiddle factor. Run at the smallest paper-N
+    /// where every paper prime is NTT-friendly (N=4) to keep the test
+    /// fast while still exercising each prime.
+    #[test]
+    fn find_primitive_2n_th_root_paper_primes_within_cap() {
+        for q in [
+            // Single primes from .docs/primitives.md §A.1.
+            paper::ViaCQ3::Q,
+            paper::ViaQ3::Q,
+            paper::ViaCQ2::Q,
+            paper::ViaQ2::Q,
+            // RNS slot primes (both halves of $q_1$ for VIA and VIA-C).
+            268369921u64,
+            536608769,
+            137438822401,
+            274810798081,
+        ] {
+            let psi = find_primitive_2n_th_root(q, 8);
+            // Order divides 2N=8.
+            assert_eq!(mod_pow(psi, 8, q), 1, "q={q}: psi^8 != 1");
+            // Order is not a proper divisor of 2N.
+            assert_ne!(
+                mod_pow(psi, 4, q),
+                1,
+                "q={q}: psi^4 == 1 (order divides 4)"
+            );
+        }
     }
 
     #[test]
