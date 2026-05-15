@@ -1154,6 +1154,54 @@ mod tests {
         assert_eq!(via_ntt, schoolbook);
     }
 
+    /// `PolyRns::set_eval(i, v)` then `eval(i)` round-trips the value
+    /// at a chosen NTT point — exercises the typed eval-form
+    /// accessor that the existing unit tests never touch (they all
+    /// construct via `PolyRns::new` on raw `[u64; N]` arrays).
+    /// Closes review item 18 (RNS side).
+    #[test]
+    fn rns_poly_eval_set_eval_roundtrip() {
+        let b = paper::ViaQ1Rns::default();
+        let mut p: PolyRns<8, _, Evaluation> = PolyRns::zero(b);
+        let v = RnsZq::from_u128(b, 12_345_678_901u128);
+        p.set_eval(3, v);
+        // Untouched lanes stay zero; the written lane reads back exactly.
+        assert_eq!(p.eval(3), v);
+        assert_eq!(p.eval(0), RnsZq::zero(b));
+        assert_eq!(p.eval(7), RnsZq::zero(b));
+    }
+
+    /// Per-slot bit-reversed-index convention dispatches correctly
+    /// inside `PolyRns::into_eval`. The single-prime kernel-level
+    /// convention is already pinned by
+    /// `ntt::tests::ntt_forward_known_input_q17_n8` and
+    /// `poly_eval_pins_bit_reversed_index`; this test confirms that
+    /// the RNS wrapper just dispatches per-slot without any extra
+    /// permutation. Closes review item 17/18 (RNS side).
+    #[test]
+    fn rns_poly_eval_dispatches_per_slot_bit_reversed_layout() {
+        use crate::primitives::ring::element::Poly;
+        use crate::primitives::ring::form::Coefficient as SingleCoefficient;
+        let b = paper::ViaQ1Rns::default();
+        let q0 = b.m0().q();
+        let q1 = b.m1().q();
+        // Distinct per-slot inputs so the test fails if the wrapper
+        // accidentally evaluates the same slot twice or swaps them.
+        let v0: [u64; 8] = core::array::from_fn(|i| (i as u64 * 13 + 1) % q0);
+        let v1: [u64; 8] = core::array::from_fn(|i| (i as u64 * 7 + 11) % q1);
+        let p: PolyRns<8, _, Coefficient> = PolyRns::new(b, v0, v1);
+        let e = p.into_eval();
+        // Reference: run the single-prime NTT on each slot directly.
+        let s0: Poly<8, _, SingleCoefficient> = Poly::new(b.m0(), v0);
+        let s1: Poly<8, _, SingleCoefficient> = Poly::new(b.m1(), v1);
+        let e0 = s0.into_eval();
+        let e1 = s1.into_eval();
+        for i in 0..8 {
+            assert_eq!(e.eval(i).value0(), e0.eval(i).to_u64(), "slot0 lane {i}");
+            assert_eq!(e.eval(i).value1(), e1.eval(i).to_u64(), "slot1 lane {i}");
+        }
+    }
+
     /// Round-trip at paper $N = 2048$, VIA-C q_1 RNS basis. Locks the
     /// realistic-size code path through both RNS slots.
     #[test]
