@@ -11,5 +11,6 @@
 //! - **Layer 3+** — ring switching, homomorphic gates, MLWE cascade, protocol
 //!   composites.
 
+pub mod ring;
 pub mod rns;
 pub mod zq;

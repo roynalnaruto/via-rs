@@ -199,6 +199,81 @@ pub fn decompose_slice<B: RnsBasis>(basis: B, dst0: &mut [u64], dst1: &mut [u64]
     }
 }
 
+/// §0.6 centred-lift kernel for the composite $\mathbb{Z}_Q$:
+/// `dst[i] = to_centered_i128(reconstruct(src0[i], src1[i]), Q)`.
+///
+/// Output range $(-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$ in `i128`.
+///
+/// **Not constant-time** over input values (branches on `v > Q/2`).
+/// For secret-data inputs (§3.4 secret-key rekeying, RNS variant),
+/// use [`to_centered_i128_ct_slice`].
+///
+/// # Panics
+///
+/// Panics on cross-prime length mismatch or `dst` length mismatch.
+#[inline]
+pub fn to_centered_i128_slice<B: RnsBasis>(basis: B, dst: &mut [i128], src0: &[u64], src1: &[u64]) {
+    assert_eq!(
+        src0.len(),
+        src1.len(),
+        "to_centered_i128_slice: cross-prime src length mismatch",
+    );
+    assert_eq!(
+        dst.len(),
+        src0.len(),
+        "to_centered_i128_slice: dst length mismatch",
+    );
+    let big_q = basis.big_q();
+    let half = big_q / 2;
+    let big_q_i = big_q as i128;
+    for ((d, &a0), &a1) in dst.iter_mut().zip(src0.iter()).zip(src1.iter()) {
+        let v = basis.reconstruct(a0, a1);
+        *d = if v <= half {
+            v as i128
+        } else {
+            (v as i128) - big_q_i
+        };
+    }
+}
+
+/// Constant-time §0.6 centred-lift kernel for the composite
+/// $\mathbb{Z}_Q$. Hand-rolled CT comparison on `u128` (sign-bit
+/// extraction), matching the per-element [`super::element::RnsZq::to_centered_i128_ct`].
+///
+/// # Panics
+///
+/// Same length contract as [`to_centered_i128_slice`].
+#[inline]
+pub fn to_centered_i128_ct_slice<B: RnsBasis>(
+    basis: B,
+    dst: &mut [i128],
+    src0: &[u64],
+    src1: &[u64],
+) {
+    assert_eq!(
+        src0.len(),
+        src1.len(),
+        "to_centered_i128_ct_slice: cross-prime src length mismatch",
+    );
+    assert_eq!(
+        dst.len(),
+        src0.len(),
+        "to_centered_i128_ct_slice: dst length mismatch",
+    );
+    let big_q = basis.big_q();
+    let half = big_q / 2;
+    let big_q_i = big_q as i128;
+    for ((d, &a0), &a1) in dst.iter_mut().zip(src0.iter()).zip(src1.iter()) {
+        let v = basis.reconstruct(a0, a1);
+        let pos = v as i128;
+        let neg = (v as i128) - big_q_i;
+        // See `RnsZq::to_centered_i128_ct` for the bit-trick rationale.
+        let diff: i128 = half.wrapping_sub(v) as i128;
+        let mask: i128 = diff >> 127;
+        *d = pos ^ ((pos ^ neg) & mask);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::basis::{ConstRnsBasis, DynRnsBasis, paper};
@@ -544,5 +619,69 @@ mod tests {
         let src0 = [0u64; 4];
         let src1 = [0u64; 3];
         scalar_mul_slice(b, &mut dst0, &mut dst1, &src0, &src1, 0, 0);
+    }
+
+    /// §0.6 RNS centred-lift slice agrees with per-element
+    /// `RnsZq::to_centered_i128` across a sweep at the toy Z55 basis.
+    #[test]
+    fn to_centered_i128_slice_matches_per_element_z55() {
+        let b = Z55::default();
+        let q = b.big_q();
+        let xs: [u128; 6] = [0, 1, 27, 28, 29, q - 1];
+        let mut src0 = [0u64; 6];
+        let mut src1 = [0u64; 6];
+        for (i, &x) in xs.iter().enumerate() {
+            let (a0, a1) = b.decompose_u128(x);
+            src0[i] = a0;
+            src1[i] = a1;
+        }
+        let mut dst = [0i128; 6];
+        to_centered_i128_slice(b, &mut dst, &src0, &src1);
+        // Reference: per-element via RnsZq.
+        for (i, &x) in xs.iter().enumerate() {
+            let r = RnsZq::from_u128(b, x);
+            assert_eq!(dst[i], r.to_centered_i128(), "i={i}, x={x}");
+        }
+    }
+
+    /// CT slice matches non-CT slice at paper VIA q_1 basis.
+    #[test]
+    fn to_centered_i128_ct_slice_matches_non_ct_slice() {
+        let b = paper::ViaQ1Rns::default();
+        let q = b.big_q();
+        let half = q / 2;
+        let xs: [u128; 6] = [0, 1, half - 1, half, half + 1, q - 1];
+        let mut src0 = [0u64; 6];
+        let mut src1 = [0u64; 6];
+        for (i, &x) in xs.iter().enumerate() {
+            let (a0, a1) = b.decompose_u128(x);
+            src0[i] = a0;
+            src1[i] = a1;
+        }
+        let mut non_ct = [0i128; 6];
+        let mut ct = [0i128; 6];
+        to_centered_i128_slice(b, &mut non_ct, &src0, &src1);
+        to_centered_i128_ct_slice(b, &mut ct, &src0, &src1);
+        assert_eq!(non_ct, ct);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime")]
+    fn to_centered_i128_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst = [0i128; 4];
+        let src0 = [0u64; 4];
+        let src1 = [0u64; 3];
+        to_centered_i128_slice(b, &mut dst, &src0, &src1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cross-prime")]
+    fn to_centered_i128_ct_slice_panics_on_cross_prime_mismatch() {
+        let b = paper::ViaQ1Rns::default();
+        let mut dst = [0i128; 4];
+        let src0 = [0u64; 4];
+        let src1 = [0u64; 3];
+        to_centered_i128_ct_slice(b, &mut dst, &src0, &src1);
     }
 }

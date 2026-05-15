@@ -160,7 +160,9 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     /// The comparison `a > q/2` branches on a value derived from the input.
     /// Callers handling secret data should not use this helper directly;
     /// it is intended for decoding boundaries (paper §2.2 `Dec`, §3.1
-    /// `ModSwitch`) where the value is about to be revealed.
+    /// `ModSwitch`) where the value is about to be revealed. For
+    /// secret-key coefficient centring (§3.4 rekeying), use the
+    /// constant-time companion [`Self::to_centered_i64_ct`].
     #[inline(always)]
     fn to_centered_i64(self, a: u64) -> i64 {
         debug_assert!(a < self.q(), "Modulus::to_centered_i64: a >= q");
@@ -170,6 +172,41 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
         } else {
             -((q - a) as i64)
         }
+    }
+
+    /// Constant-time variant of [`Self::to_centered_i64`].
+    ///
+    /// Same output as [`Self::to_centered_i64`]; the difference is only
+    /// the timing behaviour. Branchless: both candidate outputs (the
+    /// positive `a as i64` and the negative `-((q - a) as i64)`) are
+    /// computed unconditionally, and the choice is made via a
+    /// [`subtle::ConditionallySelectable`] cmov driven by
+    /// [`subtle::ConstantTimeGreater`] on `u64`.
+    ///
+    /// # Invariants
+    ///
+    /// Input: $a \in [0, q)$ (`debug_assert!`'d). Output:
+    /// $\in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
+    ///
+    /// # Constant-time
+    ///
+    /// CT over the input value $a$. The access pattern depends only
+    /// on the public parameter $q$. Use this whenever centring a
+    /// **secret** coefficient — specifically the §3.4 secret-key
+    /// rekeying step, where $S$'s small non-uniform coefficients
+    /// would otherwise leak Hamming-weight information through
+    /// timing/side-channels.
+    #[inline(always)]
+    fn to_centered_i64_ct(self, a: u64) -> i64 {
+        use subtle::{ConditionallySelectable, ConstantTimeGreater};
+        debug_assert!(a < self.q(), "Modulus::to_centered_i64_ct: a >= q");
+        let q = self.q();
+        let half = q / 2;
+        // Compute both branches unconditionally.
+        let pos = a as i64;
+        let neg = -((q - a) as i64);
+        let is_negative = a.ct_gt(&half);
+        i64::conditional_select(&pos, &neg, is_negative)
     }
 }
 
@@ -693,5 +730,53 @@ mod tests {
             let want = ((u128::from(a) * u128::from(b)) % qu) as u64;
             assert_eq!(got, want, "a={a}, b={b}");
         }
+    }
+
+    /// CT centred lift produces identical output to the non-CT version
+    /// across a sweep of representative inputs and moduli.
+    #[test]
+    fn to_centered_i64_ct_matches_non_ct_small_moduli() {
+        for q in [2u64, 3, 17, 256, 4096, 8380417] {
+            let m = DynModulus::new(q);
+            for a in 0..q {
+                let want = m.to_centered_i64(a);
+                let got = m.to_centered_i64_ct(a);
+                assert_eq!(got, want, "q={q}, a={a}");
+            }
+        }
+    }
+
+    /// CT centred lift at a paper prime, sweeping a handful of
+    /// boundary-relevant inputs (0, q/2, q/2+1, q-1, and random
+    /// midpoints). Full sweep would be too slow at $q \approx 2^{38}$.
+    #[test]
+    fn to_centered_i64_ct_matches_non_ct_paper_prime() {
+        let q = 274_810_798_081u64; // VIA-C q_1 second RNS prime, ~2^38
+        let m = DynModulus::new(q);
+        let half = q / 2;
+        for &a in &[
+            0,
+            1,
+            half - 1,
+            half,
+            half + 1,
+            q - 1,
+            12_345_678_901u64,
+            q - 12_345_678_901u64,
+        ] {
+            let want = m.to_centered_i64(a);
+            let got = m.to_centered_i64_ct(a);
+            assert_eq!(got, want, "q={q}, a={a}");
+        }
+    }
+
+    /// Explicit hand-computed boundary checks for the CT path at q=17.
+    #[test]
+    fn to_centered_i64_ct_boundary_q17() {
+        let m = ConstModulus::<17>;
+        assert_eq!(m.to_centered_i64_ct(0), 0);
+        assert_eq!(m.to_centered_i64_ct(8), 8); // q/2
+        assert_eq!(m.to_centered_i64_ct(9), -8); // q/2 + 1
+        assert_eq!(m.to_centered_i64_ct(16), -1); // q - 1
     }
 }

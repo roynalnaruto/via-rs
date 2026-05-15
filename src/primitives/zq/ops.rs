@@ -96,6 +96,54 @@ pub fn scalar_mul_slice<M: Modulus>(modulus: M, dst: &mut [u64], src: &[u64], sc
     }
 }
 
+/// §0.6 centred-lift kernel: `dst[i] = to_centered_i64(src[i], q)`.
+///
+/// Per-lane wrapper of [`Modulus::to_centered_i64`]. Each input lane
+/// must be in canonical $[0, q)$ form (debug-asserted by the trait
+/// method). Output lanes lie in
+/// $(-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
+///
+/// **Not constant-time** over input values. For secret-data inputs
+/// (paper §3.4 secret-key rekeying), use [`to_centered_i64_ct_slice`].
+///
+/// # Panics
+///
+/// Panics if `dst.len() != src.len()`.
+#[inline]
+pub fn to_centered_i64_slice<M: Modulus>(modulus: M, dst: &mut [i64], src: &[u64]) {
+    assert_eq!(
+        dst.len(),
+        src.len(),
+        "to_centered_i64_slice: dst/src length mismatch",
+    );
+    for (d, &s) in dst.iter_mut().zip(src) {
+        *d = modulus.to_centered_i64(s);
+    }
+}
+
+/// Constant-time §0.6 centred-lift kernel. Same output as
+/// [`to_centered_i64_slice`]; the difference is only timing.
+///
+/// Use this when the input values are **secrets** (e.g. coefficients
+/// of a secret-key polynomial in §3.4 rekeying). For RLWE-uniform
+/// ciphertext coefficients or plaintext-being-decoded inputs, the
+/// non-CT [`to_centered_i64_slice`] is faster and equally safe.
+///
+/// # Panics
+///
+/// Panics if `dst.len() != src.len()`.
+#[inline]
+pub fn to_centered_i64_ct_slice<M: Modulus>(modulus: M, dst: &mut [i64], src: &[u64]) {
+    assert_eq!(
+        dst.len(),
+        src.len(),
+        "to_centered_i64_ct_slice: dst/src length mismatch",
+    );
+    for (d, &s) in dst.iter_mut().zip(src) {
+        *d = modulus.to_centered_i64_ct(s);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::modulus::{ConstModulus, DynModulus, PowerOfTwoModulus};
@@ -214,5 +262,47 @@ mod tests {
         let mut dst = [0u64; 4];
         let src = [0u64; 3]; // wrong length.
         scalar_mul_slice(m, &mut dst, &src, 1);
+    }
+
+    /// `to_centered_i64_slice` agrees with per-lane `Modulus::to_centered_i64`.
+    #[test]
+    fn to_centered_i64_slice_matches_per_lane() {
+        let m = ConstModulus::<17>;
+        let src = [0u64, 1, 8, 9, 16];
+        let mut dst = [0i64; 5];
+        to_centered_i64_slice(m, &mut dst, &src);
+        assert_eq!(dst, [0i64, 1, 8, -8, -1]);
+    }
+
+    /// CT slice matches non-CT slice across a sweep at a paper modulus.
+    #[test]
+    fn to_centered_i64_ct_slice_matches_non_ct_slice() {
+        let m = DynModulus::new(8380417); // VIA-C q_3
+        let src = [
+            0u64, 1, 4_190_207, 4_190_208, 4_190_209, 8_380_415, 8_380_416,
+        ];
+        let mut non_ct = [0i64; 7];
+        let mut ct = [0i64; 7];
+        to_centered_i64_slice(m, &mut non_ct, &src);
+        to_centered_i64_ct_slice(m, &mut ct, &src);
+        assert_eq!(non_ct, ct);
+    }
+
+    #[test]
+    #[should_panic(expected = "to_centered_i64_slice")]
+    fn to_centered_i64_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0i64; 4];
+        let src = [0u64; 3];
+        to_centered_i64_slice(m, &mut dst, &src);
+    }
+
+    #[test]
+    #[should_panic(expected = "to_centered_i64_ct_slice")]
+    fn to_centered_i64_ct_slice_panics_on_length_mismatch() {
+        let m = ConstModulus::<17>;
+        let mut dst = [0i64; 4];
+        let src = [0u64; 3];
+        to_centered_i64_ct_slice(m, &mut dst, &src);
     }
 }

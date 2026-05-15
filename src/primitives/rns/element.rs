@@ -168,6 +168,74 @@ impl<B: RnsBasis> RnsZq<B> {
         self.basis.reconstruct(self.value0, self.value1)
     }
 
+    /// §0.6 centred representation in $\mathbb{Z}_Q$ —
+    /// $\tilde a \in (-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$ with
+    /// $\tilde a \equiv a \pmod Q$. Returns `i128` because $Q$ can
+    /// exceed $2^{63}$ (paper VIA-C / VIA-B $q_1 \approx 2^{75}$).
+    ///
+    /// # Not constant-time
+    ///
+    /// Branches on the reconstructed value's position relative to
+    /// $Q/2$. Intended for decoding boundaries (paper §2.2 `Dec`,
+    /// §3.1 `ModSwitch`) where the value is about to be revealed.
+    /// For secret-data inputs, use [`Self::to_centered_i128_ct`].
+    #[inline(always)]
+    pub fn to_centered_i128(self) -> i128 {
+        let big_q = self.basis.big_q();
+        let v = self.to_u128();
+        if v <= big_q / 2 {
+            v as i128
+        } else {
+            (v as i128) - (big_q as i128)
+        }
+    }
+
+    /// Constant-time variant of [`Self::to_centered_i128`].
+    ///
+    /// Same output; the difference is only the timing behaviour. Two
+    /// pieces of bit-trickery are needed because `subtle` does not
+    /// (as of 2.6) implement `ConstantTimeGreater` or
+    /// `ConditionallySelectable` for `u128` / `i128`:
+    ///
+    /// 1. **CT comparison** `v > Q/2` via the sign bit of
+    ///    `half.wrapping_sub(v) as i128`. Negative iff `v > half`.
+    /// 2. **CT cmov** between the two pre-computed branches via the
+    ///    arithmetic-right-shift idiom: a mask of all-ones (when the
+    ///    sign bit is set) or all-zeros, XORed against the diff and
+    ///    XOR'd back into the base value.
+    ///
+    /// Both steps use only fixed-width arithmetic and bitwise ops on
+    /// `i128` / `u128` — no data-dependent branches.
+    ///
+    /// # Constant-time
+    ///
+    /// CT over the input value; access pattern depends only on the
+    /// public basis $Q$. Use for centring secret-key coefficients in
+    /// §3.4 rekeying (RNS variant).
+    #[inline(always)]
+    pub fn to_centered_i128_ct(self) -> i128 {
+        let big_q = self.basis.big_q();
+        let v = self.to_u128();
+        let half = big_q / 2;
+        // Compute both branches unconditionally.
+        let pos = v as i128;
+        let neg = (v as i128) - (big_q as i128);
+        // CT `v > half`:
+        // `half.wrapping_sub(v)` as i128 is negative iff `v > half`.
+        // - If v <= half: `half - v` is non-negative and `< 2^127`
+        //   (since `half < 2^127`); the i128 cast preserves the
+        //   value, MSB = 0.
+        // - If v > half: `half.wrapping_sub(v)` wraps to a large
+        //   u128 `2^128 + half - v`; cast to i128 yields a negative
+        //   value with MSB = 1.
+        let diff: i128 = half.wrapping_sub(v) as i128;
+        // Arithmetic right shift propagates the sign bit: yields
+        // `0` if MSB clear, `-1` (all-ones) if MSB set.
+        let mask: i128 = diff >> 127;
+        // XOR-based CT cmov: result = pos when mask = 0, neg when mask = -1.
+        pos ^ ((pos ^ neg) & mask)
+    }
+
     /// Sample a uniformly random element of $\mathbb{Z}_Q$ by independently
     /// drawing each component from its prime range.
     ///
@@ -641,6 +709,82 @@ mod tests {
         fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
             self.fill_bytes(dst);
             Ok(())
+        }
+    }
+
+    // ----- §0.6 RNS centred-lift tests -----
+
+    #[test]
+    fn rnszq_to_centered_i128_zero_is_zero() {
+        let b = paper::ViaQ1Rns::default();
+        let z = RnsZq::zero(b);
+        assert_eq!(z.to_centered_i128(), 0);
+        assert_eq!(z.to_centered_i128_ct(), 0);
+    }
+
+    #[test]
+    fn rnszq_to_centered_i128_q_minus_1_is_neg_1() {
+        let b = paper::ViaQ1Rns::default();
+        let q = b.big_q();
+        // RnsZq for v = Q - 1 centres to -1.
+        let v = RnsZq::from_u128(b, q - 1);
+        assert_eq!(v.to_centered_i128(), -1);
+        assert_eq!(v.to_centered_i128_ct(), -1);
+    }
+
+    #[test]
+    fn rnszq_to_centered_i128_at_half_boundary() {
+        let b = paper::ViaQ1Rns::default();
+        let q = b.big_q();
+        let half = q / 2;
+        // v == Q/2 stays positive.
+        let v_half = RnsZq::from_u128(b, half);
+        assert_eq!(v_half.to_centered_i128(), half as i128);
+        assert_eq!(v_half.to_centered_i128_ct(), half as i128);
+        // v == Q/2 + 1 centres negative.
+        let v_half_plus_1 = RnsZq::from_u128(b, half + 1);
+        let want_neg = (half as i128) + 1 - (q as i128);
+        assert_eq!(v_half_plus_1.to_centered_i128(), want_neg);
+        assert_eq!(v_half_plus_1.to_centered_i128_ct(), want_neg);
+    }
+
+    #[test]
+    fn rnszq_to_centered_i128_at_paper_via_c_q1() {
+        // VIA-C / VIA-B q_1 RNS basis — Q ≈ 2^75, exercises the
+        // hand-rolled u128 sign-bit CT comparison at a realistic Q.
+        let b = paper::ViaCQ1Rns::default();
+        let q = b.big_q();
+        let half = q / 2;
+        // Sample a few specific values across the boundary.
+        for &v in &[
+            0u128,
+            1,
+            (1u128 << 70),
+            half - 1,
+            half,
+            half + 1,
+            q - (1u128 << 60),
+            q - 1,
+        ] {
+            let r = RnsZq::from_u128(b, v);
+            let want = if v <= half {
+                v as i128
+            } else {
+                (v as i128) - (q as i128)
+            };
+            assert_eq!(r.to_centered_i128(), want, "v={v}");
+            assert_eq!(r.to_centered_i128_ct(), want, "v={v}");
+        }
+    }
+
+    #[test]
+    fn rnszq_to_centered_i128_ct_matches_non_ct_sweep_z55() {
+        type Z55 = ConstRnsBasis<5, 11>;
+        let b = Z55::default();
+        let q = b.big_q();
+        for v in 0..q {
+            let r = RnsZq::from_u128(b, v);
+            assert_eq!(r.to_centered_i128_ct(), r.to_centered_i128(), "v={v}");
         }
     }
 }

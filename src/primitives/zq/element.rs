@@ -107,10 +107,20 @@ impl<M: Modulus> Zq<M> {
 
     /// The centred representation $\tilde a \in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
     ///
-    /// See [`Modulus::to_centered_i64`] for the invariants and the constant-time note.
+    /// See [`Modulus::to_centered_i64`] for the invariants and the
+    /// constant-time note. For secret-data inputs, prefer
+    /// [`Self::to_centered_i64_ct`].
     #[inline(always)]
     pub fn to_centered_i64(self) -> i64 {
         self.modulus.to_centered_i64(self.value)
+    }
+
+    /// Constant-time variant of [`Self::to_centered_i64`]. Use this
+    /// when the underlying value is secret (e.g. §3.4 secret-key
+    /// rekeying); see [`Modulus::to_centered_i64_ct`] for details.
+    #[inline(always)]
+    pub fn to_centered_i64_ct(self) -> i64 {
+        self.modulus.to_centered_i64_ct(self.value)
     }
 
     /// The modulus this element is associated with.
