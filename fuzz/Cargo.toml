@@ -20,37 +20,41 @@ arbitrary = { version = "1.4", features = ["derive"] }
 [dependencies.via-rs]
 path = ".."
 
-# Each fuzz target gets its own [[bin]] entry. `cargo fuzz add <name>` will
-# extend this list; we register the §0.1 targets up front so the harness is
-# self-contained from day one.
+# Each fuzz target gets its own [[bin]] entry. Targets are grouped on disk by
+# the `src/primitives/` module they exercise — `fuzz_targets/{zq,rns,ring}/` —
+# but the public `name = "..."` identifier (used by the CI matrix, the
+# `just fuzz <name>` recipe, and the libFuzzer corpus directory) keeps the
+# original flat scheme so corpora and tooling continue to resolve unchanged.
+
+# §0.1 — Zq scalar arithmetic.
 
 [[bin]]
 name = "zq_reduce"
-path = "fuzz_targets/zq_reduce.rs"
+path = "fuzz_targets/zq/reduce.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "zq_ops"
-path = "fuzz_targets/zq_ops.rs"
+path = "fuzz_targets/zq/ops.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "zq_const_vs_dyn"
-path = "fuzz_targets/zq_const_vs_dyn.rs"
+path = "fuzz_targets/zq/const_vs_dyn.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "zq_pow2_match"
-path = "fuzz_targets/zq_pow2_match.rs"
+path = "fuzz_targets/zq/pow2_match.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "zq_roundtrip"
-path = "fuzz_targets/zq_roundtrip.rs"
+path = "fuzz_targets/zq/roundtrip.rs"
 test = false
 doc = false
 
@@ -58,25 +62,25 @@ doc = false
 
 [[bin]]
 name = "rns_roundtrip"
-path = "fuzz_targets/rns_roundtrip.rs"
+path = "fuzz_targets/rns/roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "rns_ops"
-path = "fuzz_targets/rns_ops.rs"
+path = "fuzz_targets/rns/ops.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "rns_const_vs_dyn"
-path = "fuzz_targets/rns_const_vs_dyn.rs"
+path = "fuzz_targets/rns/const_vs_dyn.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "rns_slice_ops"
-path = "fuzz_targets/rns_slice_ops.rs"
+path = "fuzz_targets/rns/slice_ops.rs"
 test = false
 doc = false
 
@@ -84,49 +88,49 @@ doc = false
 
 [[bin]]
 name = "ring_negacyclic_mul"
-path = "fuzz_targets/ring_negacyclic_mul.rs"
+path = "fuzz_targets/ring/negacyclic_mul.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rotate"
-path = "fuzz_targets/ring_rotate.rs"
+path = "fuzz_targets/ring/rotate.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_ops"
-path = "fuzz_targets/ring_ops.rs"
+path = "fuzz_targets/ring/ops.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_const_vs_dyn"
-path = "fuzz_targets/ring_const_vs_dyn.rs"
+path = "fuzz_targets/ring/const_vs_dyn.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_ops"
-path = "fuzz_targets/ring_rns_ops.rs"
+path = "fuzz_targets/ring/rns_ops.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_negacyclic_mul"
-path = "fuzz_targets/ring_rns_negacyclic_mul.rs"
+path = "fuzz_targets/ring/rns_negacyclic_mul.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_rotate"
-path = "fuzz_targets/ring_rns_rotate.rs"
+path = "fuzz_targets/ring/rns_rotate.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_const_vs_dyn"
-path = "fuzz_targets/ring_rns_const_vs_dyn.rs"
+path = "fuzz_targets/ring/rns_const_vs_dyn.rs"
 test = false
 doc = false
 
@@ -134,31 +138,31 @@ doc = false
 
 [[bin]]
 name = "ring_ntt_roundtrip"
-path = "fuzz_targets/ring_ntt_roundtrip.rs"
+path = "fuzz_targets/ring/ntt_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_ntt_homomorphism"
-path = "fuzz_targets/ring_ntt_homomorphism.rs"
+path = "fuzz_targets/ring/ntt_homomorphism.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_ntt_roundtrip"
-path = "fuzz_targets/ring_rns_ntt_roundtrip.rs"
+path = "fuzz_targets/ring/rns_ntt_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_ntt_homomorphism"
-path = "fuzz_targets/ring_rns_ntt_homomorphism.rs"
+path = "fuzz_targets/ring/rns_ntt_homomorphism.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_ntt_homomorphism_n32"
-path = "fuzz_targets/ring_rns_ntt_homomorphism_n32.rs"
+path = "fuzz_targets/ring/rns_ntt_homomorphism_n32.rs"
 test = false
 doc = false
 
@@ -166,43 +170,43 @@ doc = false
 
 [[bin]]
 name = "ring_embed_roundtrip"
-path = "fuzz_targets/ring_embed_roundtrip.rs"
+path = "fuzz_targets/ring/embed_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_embed_slot_isolation"
-path = "fuzz_targets/ring_embed_slot_isolation.rs"
+path = "fuzz_targets/ring/embed_slot_isolation.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_embed_dfold_roundtrip"
-path = "fuzz_targets/ring_embed_dfold_roundtrip.rs"
+path = "fuzz_targets/ring/embed_dfold_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_embed_roundtrip"
-path = "fuzz_targets/ring_rns_embed_roundtrip.rs"
+path = "fuzz_targets/ring/rns_embed_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_rns_embed_slot_isolation"
-path = "fuzz_targets/ring_rns_embed_slot_isolation.rs"
+path = "fuzz_targets/ring/rns_embed_slot_isolation.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_embed_iota_zero_homomorphism"
-path = "fuzz_targets/ring_embed_iota_zero_homomorphism.rs"
+path = "fuzz_targets/ring/embed_iota_zero_homomorphism.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_embed_at_zeroes_other_slots"
-path = "fuzz_targets/ring_embed_at_zeroes_other_slots.rs"
+path = "fuzz_targets/ring/embed_at_zeroes_other_slots.rs"
 test = false
 doc = false
 
@@ -210,12 +214,12 @@ doc = false
 
 [[bin]]
 name = "ring_centered_repr_roundtrip"
-path = "fuzz_targets/ring_centered_repr_roundtrip.rs"
+path = "fuzz_targets/ring/centered_repr_roundtrip.rs"
 test = false
 doc = false
 
 [[bin]]
 name = "ring_centered_repr_ct_match"
-path = "fuzz_targets/ring_centered_repr_ct_match.rs"
+path = "fuzz_targets/ring/centered_repr_ct_match.rs"
 test = false
 doc = false

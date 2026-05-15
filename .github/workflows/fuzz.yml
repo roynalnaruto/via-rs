@@ -1,0 +1,102 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch / PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─── Fuzz every target (matrix; short smoke runs) ──────────────────────
+  #
+  # NOTE on the explicit `--target x86_64-unknown-linux-gnu`:
+  # `taiki-e/install-action` ships a musl-static `cargo-fuzz` binary, and
+  # cargo-fuzz's `default_target()` returns the triple it was compiled
+  # against — so without an override it would try to build the fuzz target
+  # for `x86_64-unknown-linux-musl`, which requires `x86_64-linux-musl-g++`
+  # (not present on ubuntu-latest). Forcing the gnu triple matches the
+  # runner's actual toolchain and uses the pre-installed `g++` for the
+  # libFuzzer C++ shim built by `libfuzzer-sys`.
+  #
+  # Alternative: drop the `--target` flag and instead install the musl
+  # toolchain (`sudo apt-get install -y musl-tools` + add the musl target
+  # via `dtolnay/rust-toolchain`). Slower; not chosen here.
+  fuzz:
+    name: Fuzz / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # §0.1 — Zq scalar arithmetic.
+          - zq_reduce
+          - zq_ops
+          - zq_const_vs_dyn
+          - zq_pow2_match
+          - zq_roundtrip
+          # §0.2 — RNS / double-CRT scalar.
+          - rns_roundtrip
+          - rns_ops
+          - rns_const_vs_dyn
+          - rns_slice_ops
+          # §0.3 — polynomial ring R_{n, q}.
+          - ring_negacyclic_mul
+          - ring_rotate
+          - ring_ops
+          - ring_const_vs_dyn
+          - ring_rns_ops
+          - ring_rns_negacyclic_mul
+          - ring_rns_rotate
+          - ring_rns_const_vs_dyn
+          # §0.4 — negacyclic NTT.
+          - ring_ntt_roundtrip
+          - ring_ntt_homomorphism
+          - ring_rns_ntt_roundtrip
+          - ring_rns_ntt_homomorphism
+          - ring_rns_ntt_homomorphism_n32
+          # §0.5 — ring embedding ι and projection π.
+          - ring_embed_roundtrip
+          - ring_embed_slot_isolation
+          - ring_embed_dfold_roundtrip
+          - ring_rns_embed_roundtrip
+          - ring_rns_embed_slot_isolation
+          - ring_embed_iota_zero_homomorphism
+          - ring_embed_at_zeroes_other_slots
+          # §0.6 — centred / balanced representation.
+          - ring_centered_repr_roundtrip
+          - ring_centered_repr_ct_match
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "fuzz -> fuzz/target"
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      - name: Fuzz ${{ matrix.target }} for 60s
+        run: |
+          cargo +nightly fuzz run \
+            --target x86_64-unknown-linux-gnu \
+            ${{ matrix.target }} \
+            -- -max_total_time=60
+
+      # Persist any crashes / hangs / leaks as artifacts so they survive the
+      # runner being torn down.
+      - name: Upload fuzz artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
