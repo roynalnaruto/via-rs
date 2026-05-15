@@ -89,15 +89,38 @@ jobs:
       fail-fast: false
       matrix:
         target:
+          # §0.1 — Zq scalar arithmetic.
           - zq_reduce
           - zq_ops
           - zq_const_vs_dyn
           - zq_pow2_match
           - zq_roundtrip
+          # §0.2 — RNS / double-CRT scalar.
           - rns_roundtrip
           - rns_ops
           - rns_const_vs_dyn
           - rns_slice_ops
+          # §0.3 — polynomial ring R_{n, q}.
+          - ring_negacyclic_mul
+          - ring_rotate
+          - ring_ops
+          - ring_const_vs_dyn
+          - ring_rns_ops
+          - ring_rns_negacyclic_mul
+          - ring_rns_const_vs_dyn
+          # §0.4 — negacyclic NTT.
+          - ring_ntt_roundtrip
+          - ring_ntt_homomorphism
+          - ring_rns_ntt_roundtrip
+          - ring_rns_ntt_homomorphism
+          # §0.5 — ring embedding ι and projection π.
+          - ring_embed_roundtrip
+          - ring_embed_slot_isolation
+          - ring_embed_dfold_roundtrip
+          - ring_rns_embed_roundtrip
+          # §0.6 — centred / balanced representation.
+          - ring_centered_repr_roundtrip
+          - ring_centered_repr_ct_match
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
