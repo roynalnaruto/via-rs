@@ -1,5 +1,7 @@
-//! Fuzz: `PolyRns::embed_at(j).project_at(j) == identity` across paper
-//! RNS bases. RNS analogue of `ring_embed_roundtrip`.
+//! Fuzz: $\pi_{j'} \circ \iota_j = 0$ for $j' \ne j$ on `PolyRns`.
+//! After embedding at slot `j`, projecting at any *other* slot
+//! yields the zero polynomial — slots are disjoint, per RNS slot.
+//! RNS analogue of `ring_embed_slot_isolation`.
 
 #![no_main]
 
@@ -40,10 +42,16 @@ struct Input {
 
 fn check<B: RnsBasis>(b: B, values: &[u128; N_SMALL], slot: usize) {
     let f: PolyRns<N_SMALL, B, Coefficient> = PolyRns::from_u128_array(b, values);
+    let zero: PolyRns<N_SMALL, B, Coefficient> = PolyRns::zero(b);
     let slot = slot % D;
     let big: PolyRns<N_LARGE, B, Coefficient> = f.embed_at::<N_LARGE>(slot);
-    let back: PolyRns<N_SMALL, B, Coefficient> = big.project_at::<N_SMALL>(slot);
-    assert_eq!(back, f);
+    for jp in 0..D {
+        if jp == slot {
+            continue;
+        }
+        let back: PolyRns<N_SMALL, B, Coefficient> = big.project_at::<N_SMALL>(jp);
+        assert_eq!(back, zero, "embed {slot}, project {jp}");
+    }
 }
 
 fuzz_target!(|input: Input| {

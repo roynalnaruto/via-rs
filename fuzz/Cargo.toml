@@ -177,6 +177,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "ring_rns_embed_slot_isolation"
+path = "fuzz_targets/ring_rns_embed_slot_isolation.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "ring_embed_iota_zero_homomorphism"
 path = "fuzz_targets/ring_embed_iota_zero_homomorphism.rs"
 test = false
