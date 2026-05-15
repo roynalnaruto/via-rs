@@ -39,6 +39,9 @@ impl<'a> Arbitrary<'a> for FuzzModulus {
 enum WhichLayer {
     SinglePrimeQ17,
     SinglePrimeViaCQ3,
+    /// Typed `PowerOfTwoModulus<12>` — see the matching note in
+    /// `ring_centered_repr_roundtrip`.
+    SinglePrimePow2ViaCQ4,
     SinglePrimeDyn,
     RnsViaQ1,
     RnsViaCQ1,
@@ -74,6 +77,9 @@ fuzz_target!(|input: Input| {
     match input.which {
         WhichLayer::SinglePrimeQ17 => check_single(ConstModulus::<17>, input.values_u64),
         WhichLayer::SinglePrimeViaCQ3 => check_single(paper::ViaCQ3::default(), input.values_u64),
+        WhichLayer::SinglePrimePow2ViaCQ4 => {
+            check_single(paper::ViaCQ4::default(), input.values_u64)
+        }
         WhichLayer::SinglePrimeDyn => check_single(input.dyn_mod.0, input.values_u64),
         WhichLayer::RnsViaQ1 => check_rns(rns_paper::ViaQ1Rns::default(), &input.values_u128),
         WhichLayer::RnsViaCQ1 => check_rns(rns_paper::ViaCQ1Rns::default(), &input.values_u128),
