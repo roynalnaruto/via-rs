@@ -13,12 +13,23 @@ use via_rs::primitives::zq::modulus::{DynModulus, Modulus};
 /// Paper-pinned moduli, plus a small set of representative odd composites,
 /// gives the fuzzer a strong starting point for corpus expansion.
 const KNOWN_MODULI: &[u64] = &[
-    2, 3, 5, 17, 257, // tiny primes
-    16, 256, 4096, 32768, // powers of two: p, q_4
-    8380417, 2147352577, // VIA-C / VIA q_3 primes
-    17175674881, 34359214081, // q_2 primes
-    137438822401, 274810798081, // VIA-C q_1 RNS primes
-    268369921, 536608769, // VIA q_1 RNS primes
+    2,
+    3,
+    5,
+    17,
+    257, // tiny primes
+    16,
+    256,
+    4096,
+    32768, // powers of two: p, q_4
+    8380417,
+    2147352577, // VIA-C / VIA q_3 primes
+    17175674881,
+    34359214081, // q_2 primes
+    137438822401,
+    274810798081, // VIA-C q_1 RNS primes
+    268369921,
+    536608769, // VIA q_1 RNS primes
 ];
 
 #[derive(Debug)]

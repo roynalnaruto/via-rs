@@ -14,7 +14,16 @@ use via_rs::primitives::ring::form::Coefficient;
 use via_rs::primitives::zq::modulus::{ConstModulus, DynModulus, Modulus, paper};
 
 const KNOWN_MODULI: &[u64] = &[
-    16, 256, 17, 257, 8380417, 2147352577, 17175674881, 34359214081, 137438822401, 274810798081,
+    16,
+    256,
+    17,
+    257,
+    8380417,
+    2147352577,
+    17175674881,
+    34359214081,
+    137438822401,
+    274810798081,
 ];
 
 /// Largest `N_LARGE` across the shapes below; sized for the raw bytes
@@ -48,8 +57,14 @@ enum WhichShape {
     D8,
     /// $(2, 32, 16)$ — wider $d$, closer to VIA-B's tiny-$n_3$ regime.
     D16,
-    /// $(1, 8, 8)$ — degenerate slot degree 1 (paper VIA-B $n_3 = 1$).
-    D8N1,
+    // VIA-B's $n_3 = 1$ case (slot degree 1, $d = n_1$) cannot be
+    // fuzzed at the typed `Poly` API: the `_CHECK` block in
+    // `Poly<N, M, F>` requires `N >= 2`. The slice-level kernel
+    // (`reshape::pack_slots_slice`) does support $n_\text{small} = 1$
+    // and is locked by the unit test
+    // `pack_then_unpack_identity_n_small_1_n_large_8` in `reshape.rs`;
+    // a slice-level fuzz target for that path would be a separate
+    // addition.
 }
 
 #[derive(Debug, Arbitrary)]
@@ -95,7 +110,6 @@ fn dispatch_shape<M: Modulus>(m: M, shape: WhichShape, raw: &[u64; MAX_N_LARGE])
         WhichShape::D4 => check::<M, 4, 16, 4>(m, reshape::<4, 4>(raw)),
         WhichShape::D8 => check::<M, 2, 16, 8>(m, reshape::<2, 8>(raw)),
         WhichShape::D16 => check::<M, 2, 32, 16>(m, reshape::<2, 16>(raw)),
-        WhichShape::D8N1 => check::<M, 1, 8, 8>(m, reshape::<1, 8>(raw)),
     }
 }
 

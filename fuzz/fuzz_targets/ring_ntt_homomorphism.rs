@@ -28,9 +28,9 @@ struct Input {
     rhs: [u64; N],
 }
 
-fn check<C: Modulus>(c: C, lhs: [u64; N], rhs: [u64; N])
+fn check<C>(c: C, lhs: [u64; N], rhs: [u64; N])
 where
-    C: via_rs::primitives::ring::ntt::NttFriendly<N>,
+    C: Modulus + via_rs::primitives::ring::ntt::NttFriendly<N>,
 {
     let f: Poly<N, C, Coefficient> = Poly::new(c, lhs);
     let g: Poly<N, C, Coefficient> = Poly::new(c, rhs);

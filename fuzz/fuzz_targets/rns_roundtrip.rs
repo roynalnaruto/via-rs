@@ -18,7 +18,7 @@ use via_rs::primitives::zq::modulus::{DynModulus, Modulus};
 /// Includes both paper products (so the corpus exercises the const-vs-dyn
 /// parity at 38-bit primes) plus a small handful of toy bases for sanity.
 const KNOWN_PAIRS: &[(u64, u64)] = &[
-    (268369921, 536608769),     // VIA q_1
+    (268369921, 536608769),       // VIA q_1
     (137438822401, 274810798081), // VIA-C / VIA-B q_1
     (5, 11),
     (7, 13),

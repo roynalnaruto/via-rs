@@ -59,11 +59,7 @@ fn reference_rotate_u128(q: u128, src: &[u128; N], k: usize) -> [u128; N] {
         let out_pos = if wrapped { i + k_red - N } else { i + k_red };
         let v = v_raw % q;
         dst[out_pos] = if wrapped ^ neg {
-            if v == 0 {
-                0
-            } else {
-                q - v
-            }
+            if v == 0 { 0 } else { q - v }
         } else {
             v
         };

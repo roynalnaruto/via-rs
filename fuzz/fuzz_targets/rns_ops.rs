@@ -89,8 +89,16 @@ fn check_ops<B: RnsBasis>(b: B, x: u128, y: u128, scalar: u64) {
     let want_scalar_a0 = m0_mul(m0.q(), a0, s0);
     let want_scalar_a1 = m0_mul(m1.q(), a1, s1);
     let scaled = xz * scalar;
-    assert_eq!(scaled.value0(), want_scalar_a0, "scalar.a0: scalar={scalar}");
-    assert_eq!(scaled.value1(), want_scalar_a1, "scalar.a1: scalar={scalar}");
+    assert_eq!(
+        scaled.value0(),
+        want_scalar_a0,
+        "scalar.a0: scalar={scalar}"
+    );
+    assert_eq!(
+        scaled.value1(),
+        want_scalar_a1,
+        "scalar.a1: scalar={scalar}"
+    );
 }
 
 /// Naive modular multiply: `(a * b) mod q` using u128 intermediates.

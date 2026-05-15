@@ -63,10 +63,7 @@ fuzz_target!(|input: Input| {
         }
         WhichBasis::ViaCQ1 => {
             let c = paper::ViaCQ1Rns::default();
-            let d = DynRnsBasis::new(
-                DynModulus::new(137438822401),
-                DynModulus::new(274810798081),
-            );
+            let d = DynRnsBasis::new(DynModulus::new(137438822401), DynModulus::new(274810798081));
             check(c, d, input.x, input.y, input.scalar);
         }
     }

@@ -36,11 +36,15 @@ doc-build:
 lint:
     cargo fmt --all
     cargo clippy --all-targets -- -D warnings
+    cd fuzz && cargo fmt --all
+    cd fuzz && cargo clippy --all-targets -- -D warnings
 
 # CI-friendly variant: check formatting without modifying files; deny clippy warnings.
 lint-check:
     cargo fmt --all -- --check
     cargo clippy --all-targets -- -D warnings
+    cd fuzz && cargo fmt --all -- --check
+    cd fuzz && cargo clippy --all-targets -- -D warnings
 
 # ─── fuzz ────────────────────────────────────────────────────────────────
 #

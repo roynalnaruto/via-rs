@@ -122,8 +122,18 @@ fn check<B: RnsBasis>(b: B, lhs: &[u128; N], rhs: &[u128; N], scalar: u64) {
 
 fuzz_target!(|input: Input| {
     match input.which {
-        WhichBasis::ViaQ1 => check(paper::ViaQ1Rns::default(), &input.lhs, &input.rhs, input.scalar),
-        WhichBasis::ViaCQ1 => check(paper::ViaCQ1Rns::default(), &input.lhs, &input.rhs, input.scalar),
+        WhichBasis::ViaQ1 => check(
+            paper::ViaQ1Rns::default(),
+            &input.lhs,
+            &input.rhs,
+            input.scalar,
+        ),
+        WhichBasis::ViaCQ1 => check(
+            paper::ViaCQ1Rns::default(),
+            &input.lhs,
+            &input.rhs,
+            input.scalar,
+        ),
         WhichBasis::Dyn => {
             let (q0, q1) = KNOWN_PAIRS[input.dyn_pair_idx];
             let basis = DynRnsBasis::new(DynModulus::new(q0), DynModulus::new(q1));

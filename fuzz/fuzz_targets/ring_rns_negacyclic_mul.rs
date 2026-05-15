@@ -15,12 +15,7 @@ use via_rs::primitives::zq::modulus::DynModulus;
 
 const N: usize = 4;
 
-const KNOWN_PAIRS: &[(u64, u64)] = &[
-    (5, 11),
-    (7, 13),
-    (17, 257),
-    (268369921, 536608769),
-];
+const KNOWN_PAIRS: &[(u64, u64)] = &[(5, 11), (7, 13), (17, 257), (268369921, 536608769)];
 
 #[derive(Debug, Arbitrary, Clone, Copy)]
 enum WhichBasis {
@@ -65,8 +60,8 @@ fn check<B: RnsBasis>(b: B, lhs_u32: &[u32; N], rhs_u32: &[u32; N]) {
             }
         }
     }
-    for i in 0..N {
-        let want = acc[i].rem_euclid(qi) as u128;
+    for (i, &a) in acc.iter().enumerate() {
+        let want = a.rem_euclid(qi) as u128;
         assert_eq!(got.coeff(i).to_u128(), want, "i={i}, q={q}");
     }
 }

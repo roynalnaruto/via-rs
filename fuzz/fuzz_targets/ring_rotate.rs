@@ -15,8 +15,20 @@ use via_rs::primitives::zq::modulus::{DynModulus, Modulus};
 const N: usize = 8;
 
 const KNOWN_MODULI: &[u64] = &[
-    16, 256, 4096, 32768, 17, 257, 8380417, 2147352577, 17175674881, 34359214081, 137438822401,
-    274810798081, 268369921, 536608769,
+    16,
+    256,
+    4096,
+    32768,
+    17,
+    257,
+    8380417,
+    2147352577,
+    17175674881,
+    34359214081,
+    137438822401,
+    274810798081,
+    268369921,
+    536608769,
 ];
 
 #[derive(Debug)]
@@ -48,11 +60,14 @@ fn reference_rotate(m: DynModulus, src: &[u64; N], k: usize) -> [u64; N] {
     let k_red = k_eff % N;
     let neg = k_eff >= N;
     let mut dst = [0u64; N];
-    for i in 0..N {
+    for (i, &v) in src.iter().enumerate() {
         let wrapped = i + k_red >= N;
         let out_pos = if wrapped { i + k_red - N } else { i + k_red };
-        let v = src[i];
-        dst[out_pos] = if wrapped ^ neg { if v == 0 { 0 } else { q - v } } else { v };
+        dst[out_pos] = if wrapped ^ neg {
+            if v == 0 { 0 } else { q - v }
+        } else {
+            v
+        };
     }
     dst
 }

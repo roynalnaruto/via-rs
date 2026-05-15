@@ -32,9 +32,9 @@ struct Input {
     values: [u64; N],
 }
 
-fn check<C: Modulus>(c: C, values: [u64; N])
+fn check<C>(c: C, values: [u64; N])
 where
-    C: via_rs::primitives::ring::ntt::NttFriendly<N>,
+    C: Modulus + via_rs::primitives::ring::ntt::NttFriendly<N>,
 {
     let f: Poly<N, C, Coefficient> = Poly::new(c, values);
     let back = f.into_eval().into_coeff();
