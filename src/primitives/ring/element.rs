@@ -178,6 +178,25 @@ impl<const N: usize, M: Modulus, F: Form> Poly<N, M, F> {
     /// as $\sum_i v_i X^i$. On the evaluation form this trusts the caller
     /// that the `values` are already valid negacyclic-NTT evaluations of
     /// some polynomial — they are not re-NTT'd.
+    ///
+    /// # Evaluation form on non-NTT-friendly moduli
+    ///
+    /// This constructor is form-neutral: it accepts any `M: Modulus`,
+    /// not just `NttFriendly<N>`. Constructing
+    /// `Poly<N, M, Evaluation>` when `M` is *not* `NttFriendly<N>`
+    /// produces a buffer that has **no underlying $R_{n, q}$ polynomial**
+    /// — the NTT bijection $R_{n, q} \to \mathbb{Z}_q^N$ requires
+    /// $q \equiv 1 \pmod{2N}$. Such an eval-form `Poly` still supports
+    /// the pointwise arithmetic ops (`add`, `sub`, `neg`, `mul`,
+    /// scalar `mul`) as raw $\mathbb{Z}_q^N$ vectors, which is useful
+    /// for testing and for protocol layers that operate componentwise.
+    /// But [`Poly::eval`] returns "the value at the $i$-th NTT point"
+    /// — meaningless without an NTT — and there is no way to recover
+    /// a coefficient-form polynomial without `NttFriendly<N>`.
+    ///
+    /// Production call sites in `Evaluation` form should always go
+    /// through [`Poly::into_eval`] from coefficient form, which
+    /// statically requires `M: NttFriendly<N>`.
     pub fn new(modulus: M, values: [u64; N]) -> Self {
         let () = Self::_CHECK;
         let mut reduced = [0u64; N];
@@ -192,9 +211,20 @@ impl<const N: usize, M: Modulus, F: Form> Poly<N, M, F> {
     /// independently via [`Zq::random`].
     ///
     /// On the coefficient form this samples a uniform polynomial in
-    /// $R_{n, q}$; on the evaluation form this samples a uniform vector
-    /// of NTT evaluations (also uniform in $R_{n, q}$ because the NTT is
-    /// a bijection).
+    /// $R_{n, q}$. On the evaluation form, when `M: NttFriendly<N>`,
+    /// this samples a uniform vector of NTT evaluations — by the NTT
+    /// bijection this is *also* uniform in $R_{n, q}$.
+    ///
+    /// # Evaluation form on non-NTT-friendly moduli
+    ///
+    /// As with [`Poly::new`], this constructor is form-neutral: it
+    /// accepts any `M: Modulus`. When `M` is *not* `NttFriendly<N>`
+    /// the result is a uniform $\mathbb{Z}_q^N$ vector with **no
+    /// associated $R_{n, q}$ polynomial** — the "uniform in $R_{n, q}$
+    /// via NTT bijection" guarantee in the paragraph above is conditional
+    /// on the bijection existing. Use the evaluation form on
+    /// non-NTT-friendly moduli only for componentwise testing and
+    /// protocol scratch buffers.
     pub fn random<R: RngCore + ?Sized>(modulus: M, rng: &mut R) -> Self {
         let () = Self::_CHECK;
         let mut buf = [0u64; N];

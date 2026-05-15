@@ -130,6 +130,18 @@ impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
     ///
     /// Under `F = Evaluation` this trusts that the supplied values are
     /// already valid negacyclic-NTT evaluations — they are not re-NTT'd.
+    ///
+    /// # Evaluation form on non-NTT-friendly bases
+    ///
+    /// Form-neutral: accepts any `B: RnsBasis`, not just one where both
+    /// `B::M0` and `B::M1` are `NttFriendly<N>`. Constructing
+    /// `PolyRns<N, B, Evaluation>` over a basis whose component primes
+    /// aren't NTT-friendly produces a per-slot raw $\mathbb{Z}_{q^{(i)}}^N$
+    /// pair with **no underlying $R_{n, Q}$ polynomial** — same
+    /// caveat as the single-prime [`super::element::Poly::new`].
+    /// Production call sites should always go through
+    /// [`PolyRns::into_eval`], which statically requires NTT-friendly
+    /// component primes.
     pub fn new(basis: B, values0: [u64; N], values1: [u64; N]) -> Self {
         let () = Self::_CHECK;
         let m0 = basis.m0();
@@ -162,6 +174,15 @@ impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
 
     /// Sample a uniformly random polynomial by drawing each lane
     /// independently via [`Zq::random`] on each slot.
+    ///
+    /// # Evaluation form on non-NTT-friendly bases
+    ///
+    /// As with [`PolyRns::new`], constructing the `Evaluation` form
+    /// over a basis whose component primes aren't `NttFriendly<N>`
+    /// produces a uniform per-slot $\mathbb{Z}_{q^{(i)}}^N$ pair with
+    /// no associated $R_{n, Q}$ polynomial. The "uniform in $R_{n, Q}$
+    /// via NTT bijection" guarantee is conditional on NTT-friendliness
+    /// of both component primes.
     pub fn random<R: RngCore + ?Sized>(basis: B, rng: &mut R) -> Self {
         let () = Self::_CHECK;
         let m0 = basis.m0();
