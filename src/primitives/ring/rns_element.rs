@@ -272,6 +272,18 @@ where
     /// (§0.4). Each slot is transformed independently. The eval-form
     /// buffer is in **bit-reversed** order — see
     /// [`super::element::Poly::into_eval`].
+    ///
+    /// # Secret-bearing inputs
+    ///
+    /// Inherits the same trust boundary as
+    /// [`super::element::Poly::into_eval`]: `self` is consumed by
+    /// value, and Rust does not guarantee either slot's source
+    /// buffer is zeroed after the move. RNS secrets (e.g. a $q_1$
+    /// ring-switch key sample, or any intermediate carrying
+    /// coefficient statistics of $S_1$) must be routed through a
+    /// `_zeroizing` wrapper rather than this method directly.
+    /// Current call sites are non-secret; the wrapper lands with
+    /// §2.1 / §3.3.
     #[inline]
     pub fn into_eval(self) -> PolyRns<N, B, Evaluation> {
         let mut b0 = self.values0;
@@ -485,6 +497,16 @@ where
     /// Convert back to coefficient form via per-slot inverse NTT (§0.4).
     /// Consumes bit-reversed eval-form input per slot; produces
     /// natural-coefficient output per slot.
+    ///
+    /// # Secret-bearing inputs
+    ///
+    /// Same trust boundary as
+    /// [`PolyRns::<N, B, Coefficient>::into_eval`]: `self` is
+    /// consumed by value and neither slot's source buffer is
+    /// guaranteed zeroed after the move. Wrap secret-bearing
+    /// inputs through a `_zeroizing` variant when those types land
+    /// at §2.1 / §3.3; non-secret current call sites use this
+    /// method directly.
     #[inline]
     pub fn into_coeff(self) -> PolyRns<N, B, Coefficient> {
         let mut b0 = self.values0;

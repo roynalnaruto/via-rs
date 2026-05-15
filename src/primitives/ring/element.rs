@@ -292,6 +292,25 @@ impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Coefficient> {
     /// Pointwise multiplication and additive ring ops are order-agnostic,
     /// so consumers that only round-trip + multiply + add do not see the
     /// permutation.
+    ///
+    /// # Secret-bearing inputs
+    ///
+    /// This method consumes `self` by value: the source buffer is
+    /// moved into a stack-local scratch slot and the in-place NTT
+    /// overwrites it. Rust does **not** guarantee the original stack
+    /// location is zeroed after the move. If the caller's `self`
+    /// carries secret data (e.g. a §2.1 secret-key polynomial, or a
+    /// §3.3 ring-switch-key intermediate that exposes coefficient
+    /// statistics of $S_1$), the residual stack slot remains
+    /// observable to anyone who can read that memory.
+    ///
+    /// Today the only call sites are tests and non-secret protocol
+    /// paths, so direct use is safe. When secret-bearing types land
+    /// (§2.1 `SecretKey`, §3.3 ring-switch keys), funnel secret
+    /// inputs through a `_zeroizing` wrapper that calls
+    /// [`zeroize::Zeroize::zeroize`] on `self.values` immediately
+    /// after the NTT. **Do not** call this method directly on a
+    /// secret-bearing `Poly`.
     #[inline]
     pub fn into_eval(self) -> Poly<N, M, Evaluation> {
         let mut buf = self.values;
@@ -504,6 +523,17 @@ impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Evaluation> {
     /// Assumes the eval-form buffer is in **bit-reversed** order — i.e.
     /// the output of a prior [`Poly::<N, M, Coefficient>::into_eval`]
     /// call. The result is in natural-coefficient order.
+    ///
+    /// # Secret-bearing inputs
+    ///
+    /// Same trust boundary as
+    /// [`Poly::<N, M, Coefficient>::into_eval`]: `self` is consumed
+    /// by value and Rust does not guarantee the original stack slot
+    /// is zeroed after the move. If `self` carries secret data, the
+    /// residual eval-form buffer remains observable. Route secret
+    /// inputs through a `_zeroizing` wrapper (to land with §2.1
+    /// `SecretKey` / §3.3 ring-switch keys); current call sites are
+    /// non-secret and use this method directly.
     #[inline]
     pub fn into_coeff(self) -> Poly<N, M, Coefficient> {
         let mut buf = self.values;
