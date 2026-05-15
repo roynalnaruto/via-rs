@@ -118,6 +118,7 @@ jobs:
           - ring_embed_slot_isolation
           - ring_embed_dfold_roundtrip
           - ring_rns_embed_roundtrip
+          - ring_embed_iota_zero_homomorphism
           # §0.6 — centred / balanced representation.
           - ring_centered_repr_roundtrip
           - ring_centered_repr_ct_match
