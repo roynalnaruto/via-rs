@@ -318,10 +318,16 @@ mod tests {
     }
 
     /// $d$-fold pack should agree with per-slot single-slot embeds
-    /// merged together (slots are disjoint, so OR/add are equivalent).
+    /// summed position-wise. Slots are *disjoint by construction*
+    /// (embed_j writes to positions ≡ j (mod d) and zero elsewhere),
+    /// so adding the per-slot embeds reconstructs the d-fold pack
+    /// without overflow risk on raw `u64`. The earlier version used
+    /// bitwise OR for the same reason, but addition reads more
+    /// faithfully as a disjoint-union operation and survives any
+    /// future test-value change.
     #[test]
     fn pack_slots_matches_per_slot_embed() {
-        // Three slot polys at n_small = 4, n_large = 16 (d = 4).
+        // Source layout: d=4 slots of n_small=4 lanes each, into n_large=16.
         let mut concat = [0u64; 16];
         for j in 0..4usize {
             for i in 0..4usize {
@@ -338,7 +344,7 @@ mod tests {
             let mut tmp = [0u64; 16];
             embed_at_slice(&slot_src, &mut tmp, j);
             for (acc, &v) in packed_via_singles.iter_mut().zip(tmp.iter()) {
-                *acc |= v;
+                *acc += v;
             }
         }
         assert_eq!(packed_via_dfold, packed_via_singles);
