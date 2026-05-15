@@ -250,6 +250,15 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
 
     /// Deterministic rotation: returns $X^k \cdot \mathrm{self}$ in
     /// $R_{n, Q}$. Calls [`super::ops::rotate_slice`] once per slot.
+    ///
+    /// # Secret-$k$: do not use this method
+    ///
+    /// Inherits the same constraint as the single-prime
+    /// [`super::element::Poly::mul_x_pow`]: `k` is a **public**
+    /// parameter and the implementation branches on it. Encrypted-
+    /// exponent rotation belongs to the §4.4 `CRot` composite; this
+    /// kernel is the building block, not the protocol-facing entry
+    /// point.
     pub fn mul_x_pow(&self, k: usize) -> Self {
         let mut d0 = [0u64; N];
         let mut d1 = [0u64; N];

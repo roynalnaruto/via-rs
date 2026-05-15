@@ -134,6 +134,13 @@ pub fn negacyclic_mul_slice<M: Modulus>(m: M, dst: &mut [u64], lhs: &[u64], rhs:
 /// per-bit shift $2^i$ is also a loop induction variable (the *encrypted*
 /// control bit feeds CMux, not the rotation index).
 ///
+/// **Do not** call this kernel with a $k$ that depends on secret data
+/// (a query index, a key-derived value, anything that should not leak
+/// through timing). The encrypted-exponent path lives in §4.4 `CRot`,
+/// which composes this rotation with `CMux` over RGSW select bits;
+/// callers wanting encrypted rotation should route through that
+/// composite rather than passing a secret $k$ here.
+///
 /// # Panics
 ///
 /// Panics if `dst.len() != src.len()`. Panics if `dst.len() == 0`.

@@ -304,6 +304,20 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     /// $R_{n, q}$ — paper §4.5. The rotation exponent $k$ is taken as a
     /// public parameter and the implementation may branch on it; the
     /// coefficient *values* are still handled in constant time.
+    ///
+    /// # Secret-$k$: do not use this method
+    ///
+    /// **Do not call this with a $k$ that depends on secret data**
+    /// (e.g. a query index or any value derived from a key or
+    /// plaintext). The implementation reduces `k` modulo `2 * n` and
+    /// branches on the wrap quadrant, which leaks `k` through timing.
+    /// At every paper §4.5 call site `k` is a public loop induction
+    /// variable (the per-bit shift $2^i$ in `CRot`), and the
+    /// *encrypted* control bits feed [`CMux`](../../../) — not this
+    /// rotation primitive directly. When the §4.4 `CRot` primitive
+    /// lands it will compose `mul_x_pow` with `CMux` to support
+    /// encrypted exponents; route secret-$k$ call sites through that
+    /// composite rather than calling `mul_x_pow` with secret input.
     pub fn mul_x_pow(&self, k: usize) -> Self {
         let mut dst = [0u64; N];
         ring_ops::rotate_slice(self.modulus, &mut dst, &self.values, k);
