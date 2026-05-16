@@ -8,10 +8,10 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::primitives::rns::element::RnsZq;
-use via_rs::primitives::rns::ops;
-use via_rs::primitives::zq::modulus::DynModulus;
+use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_rs::algebra::rns::element::RnsZq;
+use via_rs::algebra::rns::ops;
+use via_rs::algebra::zq::modulus::DynModulus;
 
 const MAX_LEN: usize = 16;
 
@@ -159,7 +159,7 @@ fn check<B: RnsBasis>(b: B, lhs: &[u128], rhs: &[u128], scalar: u64) {
 }
 
 // Bring `Modulus::reduce_u64` into scope for `scalar_mul`'s scalar reduction.
-use via_rs::primitives::zq::modulus::Modulus;
+use via_rs::algebra::zq::modulus::Modulus;
 
 fuzz_target!(|input: FuzzInput| {
     let n = input.len as usize;

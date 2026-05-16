@@ -8,10 +8,10 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::ring::element::Poly;
-use via_rs::primitives::ring::form::{Coefficient, Evaluation};
-use via_rs::primitives::zq::modulus::{DynModulus, Modulus};
-use via_rs::primitives::zq::ops as zq_ops;
+use via_rs::algebra::ring::element::Poly;
+use via_rs::algebra::ring::form::{Coefficient, Evaluation};
+use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_rs::algebra::zq::ops as zq_ops;
 
 const N: usize = 16;
 

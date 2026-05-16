@@ -3,7 +3,7 @@
 //! These are the **ring-specific** kernels — operations that depend on the
 //! polynomial structure (negacyclic wrap, $X^k$ rotation) rather than the
 //! purely coefficient-wise ones (`add`, `sub`, `neg`, scalar / pointwise
-//! `mul`). The componentwise ops live at [`crate::primitives::zq::ops`] and
+//! `mul`). The componentwise ops live at [`crate::algebra::zq::ops`] and
 //! are reused directly by the [`Poly`] type — they are not re-exposed here.
 //!
 //! Every kernel takes a [`Modulus`] by value plus flat `&[u64]` slices.
@@ -33,7 +33,7 @@
 //!
 //! [`Poly`]: super::element::Poly
 
-use crate::primitives::zq::modulus::Modulus;
+use crate::algebra::zq::modulus::Modulus;
 
 /// Negacyclic schoolbook multiplication in $R_{n, q}$:
 /// $\mathrm{dst} = \mathrm{lhs} \cdot \mathrm{rhs} \bmod (X^n + 1, q)$.
@@ -184,7 +184,7 @@ pub fn rotate_slice<M: Modulus>(m: M, dst: &mut [u64], src: &[u64], k: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::zq::modulus::{ConstModulus, DynModulus};
+    use crate::algebra::zq::modulus::{ConstModulus, DynModulus};
 
     /// Reference negacyclic mul on `u128`s reduced modulo `q` at the end.
     /// The kernel under test should agree element-by-element.

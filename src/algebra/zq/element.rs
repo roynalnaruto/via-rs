@@ -310,7 +310,7 @@ impl<M: Modulus> fmt::Debug for Zq<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::zq::modulus::{ConstModulus, DynModulus, PowerOfTwoModulus};
+    use crate::algebra::zq::modulus::{ConstModulus, DynModulus, PowerOfTwoModulus};
 
     #[test]
     fn ops_const_modulus() {

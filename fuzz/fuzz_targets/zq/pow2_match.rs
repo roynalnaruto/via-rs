@@ -8,7 +8,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::zq::modulus::{ConstModulus, Modulus, PowerOfTwoModulus};
+use via_rs::algebra::zq::modulus::{ConstModulus, Modulus, PowerOfTwoModulus};
 
 #[derive(Debug, Arbitrary, Clone, Copy)]
 enum WhichLog2 {

@@ -1,13 +1,13 @@
 //! RNS polynomial wrapper [`PolyRns<N, B, F>`].
 //!
-//! [`PolyRns`] is the §0.3 analogue of [`crate::primitives::rns::element::RnsZq`]
+//! [`PolyRns`] is the §0.3 analogue of [`crate::algebra::rns::element::RnsZq`]
 //! at the polynomial scale: two parallel `[u64; N]` lane buffers — one per
 //! RNS slot of the basis $B$ — paired with the basis context and the
 //! typestate marker `F: Form`. Used when the modulus is composite, which
 //! at paper params means **only $q_1$** for VIA / VIA-C / VIA-B.
 //!
 //! Storage is SoA (struct-of-arrays): one contiguous `[u64; N]` per prime
-//! slot, side-by-side. This matches the layout `crate::primitives::rns::ops`
+//! slot, side-by-side. This matches the layout `crate::algebra::rns::ops`
 //! and `super::rns_ops` consume — each kernel calls into its single-prime
 //! counterpart twice — and lines up naturally with per-prime NTT (§0.4).
 //!
@@ -23,11 +23,11 @@ use rand_core::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::Zeroize;
 
-use crate::primitives::rns::basis::RnsBasis;
-use crate::primitives::rns::element::RnsZq;
-use crate::primitives::rns::ops as rns_ops;
-use crate::primitives::zq::element::Zq;
-use crate::primitives::zq::modulus::Modulus;
+use crate::algebra::rns::basis::RnsBasis;
+use crate::algebra::rns::element::RnsZq;
+use crate::algebra::rns::ops as rns_ops;
+use crate::algebra::zq::element::Zq;
+use crate::algebra::zq::modulus::Modulus;
 
 use super::form::{Coefficient, Evaluation, Form};
 use super::ntt::{self, NttFriendly};
@@ -936,8 +936,8 @@ impl<const N: usize, B: RnsBasis, F: Form> fmt::Debug for PolyRns<N, B, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::rns::basis::{ConstRnsBasis, DynRnsBasis, paper};
-    use crate::primitives::zq::modulus::DynModulus;
+    use crate::algebra::rns::basis::{ConstRnsBasis, DynRnsBasis, paper};
+    use crate::algebra::zq::modulus::DynModulus;
 
     type Z55 = ConstRnsBasis<5, 11>;
 
@@ -1051,7 +1051,7 @@ mod tests {
     fn rns_mul_x_pow_matches_single_prime_per_slot() {
         // Verify PolyRns::mul_x_pow agrees with running the single-prime
         // mul_x_pow on each slot independently.
-        use crate::primitives::ring::element::Poly;
+        use crate::algebra::ring::element::Poly;
         let b = paper::ViaQ1Rns::default();
         let xs: [u128; 4] = [12345, 67890, b.big_q() - 1, 999];
         let p: PolyRns<4, _, Coefficient> = PolyRns::from_u128_array(b, &xs);
@@ -1237,8 +1237,8 @@ mod tests {
     /// permutation. Closes review item 17/18 (RNS side).
     #[test]
     fn rns_poly_eval_dispatches_per_slot_bit_reversed_layout() {
-        use crate::primitives::ring::element::Poly;
-        use crate::primitives::ring::form::Coefficient as SingleCoefficient;
+        use crate::algebra::ring::element::Poly;
+        use crate::algebra::ring::form::Coefficient as SingleCoefficient;
         let b = paper::ViaQ1Rns::default();
         let q0 = b.m0().q();
         let q1 = b.m1().q();
@@ -1331,7 +1331,7 @@ mod tests {
     /// path and compares per-slot value buffers.
     #[test]
     fn rns_poly_embed_at_matches_per_slot() {
-        use crate::primitives::ring::element::Poly;
+        use crate::algebra::ring::element::Poly;
         let b = paper::ViaQ1Rns::default();
         let xs: [u128; 4] = [12345, 67890, b.big_q() - 1, 11];
         let f: PolyRns<4, _, Coefficient> = PolyRns::from_u128_array(b, &xs);

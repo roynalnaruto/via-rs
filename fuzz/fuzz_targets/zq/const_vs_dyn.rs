@@ -6,7 +6,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::zq::modulus::{ConstModulus, DynModulus, Modulus};
+use via_rs::algebra::zq::modulus::{ConstModulus, DynModulus, Modulus};
 
 #[derive(Debug, Arbitrary, Clone, Copy)]
 enum WhichModulus {

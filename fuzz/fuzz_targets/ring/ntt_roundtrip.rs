@@ -6,9 +6,9 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::ring::element::Poly;
-use via_rs::primitives::ring::form::Coefficient;
-use via_rs::primitives::zq::modulus::{ConstModulus, Modulus, paper};
+use via_rs::algebra::ring::element::Poly;
+use via_rs::algebra::ring::form::Coefficient;
+use via_rs::algebra::zq::modulus::{ConstModulus, Modulus, paper};
 
 // Tiny N keeps fuzz iterations fast; paper-N=2048 is exercised in the
 // integration test in element.rs.
@@ -34,7 +34,7 @@ struct Input {
 
 fn check<C>(c: C, values: [u64; N])
 where
-    C: Modulus + via_rs::primitives::ring::ntt::NttFriendly<N>,
+    C: Modulus + via_rs::algebra::ring::ntt::NttFriendly<N>,
 {
     let f: Poly<N, C, Coefficient> = Poly::new(c, values);
     let back = f.into_eval().into_coeff();

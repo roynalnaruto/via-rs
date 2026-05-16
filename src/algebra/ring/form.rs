@@ -7,9 +7,9 @@
 //! compiler refuses to mix them:
 //!
 //! ```compile_fail
-//! use via_rs::primitives::ring::element::Poly;
-//! use via_rs::primitives::ring::form::{Coefficient, Evaluation};
-//! use via_rs::primitives::zq::modulus::ConstModulus;
+//! use via_rs::algebra::ring::element::Poly;
+//! use via_rs::algebra::ring::form::{Coefficient, Evaluation};
+//! use via_rs::algebra::zq::modulus::ConstModulus;
 //! type M = ConstModulus<17>;
 //! let c: Poly<4, M, Coefficient> = Poly::zero(M);
 //! let e: Poly<4, M, Evaluation> = Poly::zero(M);

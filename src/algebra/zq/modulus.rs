@@ -235,7 +235,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// # Example
 ///
 /// ```rust
-/// use via_rs::primitives::zq::modulus::{ConstModulus, Modulus};
+/// use via_rs::algebra::zq::modulus::{ConstModulus, Modulus};
 /// let m = ConstModulus::<17>;
 /// assert_eq!(m.add(10, 12), 5); // (10 + 12) mod 17 = 22 mod 17 = 5
 /// assert_eq!(m.mul(5, 7), 1);   // (5 * 7) mod 17 = 35 mod 17 = 1
@@ -244,7 +244,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// # Compile-time rejection of out-of-range `Q`
 ///
 /// ```compile_fail
-/// use via_rs::primitives::zq::modulus::{ConstModulus, Modulus};
+/// use via_rs::algebra::zq::modulus::{ConstModulus, Modulus};
 /// // Q = 2^63 violates the §0.1 modulus range contract; barrett_mu refuses
 /// // to const-evaluate, so any use of `ConstModulus::<{1u64 << 63}>::MU`
 /// // fails to compile. Use `PowerOfTwoModulus<63>` instead.
@@ -306,7 +306,7 @@ impl<const Q: u64> Modulus for ConstModulus<Q> {
 /// # Example
 ///
 /// ```rust
-/// use via_rs::primitives::zq::modulus::{PowerOfTwoModulus, Modulus};
+/// use via_rs::algebra::zq::modulus::{PowerOfTwoModulus, Modulus};
 /// let m = PowerOfTwoModulus::<4>; // q = 16
 /// assert_eq!(m.q(), 16);
 /// assert_eq!(m.add(10, 12), 6); // (10 + 12) mod 16

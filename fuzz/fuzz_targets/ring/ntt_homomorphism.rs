@@ -7,9 +7,9 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::ring::element::Poly;
-use via_rs::primitives::ring::form::Coefficient;
-use via_rs::primitives::zq::modulus::{ConstModulus, Modulus, paper};
+use via_rs::algebra::ring::element::Poly;
+use via_rs::algebra::ring::form::Coefficient;
+use via_rs::algebra::zq::modulus::{ConstModulus, Modulus, paper};
 
 const N: usize = 8;
 
@@ -30,7 +30,7 @@ struct Input {
 
 fn check<C>(c: C, lhs: [u64; N], rhs: [u64; N])
 where
-    C: Modulus + via_rs::primitives::ring::ntt::NttFriendly<N>,
+    C: Modulus + via_rs::algebra::ring::ntt::NttFriendly<N>,
 {
     let f: Poly<N, C, Coefficient> = Poly::new(c, lhs);
     let g: Poly<N, C, Coefficient> = Poly::new(c, rhs);

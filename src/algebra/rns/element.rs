@@ -423,8 +423,8 @@ impl<B: RnsBasis> fmt::Debug for RnsZq<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::rns::basis::{ConstRnsBasis, DynRnsBasis, paper};
-    use crate::primitives::zq::modulus::DynModulus;
+    use crate::algebra::rns::basis::{ConstRnsBasis, DynRnsBasis, paper};
+    use crate::algebra::zq::modulus::DynModulus;
 
     type Z55 = ConstRnsBasis<5, 11>;
 
@@ -656,7 +656,7 @@ mod tests {
     /// item 18 (RnsZq side).
     #[test]
     fn rnszq_random_uniformity_chi_squared() {
-        type Z77 = crate::primitives::rns::basis::ConstRnsBasis<7, 11>;
+        type Z77 = crate::algebra::rns::basis::ConstRnsBasis<7, 11>;
         let b = Z77::default();
         let mut rng = SplitMix64::new(0xDEADBEEF_BAADF00D);
         let mut counts0 = [0u64; 7];

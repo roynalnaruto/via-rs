@@ -279,7 +279,7 @@ mod tests {
     use super::super::basis::{ConstRnsBasis, DynRnsBasis, paper};
     use super::super::element::RnsZq;
     use super::*;
-    use crate::primitives::zq::modulus::DynModulus;
+    use crate::algebra::zq::modulus::DynModulus;
 
     type Z55 = ConstRnsBasis<5, 11>;
 

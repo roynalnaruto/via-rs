@@ -1,7 +1,7 @@
 //! GPU-portable SoA slice kernels for $R_{n, Q}$ under the two-prime RNS
 //! decomposition.
 //!
-//! Mirrors [`crate::primitives::rns::ops`] at the polynomial-ring scale:
+//! Mirrors [`crate::algebra::rns::ops`] at the polynomial-ring scale:
 //! each kernel takes an [`RnsBasis`] by value plus a pair of flat per-prime
 //! `&[u64]` slices, and dispatches to the underlying single-prime
 //! [`super::ops`] kernel twice — once per RNS slot.
@@ -10,9 +10,9 @@
 //! caller passing mismatched per-prime buffer sizes panics with a clear
 //! message before the inner kernels see it. The componentwise ops (`add`,
 //! `sub`, `neg`, scalar / pointwise `mul`) reuse
-//! [`crate::primitives::rns::ops`] directly and are not re-exposed here.
+//! [`crate::algebra::rns::ops`] directly and are not re-exposed here.
 
-use crate::primitives::rns::basis::RnsBasis;
+use crate::algebra::rns::basis::RnsBasis;
 
 use super::ops;
 
@@ -68,7 +68,7 @@ pub fn rotate_slice<B: RnsBasis>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::rns::basis::{ConstRnsBasis, paper};
+    use crate::algebra::rns::basis::{ConstRnsBasis, paper};
 
     type Z55 = ConstRnsBasis<5, 11>;
 

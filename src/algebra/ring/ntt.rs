@@ -49,8 +49,8 @@
 //! regardless of contents). The twiddle access pattern depends only on
 //! the public ring degree $N$. There are no early exits.
 
-use crate::primitives::rns::reduce::mod_inverse_u64;
-use crate::primitives::zq::modulus::{ConstModulus, Modulus};
+use crate::algebra::rns::reduce::mod_inverse_u64;
+use crate::algebra::zq::modulus::{ConstModulus, Modulus};
 
 // ---------------------------------------------------------------------------
 // Const-fn primitives — used by the `ConstModulus<Q>` trait impl below
@@ -433,7 +433,7 @@ pub(crate) fn intt_inplace<const N: usize, M: NttFriendly<N>>(m: M, buf: &mut [u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::zq::modulus::paper;
+    use crate::algebra::zq::modulus::paper;
 
     type M17 = ConstModulus<17>;
 
@@ -656,8 +656,8 @@ mod tests {
     /// `assert_bit_reversed_layout` reference.
     #[test]
     fn poly_eval_pins_bit_reversed_index() {
-        use crate::primitives::ring::element::Poly;
-        use crate::primitives::ring::form::Coefficient;
+        use crate::algebra::ring::element::Poly;
+        use crate::algebra::ring::form::Coefficient;
         let m = M17::default();
         let input = [1u64, 2, 3, 4, 5, 6, 7, 8];
         let expected = assert_bit_reversed_layout::<8, _>(m, input);
@@ -762,7 +762,7 @@ mod tests {
     /// NTT is the right transform for $R_{n, q}$ multiplication.
     #[test]
     fn ntt_homomorphism_small() {
-        use crate::primitives::ring::ops::negacyclic_mul_slice;
+        use crate::algebra::ring::ops::negacyclic_mul_slice;
         let m = M17::default();
         let cases: &[([u64; 4], [u64; 4])] = &[
             ([1, 0, 0, 0], [3, 5, 11, 7]),
@@ -794,8 +794,8 @@ mod tests {
 /// touched.
 ///
 /// ```compile_fail
-/// use via_rs::primitives::ring::ntt::NttFriendly;
-/// use via_rs::primitives::zq::modulus::ConstModulus;
+/// use via_rs::algebra::ring::ntt::NttFriendly;
+/// use via_rs::algebra::zq::modulus::ConstModulus;
 /// const _: u64 = <ConstModulus<5> as NttFriendly<4>>::PSI;
 /// ```
 ///
@@ -806,8 +806,8 @@ mod tests {
 /// exactly $8 = 2N$). Locks the happy path alongside the rejection.
 ///
 /// ```
-/// use via_rs::primitives::ring::ntt::NttFriendly;
-/// use via_rs::primitives::zq::modulus::ConstModulus;
+/// use via_rs::algebra::ring::ntt::NttFriendly;
+/// use via_rs::algebra::zq::modulus::ConstModulus;
 /// const PSI: u64 = <ConstModulus<17> as NttFriendly<4>>::PSI;
 /// const N_INV: u64 = <ConstModulus<17> as NttFriendly<4>>::N_INV;
 /// assert_eq!(PSI, 9);

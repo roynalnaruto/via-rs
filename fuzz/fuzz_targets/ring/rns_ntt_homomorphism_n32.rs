@@ -15,10 +15,10 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::ring::form::Coefficient;
-use via_rs::primitives::ring::ntt::NttFriendly;
-use via_rs::primitives::ring::rns_element::PolyRns;
-use via_rs::primitives::rns::basis::{RnsBasis, paper};
+use via_rs::algebra::ring::form::Coefficient;
+use via_rs::algebra::ring::ntt::NttFriendly;
+use via_rs::algebra::ring::rns_element::PolyRns;
+use via_rs::algebra::rns::basis::{RnsBasis, paper};
 
 const N: usize = 32;
 

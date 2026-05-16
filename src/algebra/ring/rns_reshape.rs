@@ -5,12 +5,12 @@
 //! per RNS slot. The basis `B: RnsBasis` is unused at the kernel level
 //! (the maps are pure permutations independent of the moduli) but kept
 //! as an argument for shape-consistency with the rest of the RNS kernel
-//! family — see [`crate::primitives::rns::ops`] and
+//! family — see [`crate::algebra::rns::ops`] and
 //! [`super::rns_ops`].
 //!
 //! All kernels enforce cross-prime length equality at the top.
 
-use crate::primitives::rns::basis::RnsBasis;
+use crate::algebra::rns::basis::RnsBasis;
 
 use super::reshape;
 
@@ -116,7 +116,7 @@ pub fn unpack_slots_slice<B: RnsBasis>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::rns::basis::{ConstRnsBasis, paper};
+    use crate::algebra::rns::basis::{ConstRnsBasis, paper};
 
     type Z55 = ConstRnsBasis<5, 11>;
 

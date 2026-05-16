@@ -16,7 +16,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::primitives::ring::reshape::embed_at_slice;
+use via_rs::algebra::ring::reshape::embed_at_slice;
 
 // (n_small, n_large) = (4, 16), d=4. Small enough for fast fuzz
 // iterations; large enough for d > 2 so the non-slot positions cover

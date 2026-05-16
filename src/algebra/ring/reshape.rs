@@ -16,8 +16,8 @@
 //!
 //! ## No arithmetic
 //!
-//! Unlike [`crate::primitives::ring::ops`] and
-//! [`crate::primitives::zq::ops`], these kernels perform **no modular
+//! Unlike [`crate::algebra::ring::ops`] and
+//! [`crate::algebra::zq::ops`], these kernels perform **no modular
 //! arithmetic** — they are pure coefficient permutations. The
 //! `Modulus`-by-value argument is therefore absent. Every output lane is
 //! either zero (single-slot embed only) or an exact copy of some input
