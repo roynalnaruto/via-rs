@@ -8,9 +8,11 @@
 //! - [`uniform`] — §1.2 uniform sampler over $\mathbb{Z}_q$.
 //! - [`ternary`] — §1.3 ternary sampler over $\{-1, 0, 1\}$.
 //! - [`bounded`] — §1.4 bounded-uniform sampler over $[-B, B]$.
+//! - [`gaussian`] — §1.5 discrete Gaussian sampler via Box-Muller. The
+//!   only floating-point primitive in the crate; routed through `libm` for
+//!   cross-platform determinism.
 //!
-//! Sub-modules for §1.5–§1.6 (discrete Gaussian and the `ErrorDist`
-//! dispatcher) land in subsequent phases.
+//! The §1.6 `ErrorDist` dispatcher lands in a subsequent phase.
 //!
 //! ## Cross-language reproducibility contract
 //!
@@ -30,6 +32,7 @@
 //! Layer 1.
 
 pub mod bounded;
+pub mod gaussian;
 pub mod prg;
 pub mod ternary;
 pub mod uniform;
