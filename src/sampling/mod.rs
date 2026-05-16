@@ -5,9 +5,12 @@
 //!
 //! - [`prg`] — §1.1 SHAKE-256 counter-mode PRG. Drives every randomized
 //!   operation downstream; preserves byte-exact cross-language reproducibility.
+//! - [`uniform`] — §1.2 uniform sampler over $\mathbb{Z}_q$.
+//! - [`ternary`] — §1.3 ternary sampler over $\{-1, 0, 1\}$.
+//! - [`bounded`] — §1.4 bounded-uniform sampler over $[-B, B]$.
 //!
-//! Sub-modules for §1.2–§1.6 (uniform, ternary, bounded-uniform, discrete
-//! Gaussian, and the `ErrorDist` dispatcher) land in subsequent phases.
+//! Sub-modules for §1.5–§1.6 (discrete Gaussian and the `ErrorDist`
+//! dispatcher) land in subsequent phases.
 //!
 //! ## Cross-language reproducibility contract
 //!
@@ -26,4 +29,7 @@
 //! trait for the lift helpers in a later phase); nothing in Layer 0 depends on
 //! Layer 1.
 
+pub mod bounded;
 pub mod prg;
+pub mod ternary;
+pub mod uniform;
