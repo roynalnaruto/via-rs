@@ -71,6 +71,18 @@ impl Distribution {
     ///
     /// In debug builds, `Distribution::Gaussian { sigma }` panics if `sigma`
     /// is `NaN` or `±∞` (inherited from [`discrete_gaussian`]).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use via_rs::sampling::{Distribution, Shake256Prg};
+    ///
+    /// let mut prg = Shake256Prg::new(b"dist-seed");
+    /// let mut out = [0i64; 16];
+    /// Distribution::Gaussian { sigma: 3.2 }.sample_into(&mut prg, &mut out);
+    /// // For σ = 3.2 the chance of all-zero output is negligible.
+    /// assert!(out.iter().any(|&v| v != 0));
+    /// ```
     #[inline]
     pub fn sample_into(self, prg: &mut Shake256Prg, out: &mut [i64]) {
         match self {

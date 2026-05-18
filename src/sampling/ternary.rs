@@ -26,8 +26,20 @@ use crate::sampling::prg::Shake256Prg;
 /// reference's `DeterministicSampler::ternary_poly(n)` exactly.
 ///
 /// Outputs are signed `i8`. Callers that need the coefficients lifted into a
-/// modulus `[0, q)` should go through the `lift_centered_i8_into_zq` helper
-/// (Phase 4).
+/// modulus $[0, q)$ should go through the
+/// [`lift_centered_i8_into_zq`](crate::sampling::lift_centered_i8_into_zq)
+/// helper.
+///
+/// # Example
+///
+/// ```
+/// use via_rs::sampling::{Shake256Prg, ternary::ternary};
+///
+/// let mut prg = Shake256Prg::new(b"ternary-seed");
+/// let mut out = [0i8; 16];
+/// ternary(&mut prg, &mut out);
+/// assert!(out.iter().all(|&v| v == -1 || v == 0 || v == 1));
+/// ```
 #[inline]
 pub fn ternary(prg: &mut Shake256Prg, out: &mut [i8]) {
     for c in out.iter_mut() {

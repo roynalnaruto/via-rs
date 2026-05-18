@@ -68,6 +68,19 @@ pub fn lift_centered_i32_into_zq<M: Modulus>(modulus: M, src: &[i32], dst: &mut 
 /// # Panics
 ///
 /// Panics if `src.len() != dst.len()`.
+///
+/// # Example
+///
+/// ```
+/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_rs::sampling::lift_centered_i64_into_zq;
+///
+/// let centred: [i64; 5] = [0, 1, -1, 3, -3];
+/// let mut lifted = [0u64; 5];
+/// lift_centered_i64_into_zq(ConstModulus::<17>, &centred, &mut lifted);
+/// // -1 → 16, -3 → 14 (mod 17).
+/// assert_eq!(lifted, [0, 1, 16, 3, 14]);
+/// ```
 #[inline]
 pub fn lift_centered_i64_into_zq<M: Modulus>(modulus: M, src: &[i64], dst: &mut [u64]) {
     assert_eq!(

@@ -11,13 +11,14 @@
 //! - [`gaussian`] — §1.5 discrete Gaussian sampler via Box-Muller. The
 //!   only floating-point primitive in the crate; routed through `libm` for
 //!   cross-platform determinism.
-//! - [`distribution`] — §1.6 [`Distribution`](distribution::Distribution)
-//!   dispatcher enum: a typed bundling of `(which sampler, what parameter)`
-//!   used at every key- and error-sampling call site. Sampling-only; does
-//!   **not** know about ciphertexts or secret keys (that's Layer 2).
-//! - [`lift`] — Layer-1 → Layer-0 bridge: `lift_centered_{i8,i32,i64}_into_zq`
-//!   reduce signed sampler outputs into canonical `[0, q)` under a
-//!   [`Modulus`](crate::algebra::zq::modulus::Modulus).
+//! - [`distribution`] — §1.6 [`Distribution`] dispatcher enum: a typed
+//!   bundling of `(which sampler, what parameter)` used at every key- and
+//!   error-sampling call site. Sampling-only; does **not** know about
+//!   ciphertexts or secret keys (that's Layer 2).
+//! - [`lift`] — Layer-1 → Layer-0 bridge:
+//!   [`lift_centered_i8_into_zq`] / [`lift_centered_i32_into_zq`] /
+//!   [`lift_centered_i64_into_zq`] reduce signed sampler outputs into
+//!   canonical $[0, q)$ under a [`Modulus`](crate::algebra::zq::modulus::Modulus).
 //!
 //! ## Cross-language reproducibility contract
 //!
@@ -30,11 +31,28 @@
 //! each sub-module pin a handful of seed → output vectors lifted from the
 //! reference.
 //!
+//! ## Floating-point carve-out
+//!
+//! §1.5 (the discrete Gaussian) is the **only** floating-point primitive in
+//! via-rs. Every other primitive — at every other layer — is integer-only.
+//! The Gaussian's Box-Muller path routes through [`libm`] (`log`, `sqrt`,
+//! `cos`, `rint`) so the f64 output is deterministic across platforms.
+//! Rounding uses round-half-to-even (banker's) via `libm::rint`, matching
+//! Python's built-in `round()`.
+//!
 //! ## Dependency direction
 //!
-//! Layer 1 imports Layer 0 (notably the [`Modulus`](crate::algebra::zq::modulus::Modulus)
-//! trait for the lift helpers in a later phase); nothing in Layer 0 depends on
-//! Layer 1.
+//! Layer 1 imports Layer 0 — notably the
+//! [`Modulus`](crate::algebra::zq::modulus::Modulus) trait, used by `lift` to
+//! reduce signed coefficients via `reduce_i64` (constant-time over the input
+//! sign, which matters for secret-key coefficients). Nothing in Layer 0
+//! depends on Layer 1.
+//!
+//! ## Public surface
+//!
+//! The canonical entry points are re-exported at the module root for ergonomic
+//! `use crate::sampling::{...};` access; the per-sub-module paths remain
+//! available for code that wants to be explicit about provenance.
 
 pub mod bounded;
 pub mod distribution;
@@ -43,3 +61,7 @@ pub mod lift;
 pub mod prg;
 pub mod ternary;
 pub mod uniform;
+
+pub use distribution::Distribution;
+pub use lift::{lift_centered_i8_into_zq, lift_centered_i32_into_zq, lift_centered_i64_into_zq};
+pub use prg::Shake256Prg;

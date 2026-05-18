@@ -18,8 +18,9 @@ use crate::sampling::prg::Shake256Prg;
 /// `DeterministicSampler::bounded_uniform_poly(n, bound)` exactly.
 ///
 /// Outputs are signed `i32`. Callers that need the coefficients lifted into a
-/// modulus `[0, q)` should go through the `lift_centered_i32_into_zq` helper
-/// (Phase 4).
+/// modulus $[0, q)$ should go through the
+/// [`lift_centered_i32_into_zq`](crate::sampling::lift_centered_i32_into_zq)
+/// helper.
 ///
 /// ## Edge case: `bound == 0`
 ///
@@ -27,6 +28,17 @@ use crate::sampling::prg::Shake256Prg;
 /// (via `uniform_below(1)`, which short-circuits without consuming PRG bytes).
 /// Useful as a degenerate test fixture; pinned here to keep the byte budget
 /// well-defined.
+///
+/// # Example
+///
+/// ```
+/// use via_rs::sampling::{Shake256Prg, bounded::bounded_uniform};
+///
+/// let mut prg = Shake256Prg::new(b"bounded-seed");
+/// let mut out = [0i32; 16];
+/// bounded_uniform(&mut prg, 5, &mut out);
+/// assert!(out.iter().all(|&v| (-5..=5).contains(&v)));
+/// ```
 #[inline]
 pub fn bounded_uniform(prg: &mut Shake256Prg, bound: u32, out: &mut [i32]) {
     // `bound` is u32 so `2 * bound + 1` ≤ 2^33 - 1, well within u64.

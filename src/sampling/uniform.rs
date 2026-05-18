@@ -15,6 +15,18 @@ use crate::sampling::prg::Shake256Prg;
 /// Each output coefficient is one independent [`Shake256Prg::uniform_below`]
 /// draw at `modulus.q()`. The PRG byte budget matches the Python reference's
 /// `DeterministicSampler::uniform_poly(n, q)` exactly.
+///
+/// # Example
+///
+/// ```
+/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_rs::sampling::{Shake256Prg, uniform::uniform_zq};
+///
+/// let mut prg = Shake256Prg::new(b"mask-seed");
+/// let mut mask = [0u64; 16];
+/// uniform_zq(ConstModulus::<17>, &mut prg, &mut mask);
+/// assert!(mask.iter().all(|&c| c < 17));
+/// ```
 #[inline]
 pub fn uniform_zq<M: Modulus>(modulus: M, prg: &mut Shake256Prg, out: &mut [u64]) {
     let q = modulus.q();

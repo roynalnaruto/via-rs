@@ -78,6 +78,16 @@ impl Shake256Prg {
     ///
     /// Panics if `seed.len() > 64`. The spec's test vectors all use
     /// seeds of at most 32 bytes, so the 64-byte cap is generous.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use via_rs::sampling::Shake256Prg;
+    /// let mut prg = Shake256Prg::new(b"my-seed");
+    /// let mut bytes = [0u8; 32];
+    /// prg.fill_bytes(&mut bytes);
+    /// assert!(bytes.iter().any(|&b| b != 0));
+    /// ```
     #[inline]
     pub fn new(seed: &[u8]) -> Self {
         assert!(
@@ -157,6 +167,17 @@ impl Shake256Prg {
     /// # Panics
     ///
     /// Panics if `bound == 0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use via_rs::sampling::Shake256Prg;
+    /// let mut prg = Shake256Prg::new(b"example");
+    /// for _ in 0..16 {
+    ///     let v = prg.uniform_below(17);
+    ///     assert!(v < 17);
+    /// }
+    /// ```
     #[inline]
     pub fn uniform_below(&mut self, bound: u64) -> u64 {
         assert!(bound > 0, "bound must be positive");

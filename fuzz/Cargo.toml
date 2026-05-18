@@ -223,3 +223,23 @@ name = "ring_centered_repr_ct_match"
 path = "fuzz_targets/ring/centered_repr_ct_match.rs"
 test = false
 doc = false
+
+# §1 — sampling.
+
+[[bin]]
+name = "sampling_prg_buffer_boundary"
+path = "fuzz_targets/sampling/prg_buffer_boundary.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sampling_uniform_below_range"
+path = "fuzz_targets/sampling/uniform_below_range.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sampling_lift_roundtrip"
+path = "fuzz_targets/sampling/lift_roundtrip.rs"
+test = false
+doc = false
