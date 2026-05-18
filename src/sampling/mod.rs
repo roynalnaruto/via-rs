@@ -11,8 +11,13 @@
 //! - [`gaussian`] — §1.5 discrete Gaussian sampler via Box-Muller. The
 //!   only floating-point primitive in the crate; routed through `libm` for
 //!   cross-platform determinism.
-//!
-//! The §1.6 `ErrorDist` dispatcher lands in a subsequent phase.
+//! - [`distribution`] — §1.6 [`Distribution`](distribution::Distribution)
+//!   dispatcher enum: a typed bundling of `(which sampler, what parameter)`
+//!   used at every key- and error-sampling call site. Sampling-only; does
+//!   **not** know about ciphertexts or secret keys (that's Layer 2).
+//! - [`lift`] — Layer-1 → Layer-0 bridge: `lift_centered_{i8,i32,i64}_into_zq`
+//!   reduce signed sampler outputs into canonical `[0, q)` under a
+//!   [`Modulus`](crate::algebra::zq::modulus::Modulus).
 //!
 //! ## Cross-language reproducibility contract
 //!
@@ -32,7 +37,9 @@
 //! Layer 1.
 
 pub mod bounded;
+pub mod distribution;
 pub mod gaussian;
+pub mod lift;
 pub mod prg;
 pub mod ternary;
 pub mod uniform;
