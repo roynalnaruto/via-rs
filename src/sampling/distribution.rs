@@ -48,7 +48,7 @@ pub enum Distribution {
         bound: u32,
     },
     /// Discrete Gaussian with standard deviation `sigma`, centred on zero.
-    /// Mirrors §1.5 [`discrete_gaussian`](crate::sampling::gaussian::discrete_gaussian).
+    /// Mirrors §1.5 [`crate::sampling::gaussian::discrete_gaussian`].
     Gaussian {
         /// Standard deviation. `sigma == 0.0` produces all-zero output but
         /// **still advances the PRG** (matches the §1.5 contract). Negative

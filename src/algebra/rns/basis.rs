@@ -189,7 +189,7 @@ impl<const Q0: u64, const Q1: u64> ConstRnsBasis<Q0, Q1> {
     /// at compile time. Const-folds into immediate operands at every
     /// reconstruction call site.
     ///
-    /// Touches [`Self::_CHECK`] before computing the inverse so that any
+    /// Touches `Self::_CHECK` before computing the inverse so that any
     /// caller reaching this constant (the trait method
     /// [`RnsBasis::q0_inv_mod_q1`] is the canonical path) fires the
     /// coprimality / range invariants at monomorphisation rather than

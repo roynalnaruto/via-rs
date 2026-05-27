@@ -109,7 +109,7 @@ impl<const N: usize, M: Modulus, F: Form> Poly<N, M, F> {
 
     /// The ring degree, also reachable as the const-generic parameter.
     ///
-    /// Reading this constant forces [`Self::_CHECK`] to evaluate at
+    /// Reading this constant forces `Self::_CHECK` to evaluate at
     /// monomorphisation; combined with the `let () = Self::_CHECK;` line
     /// in every constructor, this means any invalid `N` fails to compile.
     pub const N: usize = {

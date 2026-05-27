@@ -20,7 +20,7 @@
 //!   pair satisfying $Q \equiv 1 \pmod{2N}$. A compile-time `_CHECK_NTT`
 //!   block forces validation at monomorphisation; invalid pairs fail to
 //!   build. **No `DynModulus` impl** — runtime NTT contexts are deferred.
-//! - The kernels [`ntt_inplace`] (forward) and [`intt_inplace`] (inverse)
+//! - The kernels `ntt_inplace` (forward) and `intt_inplace` (inverse)
 //!   are `pub(crate)` adapters consumed by [`super::element::Poly::into_eval`]
 //!   / `into_coeff` and the [`super::rns_element::PolyRns`] analogues.
 //!

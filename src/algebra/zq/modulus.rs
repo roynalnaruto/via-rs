@@ -220,7 +220,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 ///
 /// `Q ∈ [2, 2^63)`. For $Q = 2^{63}$ use [`PowerOfTwoModulus<63>`] instead —
 /// the mask reduction path does not need the Barrett slack and is correct
-/// at that boundary. Violations fail at monomorphisation via [`Self::_CHECK`],
+/// at that boundary. Violations fail at monomorphisation via `Self::_CHECK`,
 /// which is reached from every trait method ([`Modulus::q`] for the add /
 /// sub / neg path, [`Self::MU`] → [`barrett_mu`] for mul / reduce).
 ///
@@ -269,7 +269,7 @@ impl<const Q: u64> ConstModulus<Q> {
     /// Precomputed Barrett constant for $Q$ — see [`barrett_mu`].
     ///
     /// Compile-time evaluated; const-folds into immediate operands at every
-    /// call site. Touches [`Self::_CHECK`] so the range invariants fire even
+    /// call site. Touches `Self::_CHECK` so the range invariants fire even
     /// for trait paths that never reach [`barrett_mu`].
     pub const MU: u128 = {
         let () = Self::_CHECK;

@@ -62,7 +62,7 @@ impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
         assert!(N.is_power_of_two(), "PolyRns: N must be a power of two");
     };
 
-    /// The ring degree. Touches [`Self::_CHECK`] at monomorphisation.
+    /// The ring degree. Touches `Self::_CHECK` at monomorphisation.
     pub const N: usize = {
         let () = Self::_CHECK;
         N
