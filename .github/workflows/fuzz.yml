@@ -72,6 +72,15 @@ jobs:
           # §0.6 — centred / balanced representation.
           - ring_centered_repr_roundtrip
           - ring_centered_repr_ct_match
+          # §1 — sampling.
+          - sampling_prg_buffer_boundary
+          - sampling_uniform_below_range
+          - sampling_lift_roundtrip
+          # §2 — encryption.
+          - encryption_rlwe_roundtrip
+          - encryption_gadget_reconstruct_bound
+          - encryption_gadget_digit_bounds
+          - encryption_external_product_homomorphism
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly

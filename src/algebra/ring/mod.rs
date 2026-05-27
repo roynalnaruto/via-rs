@@ -77,6 +77,7 @@
 //! loop body in [`ops::negacyclic_mul_slice`] is intentionally the same
 //! code we will later vectorise and lower to CUDA / Metal.
 
+pub mod abstraction;
 pub mod element;
 pub mod form;
 pub mod ntt;
@@ -85,3 +86,5 @@ pub mod reshape;
 pub mod rns_element;
 pub mod rns_ops;
 pub mod rns_reshape;
+
+pub use abstraction::RingPoly;

@@ -16,4 +16,5 @@
 
 pub mod ring;
 pub mod rns;
+pub(crate) mod wide;
 pub mod zq;

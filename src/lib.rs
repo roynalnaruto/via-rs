@@ -6,8 +6,14 @@
 //! - [`algebra`] — Layer 0: arithmetic substrate (§0.1–§0.6).
 //! - [`sampling`] — Layer 1: SHAKE-256 PRG and the four sampling distributions
 //!   (§1.1–§1.6) consumed by every higher layer.
+//! - [`encryption`] — Layer 2: ciphertext types (SecretKey, RLWE, RLev,
+//!   RGSW, MLWE, ModSwitched) and the primitive operations on them
+//!   (§2.1–§2.4). Generic over a polynomial backend via
+//!   [`algebra::ring::RingPoly`], so the same code instantiates against
+//!   either the single-prime [`algebra::ring::element::Poly`] or the RNS
+//!   [`algebra::ring::rns_element::PolyRns`] carrier.
 //!
-//! Further layers (RLWE, ring/key switching, homomorphic gates, MLWE cascade,
+//! Further layers (ring/key switching, homomorphic gates, MLWE cascade,
 //! protocol composites) will land as further top-level modules.
 //!
 //! See `.docs/primitives.md` for the layered primitive overview and
@@ -18,4 +24,5 @@
 #![warn(missing_docs)]
 
 pub mod algebra;
+pub mod encryption;
 pub mod sampling;

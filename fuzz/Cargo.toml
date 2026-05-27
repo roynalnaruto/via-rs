@@ -243,3 +243,29 @@ name = "sampling_lift_roundtrip"
 path = "fuzz_targets/sampling/lift_roundtrip.rs"
 test = false
 doc = false
+
+# §2 — encryption.
+
+[[bin]]
+name = "encryption_rlwe_roundtrip"
+path = "fuzz_targets/encryption/rlwe_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "encryption_gadget_reconstruct_bound"
+path = "fuzz_targets/encryption/gadget_reconstruct_bound.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "encryption_gadget_digit_bounds"
+path = "fuzz_targets/encryption/gadget_digit_bounds.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "encryption_external_product_homomorphism"
+path = "fuzz_targets/encryption/external_product_homomorphism.rs"
+test = false
+doc = false
