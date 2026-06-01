@@ -97,6 +97,19 @@ pub trait RingPoly<const N: usize>:
     /// single-prime, `i128` for RNS (composite `Q` can exceed `i64::MAX`).
     type CenteredScalar: Copy + Default;
 
+    /// The result type of [`Self::project_at`]: the same backend at the
+    /// smaller ring degree `N_SMALL`, over the *same* modulus, scalar, and
+    /// centred-scalar types. The equality bounds let §3.3 RingSwitch combine
+    /// projected masks and RSK samples generically across both backends —
+    /// `Poly<N_SMALL, M, _>` for single-prime, `PolyRns<N_SMALL, B, _>` for
+    /// RNS.
+    type Projected<const N_SMALL: usize>: RingPoly<
+            N_SMALL,
+            Modulus = Self::Modulus,
+            Scalar = Self::Scalar,
+            CenteredScalar = Self::CenteredScalar,
+        >;
+
     /// The modulus this polynomial is associated with.
     fn modulus(&self) -> Self::Modulus;
 
@@ -114,6 +127,32 @@ pub trait RingPoly<const N: usize>:
     /// freshly sampled ternary / bounded-uniform / Gaussian error vectors
     /// into ring elements during encryption.
     fn from_centered_i64s(modulus: Self::Modulus, samples: &[i64; N]) -> Self;
+
+    /// Lift a length-$N$ vector of centred `i128` samples into a
+    /// coefficient-form polynomial in $\mathbb{Z}_q$. The `i128`-wide
+    /// counterpart of [`Self::from_centered_i64s`]: it is the natural
+    /// constructor for the §3.4 secret-key rekeying path when the *source*
+    /// key lives at the RNS-composite $q_1$ (whose centred coefficients are
+    /// `i128`, see §0.6 "RNS variant").
+    ///
+    /// For single-prime targets each sample must fit in `i64` (the centred
+    /// lift of a small key is bounded by $\|S\|_\infty \ll 2^{63}$); the
+    /// single-prime impl `debug_assert!`s this before narrowing.
+    ///
+    /// ```rust
+    /// use via_rs::algebra::ring::abstraction::RingPoly;
+    /// use via_rs::algebra::ring::element::Poly;
+    /// use via_rs::algebra::ring::form::Coefficient;
+    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    ///
+    /// type P = Poly<4, ConstModulus<17>, Coefficient>;
+    /// let samples = [-8i128, 0, 3, 7];
+    /// let p = <P as RingPoly<4>>::from_centered_i128s(ConstModulus, &samples);
+    /// let mut out = [0i64; 4];
+    /// RingPoly::to_centered_coeffs(&p, &mut out);
+    /// assert_eq!(out, [-8, 0, 3, 7]);
+    /// ```
+    fn from_centered_i128s(modulus: Self::Modulus, samples: &[i128; N]) -> Self;
 
     /// Write the centred lift of each coefficient into `dst`. **Not
     /// constant-time** over the input values; use for plaintext-side paths
@@ -158,6 +197,45 @@ pub trait RingPoly<const N: usize>:
     /// **Not constant-time** over input values; used at decoding /
     /// noise-measurement boundaries (§0.6).
     fn to_centered_i128_coeffs(&self, dst: &mut [i128; N]);
+
+    /// Deterministic rotation: return $X^k \cdot \mathrm{self}$ in
+    /// $R_{N, q}$ (§4.5). Coefficient at position $i$ moves to
+    /// $(i + k) \bmod N$ with a negacyclic sign flip when $i + k \ge N$
+    /// ($X^N \equiv -1$). Used by §3.3 RingSwitch / §4.4 CRot.
+    ///
+    /// `k` is a **public** parameter (a loop induction variable); the
+    /// implementation may branch on it. Do **not** pass a secret-derived
+    /// `k` — route encrypted-exponent rotation through §4.4 `CRot`.
+    ///
+    /// ```rust
+    /// use via_rs::algebra::ring::abstraction::RingPoly;
+    /// use via_rs::algebra::ring::element::Poly;
+    /// use via_rs::algebra::ring::form::Coefficient;
+    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    ///
+    /// // In R_{4, 17}: X * (1 + 2X + 3X^2 + 4X^3) = -4 + X + 2X^2 + 3X^3.
+    /// // The top coefficient wraps negacyclically: 4*X^4 = -4 = 13 mod 17.
+    /// type P = Poly<4, ConstModulus<17>, Coefficient>;
+    /// let f = <P as RingPoly<4>>::from_u128_coeffs(ConstModulus, &[1, 2, 3, 4]);
+    /// let g = f.mul_x_pow(1);
+    /// let mut out = [0u128; 4];
+    /// RingPoly::to_u128_coeffs(&g, &mut out);
+    /// assert_eq!(out, [13, 1, 2, 3]);
+    /// ```
+    fn mul_x_pow(&self, k: usize) -> Self;
+
+    /// Single-slot projection $\pi_0^{N \to N_\text{small}}$ extended to an
+    /// arbitrary slot — extract slot `slot` of `self` into the smaller ring
+    /// $R_{N_\text{small}, q}$. Coefficient at position $d \cdot i + slot$
+    /// (with $d = N / N_\text{small}$) becomes coefficient $i$ of the
+    /// output. Pure index manipulation (§0.5); no algebra dependency.
+    ///
+    /// # Panics
+    ///
+    /// - **Compile-time** (const block in the backend): `N_SMALL > N`,
+    ///   `N_SMALL ∤ N`, or `N_SMALL` not a power of two.
+    /// - **Runtime**: `slot >= N / N_SMALL`.
+    fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Self::Projected<N_SMALL>;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +248,7 @@ impl<const N: usize, M: Modulus> RingPoly<N> for Poly<N, M, Coefficient> {
     type Modulus = M;
     type Scalar = Zq<M>;
     type CenteredScalar = i64;
+    type Projected<const N_SMALL: usize> = Poly<N_SMALL, M, Coefficient>;
 
     #[inline(always)]
     fn modulus(&self) -> M {
@@ -190,6 +269,20 @@ impl<const N: usize, M: Modulus> RingPoly<N> for Poly<N, M, Coefficient> {
         let mut buf = [0u64; N];
         for i in 0..N {
             buf[i] = modulus.reduce_i64(samples[i]);
+        }
+        // SAFETY: every lane is reduced via `Modulus::reduce_i64`, which
+        // returns a value in `[0, q)`.
+        unsafe { Poly::from_reduced_unchecked(modulus, buf) }
+    }
+
+    fn from_centered_i128s(modulus: M, samples: &[i128; N]) -> Self {
+        let mut buf = [0u64; N];
+        for i in 0..N {
+            debug_assert!(
+                samples[i] >= i64::MIN as i128 && samples[i] <= i64::MAX as i128,
+                "from_centered_i128s: coefficient does not fit in i64 for single-prime modulus",
+            );
+            buf[i] = modulus.reduce_i64(samples[i] as i64);
         }
         // SAFETY: every lane is reduced via `Modulus::reduce_i64`, which
         // returns a value in `[0, q)`.
@@ -244,6 +337,16 @@ impl<const N: usize, M: Modulus> RingPoly<N> for Poly<N, M, Coefficient> {
             dst[i] = i128::from(tmp[i]);
         }
     }
+
+    #[inline(always)]
+    fn mul_x_pow(&self, k: usize) -> Self {
+        Poly::mul_x_pow(self, k)
+    }
+
+    #[inline(always)]
+    fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Poly<N_SMALL, M, Coefficient> {
+        Poly::project_at::<N_SMALL>(self, slot)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +359,7 @@ impl<const N: usize, B: RnsBasis> RingPoly<N> for PolyRns<N, B, Coefficient> {
     type Modulus = B;
     type Scalar = RnsZq<B>;
     type CenteredScalar = i128;
+    type Projected<const N_SMALL: usize> = PolyRns<N_SMALL, B, Coefficient>;
 
     #[inline(always)]
     fn modulus(&self) -> B {
@@ -282,6 +386,31 @@ impl<const N: usize, B: RnsBasis> RingPoly<N> for PolyRns<N, B, Coefficient> {
             buf1[i] = m1.reduce_i64(samples[i]);
         }
         // SAFETY: each lane reduced via `Modulus::reduce_i64`, hence in
+        // `[0, q^(j))` for its respective slot modulus.
+        unsafe { PolyRns::from_reduced_unchecked(basis, buf0, buf1) }
+    }
+
+    fn from_centered_i128s(basis: B, samples: &[i128; N]) -> Self {
+        let m0 = basis.m0();
+        let m1 = basis.m1();
+        let mut buf0 = [0u64; N];
+        let mut buf1 = [0u64; N];
+        for i in 0..N {
+            // No `Modulus::reduce_i128` exists, so reduce the magnitude
+            // unsigned then sign-fixup via `neg` (R2 fallback). `unsigned_abs`
+            // maps `i128::MIN` correctly; reduce_u128 accepts the full range.
+            let mag = samples[i].unsigned_abs();
+            let r0 = m0.reduce_u128(mag);
+            let r1 = m1.reduce_u128(mag);
+            if samples[i] < 0 {
+                buf0[i] = m0.neg(r0);
+                buf1[i] = m1.neg(r1);
+            } else {
+                buf0[i] = r0;
+                buf1[i] = r1;
+            }
+        }
+        // SAFETY: each lane is `reduce_u128`/`neg` output, hence in
         // `[0, q^(j))` for its respective slot modulus.
         unsafe { PolyRns::from_reduced_unchecked(basis, buf0, buf1) }
     }
@@ -328,6 +457,16 @@ impl<const N: usize, B: RnsBasis> RingPoly<N> for PolyRns<N, B, Coefficient> {
     #[inline(always)]
     fn to_centered_i128_coeffs(&self, dst: &mut [i128; N]) {
         PolyRns::to_centered_coeffs(self, dst);
+    }
+
+    #[inline(always)]
+    fn mul_x_pow(&self, k: usize) -> Self {
+        PolyRns::mul_x_pow(self, k)
+    }
+
+    #[inline(always)]
+    fn project_at<const N_SMALL: usize>(&self, slot: usize) -> PolyRns<N_SMALL, B, Coefficient> {
+        PolyRns::project_at::<N_SMALL>(self, slot)
     }
 }
 
@@ -488,5 +627,109 @@ mod tests {
         RingPoly::to_centered_coeffs(&p, &mut native_out);
         RingPoly::to_centered_i128_coeffs(&p, &mut i128_out);
         assert_eq!(native_out, i128_out);
+    }
+
+    #[test]
+    fn from_centered_i128s_single_prime_roundtrip() {
+        let m = ConstModulus::<17>;
+        let samples = [-8i128, 0, 3, 7];
+        let p = <SinglePoly as RingPoly<4>>::from_centered_i128s(m, &samples);
+        let mut out = [0i64; 4];
+        RingPoly::to_centered_coeffs(&p, &mut out);
+        assert_eq!(out, [-8, 0, 3, 7]);
+    }
+
+    #[test]
+    fn from_centered_i128s_matches_from_centered_i64s_single_prime() {
+        let m = ConstModulus::<17>;
+        let i64s = [-8i64, -1, 0, 8];
+        let i128s = [-8i128, -1, 0, 8];
+        let a = <SinglePoly as RingPoly<4>>::from_centered_i64s(m, &i64s);
+        let b = <SinglePoly as RingPoly<4>>::from_centered_i128s(m, &i128s);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn from_centered_i128s_rns_roundtrip() {
+        let b = ConstRnsBasis::<5, 11>;
+        // Q = 55, centred range (-27, 27].
+        let samples = [-20i128, 0, 1, 13];
+        let p = <RnsPoly as RingPoly<4>>::from_centered_i128s(b, &samples);
+        let mut out = [0i128; 4];
+        RingPoly::to_centered_coeffs(&p, &mut out);
+        assert_eq!(out, samples);
+    }
+
+    #[test]
+    fn from_centered_i128s_matches_from_centered_i64s_rns() {
+        let b = ConstRnsBasis::<5, 11>;
+        let i64s = [-20i64, 0, 1, 13];
+        let i128s = [-20i128, 0, 1, 13];
+        let a = <RnsPoly as RingPoly<4>>::from_centered_i64s(b, &i64s);
+        let c = <RnsPoly as RingPoly<4>>::from_centered_i128s(b, &i128s);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn mul_x_pow_single_prime_identity() {
+        let m = ConstModulus::<17>;
+        let p = <SinglePoly as RingPoly<4>>::from_u128_coeffs(m, &[1, 2, 3, 4]);
+        let q = RingPoly::mul_x_pow(&p, 0);
+        assert_eq!(p, q);
+    }
+
+    #[test]
+    fn mul_x_pow_single_prime_negacyclic_wrap() {
+        let m = ConstModulus::<17>;
+        // X * (1 + 2X + 3X^2 + 4X^3) = -4 + X + 2X^2 + 3X^3; -4 = 13 mod 17.
+        let p = <SinglePoly as RingPoly<4>>::from_u128_coeffs(m, &[1, 2, 3, 4]);
+        let q = RingPoly::mul_x_pow(&p, 1);
+        let mut out = [0u128; 4];
+        RingPoly::to_u128_coeffs(&q, &mut out);
+        assert_eq!(out, [13, 1, 2, 3]);
+    }
+
+    #[test]
+    fn mul_x_pow_rns() {
+        let b = ConstRnsBasis::<5, 11>;
+        // Q = 55. X * (1 + 2X + 3X^2 + 4X^3) = -4 + X + 2X^2 + 3X^3;
+        // -4 = 51 mod 55.
+        let p = <RnsPoly as RingPoly<4>>::from_u128_coeffs(b, &[1, 2, 3, 4]);
+        let q = RingPoly::mul_x_pow(&p, 1);
+        let mut out = [0u128; 4];
+        RingPoly::to_u128_coeffs(&q, &mut out);
+        assert_eq!(out, [51, 1, 2, 3]);
+    }
+
+    #[test]
+    fn project_at_single_prime_slot0() {
+        let m = ConstModulus::<17>;
+        // d = 4 / 2 = 2; slot 0 picks coefficients at positions 0, 2.
+        let p = <SinglePoly as RingPoly<4>>::from_u128_coeffs(m, &[1, 2, 3, 4]);
+        let proj: Poly<2, ConstModulus<17>, Coefficient> = RingPoly::project_at::<2>(&p, 0);
+        let mut out = [0u128; 2];
+        RingPoly::to_u128_coeffs(&proj, &mut out);
+        assert_eq!(out, [1, 3]);
+    }
+
+    #[test]
+    fn project_at_single_prime_slot1() {
+        let m = ConstModulus::<17>;
+        // slot 1 picks coefficients at positions 1, 3.
+        let p = <SinglePoly as RingPoly<4>>::from_u128_coeffs(m, &[1, 2, 3, 4]);
+        let proj: Poly<2, ConstModulus<17>, Coefficient> = RingPoly::project_at::<2>(&p, 1);
+        let mut out = [0u128; 2];
+        RingPoly::to_u128_coeffs(&proj, &mut out);
+        assert_eq!(out, [2, 4]);
+    }
+
+    #[test]
+    fn project_at_rns_slot0() {
+        let b = ConstRnsBasis::<5, 11>;
+        let p = <RnsPoly as RingPoly<4>>::from_u128_coeffs(b, &[1, 2, 3, 4]);
+        let proj: PolyRns<2, ConstRnsBasis<5, 11>, Coefficient> = RingPoly::project_at::<2>(&p, 0);
+        let mut out = [0u128; 2];
+        RingPoly::to_u128_coeffs(&proj, &mut out);
+        assert_eq!(out, [1, 3]);
     }
 }

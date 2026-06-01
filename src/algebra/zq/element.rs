@@ -131,10 +131,18 @@ impl<M: Modulus> Zq<M> {
 
     /// Sample a uniformly random element of $\mathbb{Z}_q$.
     ///
-    /// Uses rejection sampling on the smallest power-of-two cover of $[0, q)$.
-    /// On average draws fewer than two `u64` words per sample for any modulus
-    /// (worst case is when $q$ is just above a power of two; even then the
-    /// expected reject rate stays below $1$).
+    /// Rejection sampling on the smallest power-of-two cover of $[0, q)$,
+    /// drawing only $\lceil \mathrm{bitlen}(q) / 8 \rceil$ bytes per attempt.
+    ///
+    /// # Cross-language parity
+    ///
+    /// This is the byte-for-byte counterpart of Python's `randbelow(q)` and of
+    /// [`crate::sampling::prg::Shake256Prg::uniform_below`]: it uses
+    /// `q.bit_length()` (i.e. `64 - q.leading_zeros()`, **not** `q - 1`) and
+    /// consumes exactly `nbytes` bytes per attempt, with the high bytes held at
+    /// zero across rejections. Any deviation (reading a fixed 8 bytes, or
+    /// masking with `bitlen(q-1)`) would desynchronise the SHAKE-256 stream and
+    /// break the §1.1 reproducibility contract for every ciphertext mask `A`.
     ///
     /// # Constant-time
     ///
@@ -144,15 +152,19 @@ impl<M: Modulus> Zq<M> {
     pub fn random<R: RngCore + ?Sized>(modulus: M, rng: &mut R) -> Self {
         let q = modulus.q();
         debug_assert!(q >= 2, "Zq::random requires q >= 2");
-        let bits = 64 - (q - 1).leading_zeros();
+        // `bitlen(q)` to match Python `randbelow(q)` (bound, not bound - 1).
+        let bits = 64 - q.leading_zeros();
+        let nbytes = bits.div_ceil(8) as usize;
         let mask = if bits == 64 {
             u64::MAX
         } else {
             (1u64 << bits) - 1
         };
+        // `buf` persists across attempts: only the low `nbytes` are refilled,
+        // so the high bytes stay zero — matching `uniform_below`'s buffer.
+        let mut buf = [0u8; 8];
         loop {
-            let mut buf = [0u8; 8];
-            rng.fill_bytes(&mut buf);
+            rng.fill_bytes(&mut buf[..nbytes]);
             let candidate = u64::from_le_bytes(buf) & mask;
             if candidate < q {
                 // SAFETY: rejection branch guarantees `candidate < q`.

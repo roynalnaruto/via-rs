@@ -102,6 +102,20 @@ pub type ViaCMlweQ1Rns<const RANK: usize, const N: usize> =
     MLWECiphertext<RANK, N, ViaCPolyQ1Rns<N>>;
 pub type ViaCMlweQ2<const RANK: usize, const N: usize> = MLWECiphertext<RANK, N, ViaCPolyQ2<N>>;
 
+// ---------------------------------------------------------------------------
+// Layer-3 ring-switch keys (§3.3)
+// ---------------------------------------------------------------------------
+
+/// VIA's ring-switch key: target ring $R_{N_2, q_2}$ (the ring switch runs
+/// per-column at $q_2$ before CMux, §3.3). `D = N1 / N2`.
+pub type ViaRingSwitchKey<const N1: usize, const N2: usize, const L: usize, const D: usize> =
+    crate::switching::ring_switch::RingSwitchKey<N1, N2, ViaPolyQ2<N2>, L, D>;
+
+/// VIA-C's ring-switch key: target ring $R_{N_2, q_3}$ (the ring switch runs
+/// inside `RespComp` after CRot at $q_3$, §6.2). `D = N1 / N2`.
+pub type ViaCRingSwitchKey<const N1: usize, const N2: usize, const L: usize, const D: usize> =
+    crate::switching::ring_switch::RingSwitchKey<N1, N2, ViaCPolyQ3<N2>, L, D>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +144,20 @@ mod tests {
         let rlwe = RLWECiphertext::<512, ViaCPolyQ1Rns<512>>::new(z, z);
         // L = 2 matches the paper VIA-C DMux ctrl gadget depth.
         let _rlev: ViaCRlevQ1Rns<512, 2> = RLevCiphertext::new([rlwe; 2]);
+    }
+
+    // The ring-switch-key aliases only need to *name* a valid type; building
+    // one requires gen_rsk (covered in `switching::ring_switch` tests). A
+    // size-of touch is enough to force monomorphisation + `_CHECK`.
+    #[test]
+    fn via_ring_switch_key_alias_compiles() {
+        // n1 = 2048, n2 = 512, D = 4, L = 4 (VIA ring-switch gadget depth).
+        let _ = core::mem::size_of::<ViaRingSwitchKey<2048, 512, 4, 4>>();
+    }
+
+    #[test]
+    fn viac_ring_switch_key_alias_compiles() {
+        // n1 = 2048, n2 = 512, D = 4, L = 8 (VIA-C ring-switch gadget depth).
+        let _ = core::mem::size_of::<ViaCRingSwitchKey<2048, 512, 8, 4>>();
     }
 }

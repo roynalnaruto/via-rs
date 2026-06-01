@@ -12,9 +12,12 @@
 //!   [`algebra::ring::RingPoly`], so the same code instantiates against
 //!   either the single-prime [`algebra::ring::element::Poly`] or the RNS
 //!   [`algebra::ring::rns_element::PolyRns`] carrier.
+//! - [`switching`] — Layer 3: modulus switching (§3.1–§3.2), ring switching
+//!   (§3.3), and secret-key rekeying (§3.4) — the reshaping primitives that
+//!   move ciphertexts between moduli and ring degrees.
 //!
-//! Further layers (ring/key switching, homomorphic gates, MLWE cascade,
-//! protocol composites) will land as further top-level modules.
+//! Further layers (homomorphic gates, MLWE cascade, protocol composites) will
+//! land as further top-level modules.
 //!
 //! See `.docs/primitives.md` for the layered primitive overview and
 //! `.docs/via.pdf` for the original paper.
@@ -26,3 +29,4 @@
 pub mod algebra;
 pub mod encryption;
 pub mod sampling;
+pub mod switching;

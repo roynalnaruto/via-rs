@@ -269,3 +269,29 @@ name = "encryption_external_product_homomorphism"
 path = "fuzz_targets/encryption/external_product_homomorphism.rs"
 test = false
 doc = false
+
+# §3 — switching.
+
+[[bin]]
+name = "switching_mod_switch_sym_roundtrip"
+path = "fuzz_targets/switching/mod_switch_sym_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "switching_mod_switch_asym_output_shape"
+path = "fuzz_targets/switching/mod_switch_asym_output_shape.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "switching_ring_switch_roundtrip"
+path = "fuzz_targets/switching/ring_switch_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "switching_rekey_roundtrip"
+path = "fuzz_targets/switching/rekey_roundtrip.rs"
+test = false
+doc = false
