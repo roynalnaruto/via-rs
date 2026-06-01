@@ -81,6 +81,11 @@ jobs:
           - encryption_gadget_reconstruct_bound
           - encryption_gadget_digit_bounds
           - encryption_external_product_homomorphism
+          # §3 — switching.
+          - switching_mod_switch_sym_roundtrip
+          - switching_mod_switch_asym_output_shape
+          - switching_ring_switch_roundtrip
+          - switching_rekey_roundtrip
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly

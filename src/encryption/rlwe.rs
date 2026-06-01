@@ -11,10 +11,13 @@
 //! - [`SecretKey::keygen`] — sample from one of the §1.3-§1.5
 //!   distributions.
 //! - [`SecretKey::encrypt`] — encrypt an already-$\Delta$-encoded message.
-//! - [`SecretKey::decrypt_raw`] — return $B - A \cdot S$ (encoded message
-//!   + noise); used for noise inspection and the Layer-3
-//!     `decrypt_asymmetric` path.
+//! - [`SecretKey::decrypt_raw`] — return $B - A \cdot S$ (the encoded
+//!   message plus noise); used for noise inspection and the Layer-3
+//!   [`SecretKey::decrypt_asymmetric`] path.
 //! - [`SecretKey::decrypt`] — wrap `decrypt_raw` + [`decode`].
+//! - [`SecretKey::decrypt_asymmetric`] — §3.2 `RespCompRecover`: decrypt a
+//!   [`ModSwitchedCiphertext`] whose mask (at $q_3$) and body (at $q_4$)
+//!   live at different moduli.
 //!
 //! [`encode`] and [`decode`] remain free functions: they don't touch
 //! secret material (they're polynomial-side scaling / rounding operations
@@ -48,7 +51,7 @@ use crate::algebra::ring::RingPoly;
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
-use super::types::{RLWECiphertext, SecretKey};
+use super::types::{ModSwitchedCiphertext, RLWECiphertext, SecretKey};
 
 // ---------------------------------------------------------------------------
 // Key-bearing primitives — methods on `SecretKey<N, R>` (§2.2).
@@ -153,6 +156,68 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     pub fn decrypt<RP: RingPoly<N>>(&self, ct: &RLWECiphertext<N, R>, p_mod: RP::Modulus) -> RP {
         let raw = self.decrypt_raw(ct);
         decode::<N, R, RP>(&raw, p_mod)
+    }
+
+    /// §3.2 — decrypt a [`ModSwitchedCiphertext`] whose mask and body live
+    /// at **different** moduli (paper Figure 7, `RespCompRecover`). The mask
+    /// is at $q_3$, the body at $q_4$; the secret key (this `SecretKey`,
+    /// originally sampled at $q_2$ / $q_3$) is centred and re-interpreted at
+    /// $q_3$ to compute $A' \cdot S$, which is then rescaled $q_3 \to q_4$:
+    ///
+    /// $$
+    /// \hat m = \Bigl\lfloor p \cdot \bigl(B' - \lfloor q_4 \cdot A' \cdot S
+    ///   / q_3 \rceil\bigr) / q_4 \Bigr\rceil \bmod p.
+    /// $$
+    ///
+    /// # Single-prime secret key
+    ///
+    /// The `where R: RingPoly<N, CenteredScalar = i64>` bound restricts this
+    /// method to single-prime secret keys, which matches every paper-spec
+    /// VIA / VIA-C / VIA-B $S_2$ distribution (they live at the single-prime
+    /// $q_2$ / $q_3$, never at an RNS composite). A future RNS-source $S_2$
+    /// would have to dispatch through §3.4 `RekeySource` before the centred
+    /// lift.
+    ///
+    /// # Constant-time
+    ///
+    /// The centred lift of the secret key uses the constant-time
+    /// [`RingPoly::to_centered_coeffs_ct`]; the subsequent rescale operates
+    /// on ciphertext (RLWE-uniform) coefficients and the final [`decode`] is
+    /// variable-time on the about-to-be-revealed plaintext, both acceptable
+    /// under the §0.6 timing argument.
+    pub fn decrypt_asymmetric<RM: RingPoly<N>, RB: RingPoly<N>, RP: RingPoly<N>>(
+        &self,
+        ct: &ModSwitchedCiphertext<N, RM, RB>,
+        q3_mod: RM::Modulus,
+        q4_mod: RB::Modulus,
+        p_mod: RP::Modulus,
+    ) -> RP
+    where
+        R: RingPoly<N, CenteredScalar = i64>,
+    {
+        // Step 1: centre S to (-q_src/2, q_src/2] in constant time (secret).
+        let mut centered = [0i64; N];
+        self.poly.to_centered_coeffs_ct(&mut centered);
+        // Step 2: re-interpret S at q3 (the mask modulus).
+        let sk_q3: RM = RM::from_centered_i64s(q3_mod, &centered);
+        // Step 3: product = A' · S in R_{n, q3}.
+        let product = ct.mask * sk_q3;
+        // Step 4: rescale product q3 → q4 per-coefficient. Inline integer
+        // arithmetic keeps `encryption/` free of any `switching/` import
+        // (the `RescaleConsts` helper lives in Layer 3).
+        let q3 = RM::modulus_value(q3_mod);
+        let q4 = RB::modulus_value(q4_mod);
+        let q3_half = q3 / 2;
+        let mut product_u128 = [0u128; N];
+        product.to_u128_coeffs(&mut product_u128);
+        for v in product_u128.iter_mut() {
+            *v = (*v * q4 + q3_half) / q3;
+        }
+        let switched: RB = RB::from_u128_coeffs(q4_mod, &product_u128);
+        // Step 5: noisy = B' - switched in R_{n, q4}.
+        let noisy = ct.body - switched;
+        // Step 6: decode to plaintext at p.
+        decode::<N, RB, RP>(&noisy, p_mod)
     }
 }
 
@@ -1238,5 +1303,48 @@ mod tests {
         for (i, &exp) in expected.iter().enumerate() {
             assert_eq!(recovered.coeff(i).to_u64(), exp, "i={i}");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // decrypt_asymmetric — §3.2 RespCompRecover
+    // -----------------------------------------------------------------------
+
+    /// End-to-end §3.2 round-trip: encrypt at $q_3$, body-rescale to $q_4$
+    /// (the asymmetric "body-only" ModSwitch), then recover the plaintext
+    /// via [`SecretKey::decrypt_asymmetric`]. Mask stays at $q_3$, body at
+    /// $q_4$ — matching the `ModSwitchedCiphertext` shape Figure 7 produces.
+    #[test]
+    fn decrypt_asymmetric_round_trip_pow2() {
+        type Q3 = Poly<8, PowerOfTwoModulus<12>, Coefficient>; // q3 = 4096
+        type Q4 = Poly<8, PowerOfTwoModulus<8>, Coefficient>; // q4 = 256
+        type P2 = Poly<8, PowerOfTwoModulus<1>, Coefficient>; // p = 2
+        let q3m = PowerOfTwoModulus::<12>;
+        let q4m = PowerOfTwoModulus::<8>;
+        let pm = PowerOfTwoModulus::<1>;
+
+        let mut prg = Shake256Prg::new(b"decrypt-asym-roundtrip");
+        let sk = SecretKey::<8, Q3>::keygen(q3m, Distribution::Ternary, &mut prg);
+
+        let coeffs = [1u64, 0, 1, 1, 0, 1, 0, 0];
+        let pt: P2 = pt_from_vec(pm, coeffs);
+        let encoded: Q3 = encode(&pt, q3m);
+        let ct = sk.encrypt(&encoded, Distribution::Ternary, &mut prg);
+
+        // Body-only rescale B: q3 → q4 (the §3.2 trailing op of RespComp).
+        let q3: u128 = 1 << 12;
+        let q4: u128 = 1 << 8;
+        let mut b = [0u128; 8];
+        ct.body.to_u128_coeffs(&mut b);
+        for v in b.iter_mut() {
+            *v = (*v * q4 + q3 / 2) / q3;
+        }
+        let body_q4 = <Q4 as RingPoly<8>>::from_u128_coeffs(q4m, &b);
+        let msct = ModSwitchedCiphertext::<8, Q3, Q4>::new(ct.mask, body_q4);
+
+        let recovered: P2 = sk.decrypt_asymmetric(&msct, q3m, q4m, pm);
+        let mut got = [0u128; 8];
+        recovered.to_u128_coeffs(&mut got);
+        let expected: [u128; 8] = core::array::from_fn(|i| u128::from(coeffs[i]));
+        assert_eq!(got, expected);
     }
 }

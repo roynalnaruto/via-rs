@@ -922,6 +922,23 @@ mod tests {
 
     type M17 = ConstModulus<17>;
 
+    /// `Poly::random` (the RLWE mask sampler reached via
+    /// [`RingPoly::random_uniform`]) must consume the SHAKE-256 stream
+    /// byte-identically to Python's `uniform_poly` — i.e. agree with
+    /// [`crate::sampling::uniform::uniform_zq`] coefficient-for-coefficient.
+    /// This pins the §1.1 reproducibility contract for ciphertext masks
+    /// (regression guard for the `Zq::random` byte-budget fix).
+    #[test]
+    fn random_matches_python_uniform_poly_q17() {
+        use crate::sampling::prg::Shake256Prg;
+        // First 16 outputs of `DeterministicSampler(b"test").uniform_poly(16, 17)`.
+        const EXPECTED: [u64; 16] = [1, 13, 11, 10, 10, 16, 10, 15, 5, 9, 14, 9, 5, 1, 12, 0];
+        let mut prg = Shake256Prg::new(b"test");
+        let p: Poly<16, M17, Coefficient> = Poly::random(ConstModulus, &mut prg);
+        let got: [u64; 16] = core::array::from_fn(|i| p.coeff(i).to_u64());
+        assert_eq!(got, EXPECTED);
+    }
+
     #[test]
     fn zero_one_at_paper_modulus() {
         let m = paper::ViaCQ3::default();
