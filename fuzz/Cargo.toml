@@ -295,3 +295,35 @@ name = "switching_rekey_roundtrip"
 path = "fuzz_targets/switching/rekey_roundtrip.rs"
 test = false
 doc = false
+
+# §4 — homomorphic gates.
+
+[[bin]]
+name = "gates_cmux_dmux_roundtrip"
+path = "fuzz_targets/gates/cmux_dmux_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "gates_cmux_tree_selection"
+path = "fuzz_targets/gates/cmux_tree_selection.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "gates_crot_roundtrip"
+path = "fuzz_targets/gates/crot_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "gates_rlwe_to_rgsw_usable"
+path = "fuzz_targets/gates/rlwe_to_rgsw_usable.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "gates_mod_switch_rgsw_shape"
+path = "fuzz_targets/gates/mod_switch_rgsw_shape.rs"
+test = false
+doc = false
