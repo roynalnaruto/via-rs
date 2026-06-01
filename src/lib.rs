@@ -15,9 +15,11 @@
 //! - [`switching`] — Layer 3: modulus switching (§3.1–§3.2), ring switching
 //!   (§3.3), and secret-key rekeying (§3.4) — the reshaping primitives that
 //!   move ciphertexts between moduli and ring degrees.
+//! - [`gates`] — Layer 4: homomorphic gates (§4.1–§4.7) — CMux/DMux and their
+//!   recursive trees, controlled rotation (CRot), and RLWE→RGSW conversion.
 //!
-//! Further layers (homomorphic gates, MLWE cascade, protocol composites) will
-//! land as further top-level modules.
+//! Further layers (MLWE cascade, protocol composites) will land as further
+//! top-level modules.
 //!
 //! See `.docs/primitives.md` for the layered primitive overview and
 //! `.docs/via.pdf` for the original paper.
@@ -28,5 +30,6 @@
 
 pub mod algebra;
 pub mod encryption;
+pub mod gates;
 pub mod sampling;
 pub mod switching;

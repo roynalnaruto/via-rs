@@ -86,6 +86,12 @@ jobs:
           - switching_mod_switch_asym_output_shape
           - switching_ring_switch_roundtrip
           - switching_rekey_roundtrip
+          # §4 — homomorphic gates.
+          - gates_cmux_dmux_roundtrip
+          - gates_cmux_tree_selection
+          - gates_crot_roundtrip
+          - gates_rlwe_to_rgsw_usable
+          - gates_mod_switch_rgsw_shape
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
