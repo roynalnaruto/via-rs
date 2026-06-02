@@ -110,6 +110,21 @@ pub trait RingPoly<const N: usize>:
             CenteredScalar = Self::CenteredScalar,
         >;
 
+    /// The result type of [`Self::embed_at`]: the same backend at the
+    /// *larger* ring degree `N_LARGE`, over the *same* modulus, scalar, and
+    /// centred-scalar types. The enlarging-direction dual of
+    /// [`Self::Projected`]. The equality bounds let §5.1 `embed_mlwe` and §5.2
+    /// `conv_step` lift an $R_{n, q}$ ciphertext into $R_{n \cdot d, q}$
+    /// generically across both backends — `Poly<N_LARGE, M, _>` for
+    /// single-prime, `PolyRns<N_LARGE, B, _>` for RNS — and §7.1 `Embed_d`
+    /// (VIA-B) pack `d` inputs at arbitrary slots.
+    type Embedded<const N_LARGE: usize>: RingPoly<
+            N_LARGE,
+            Modulus = Self::Modulus,
+            Scalar = Self::Scalar,
+            CenteredScalar = Self::CenteredScalar,
+        >;
+
     /// The modulus this polynomial is associated with.
     fn modulus(&self) -> Self::Modulus;
 
@@ -236,6 +251,35 @@ pub trait RingPoly<const N: usize>:
     ///   `N_SMALL ∤ N`, or `N_SMALL` not a power of two.
     /// - **Runtime**: `slot >= N / N_SMALL`.
     fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Self::Projected<N_SMALL>;
+
+    /// Single-slot embedding $\iota_{\mathrm{slot}}^{N \to N_\text{large}}$ —
+    /// the enlarging dual of [`Self::project_at`] (§0.5). Coefficient $i$ of
+    /// `self` becomes coefficient $d \cdot i + \mathrm{slot}$ of the output
+    /// (with $d = N_\text{large} / N$); every other coefficient is zero. Pure
+    /// index manipulation — no algebra dependency. `slot` is a **public**
+    /// index (a loop variable bounded by $d$ at the call site).
+    ///
+    /// # Panics
+    ///
+    /// - **Compile-time** (const block in the backend): `N_LARGE < N`,
+    ///   `N ∤ N_LARGE`, or `N_LARGE` not a power of two.
+    /// - **Runtime**: `slot >= N_LARGE / N`.
+    ///
+    /// ```rust
+    /// use via_rs::algebra::ring::abstraction::RingPoly;
+    /// use via_rs::algebra::ring::element::Poly;
+    /// use via_rs::algebra::ring::form::Coefficient;
+    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    ///
+    /// // Embed R_{2,17} into R_{4,17} at slot 0: coeff i -> position d*i = 2*i.
+    /// type P = Poly<2, ConstModulus<17>, Coefficient>;
+    /// let f = <P as RingPoly<2>>::from_u128_coeffs(ConstModulus, &[3, 5]);
+    /// let g = RingPoly::embed_at::<4>(&f, 0);
+    /// let mut out = [0u128; 4];
+    /// RingPoly::to_u128_coeffs(&g, &mut out);
+    /// assert_eq!(out, [3, 0, 5, 0]);
+    /// ```
+    fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> Self::Embedded<N_LARGE>;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +293,7 @@ impl<const N: usize, M: Modulus> RingPoly<N> for Poly<N, M, Coefficient> {
     type Scalar = Zq<M>;
     type CenteredScalar = i64;
     type Projected<const N_SMALL: usize> = Poly<N_SMALL, M, Coefficient>;
+    type Embedded<const N_LARGE: usize> = Poly<N_LARGE, M, Coefficient>;
 
     #[inline(always)]
     fn modulus(&self) -> M {
@@ -347,6 +392,11 @@ impl<const N: usize, M: Modulus> RingPoly<N> for Poly<N, M, Coefficient> {
     fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Poly<N_SMALL, M, Coefficient> {
         Poly::project_at::<N_SMALL>(self, slot)
     }
+
+    #[inline(always)]
+    fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> Poly<N_LARGE, M, Coefficient> {
+        Poly::embed_at::<N_LARGE>(self, slot)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +410,7 @@ impl<const N: usize, B: RnsBasis> RingPoly<N> for PolyRns<N, B, Coefficient> {
     type Scalar = RnsZq<B>;
     type CenteredScalar = i128;
     type Projected<const N_SMALL: usize> = PolyRns<N_SMALL, B, Coefficient>;
+    type Embedded<const N_LARGE: usize> = PolyRns<N_LARGE, B, Coefficient>;
 
     #[inline(always)]
     fn modulus(&self) -> B {
@@ -467,6 +518,11 @@ impl<const N: usize, B: RnsBasis> RingPoly<N> for PolyRns<N, B, Coefficient> {
     #[inline(always)]
     fn project_at<const N_SMALL: usize>(&self, slot: usize) -> PolyRns<N_SMALL, B, Coefficient> {
         PolyRns::project_at::<N_SMALL>(self, slot)
+    }
+
+    #[inline(always)]
+    fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> PolyRns<N_LARGE, B, Coefficient> {
+        PolyRns::embed_at::<N_LARGE>(self, slot)
     }
 }
 
@@ -731,5 +787,46 @@ mod tests {
         let mut out = [0u128; 2];
         RingPoly::to_u128_coeffs(&proj, &mut out);
         assert_eq!(out, [1, 3]);
+    }
+
+    #[test]
+    fn embed_at_trait_single_prime_slot0_and_slot1() {
+        let m = ConstModulus::<17>;
+        // d = 4 / 2 = 2; coeff i -> position 2*i + slot.
+        let p =
+            <Poly<2, ConstModulus<17>, Coefficient> as RingPoly<2>>::from_u128_coeffs(m, &[3, 5]);
+        let e0: Poly<4, ConstModulus<17>, Coefficient> = RingPoly::embed_at::<4>(&p, 0);
+        let e1: Poly<4, ConstModulus<17>, Coefficient> = RingPoly::embed_at::<4>(&p, 1);
+        let mut out0 = [0u128; 4];
+        let mut out1 = [0u128; 4];
+        RingPoly::to_u128_coeffs(&e0, &mut out0);
+        RingPoly::to_u128_coeffs(&e1, &mut out1);
+        assert_eq!(out0, [3, 0, 5, 0]);
+        assert_eq!(out1, [0, 3, 0, 5]);
+    }
+
+    #[test]
+    fn embed_at_trait_rns_slot0() {
+        let b = ConstRnsBasis::<5, 11>;
+        let p = <PolyRns<2, ConstRnsBasis<5, 11>, Coefficient> as RingPoly<2>>::from_u128_coeffs(
+            b,
+            &[3, 4],
+        );
+        let e: PolyRns<4, ConstRnsBasis<5, 11>, Coefficient> = RingPoly::embed_at::<4>(&p, 0);
+        let mut out = [0u128; 4];
+        RingPoly::to_u128_coeffs(&e, &mut out);
+        assert_eq!(out, [3, 0, 4, 0]);
+    }
+
+    /// `embed_at` is the left inverse of `project_at` at the same slot:
+    /// `project_at(embed_at(f, j), j) == f`.
+    #[test]
+    fn embed_then_project_at_same_slot_is_identity() {
+        let m = ConstModulus::<17>;
+        let f =
+            <Poly<2, ConstModulus<17>, Coefficient> as RingPoly<2>>::from_u128_coeffs(m, &[7, 9]);
+        let embedded: Poly<4, ConstModulus<17>, Coefficient> = RingPoly::embed_at::<4>(&f, 1);
+        let back: Poly<2, ConstModulus<17>, Coefficient> = RingPoly::project_at::<2>(&embedded, 1);
+        assert_eq!(back, f);
     }
 }

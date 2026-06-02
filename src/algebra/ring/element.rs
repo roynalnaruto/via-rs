@@ -99,11 +99,18 @@ pub struct Poly<const N: usize, M: Modulus, F: Form> {
 // ---------------------------------------------------------------------------
 
 impl<const N: usize, M: Modulus, F: Form> Poly<N, M, F> {
-    /// Compile-time validation block. Asserts $N \ge 2$ and $N$ is a
+    /// Compile-time validation block. Asserts $N \ge 1$ and $N$ is a
     /// power of two. Touched by [`Poly::N`] and from every constructor
     /// (via `let () = Self::_CHECK;`) so a bad $N$ fails to compile.
+    ///
+    /// $N = 1$ realises the degenerate ring $R_{1, q} = \mathbb{Z}_q\lbrack X
+    /// \rbrack/(X + 1) \cong \mathbb{Z}_q$ — the LWE-form component ring of an $(n, 1)$-MLWE
+    /// (§5.1). It is supported in **coefficient form only**: the NTT path is
+    /// gated by `M: NttFriendly<N>` (see [`super::ntt`]) whose own `_CHECK`
+    /// still requires $N \ge 2$, so no eval-form / NTT operation is reachable
+    /// at $N = 1$.
     const _CHECK: () = {
-        assert!(N >= 2, "Poly: N >= 2");
+        assert!(N >= 1, "Poly: N >= 1");
         assert!(N.is_power_of_two(), "Poly: N must be a power of two");
     };
 
@@ -423,9 +430,10 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     /// Same compile-time vs runtime split as [`Self::embed_at`]:
     ///
     /// - **Compile-time**: `N_SMALL > N`, `N` not a multiple of
-    ///   `N_SMALL`, or `N_SMALL` not a power of two (when $\ge 2$;
-    ///   the degenerate `N_SMALL = 1` is rejected by `Poly`'s own
-    ///   `_CHECK` which requires `N >= 2`).
+    ///   `N_SMALL`, or `N_SMALL` not a power of two. The degenerate
+    ///   `N_SMALL = 1` is permitted (it yields $R_{1, q} \cong
+    ///   \mathbb{Z}_q$, used by §5.4 cascade key-gen and §5.5 `extr` at
+    ///   $d = 1$).
     /// - **Runtime**: `slot >= d`. Runtime panic, not compile error.
     pub fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Poly<N_SMALL, M, Coefficient> {
         const {
@@ -895,15 +903,6 @@ impl<const N: usize, M: Modulus, F: Form> fmt::Debug for Poly<N, M, F> {
 /// let _ = c + e;
 /// ```
 ///
-/// `compile_fail` doctest: `N` must be at least 2.
-///
-/// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
-/// let _: Poly<1, ConstModulus<17>, Coefficient> = Poly::zero(ConstModulus::<17>);
-/// ```
-///
 /// `compile_fail` doctest: `N` must be a power of two.
 ///
 /// ```compile_fail
@@ -918,6 +917,7 @@ struct CompileFailDocs;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::ring::RingPoly;
     use crate::algebra::zq::modulus::{ConstModulus, DynModulus, paper};
 
     type M17 = ConstModulus<17>;
@@ -1547,6 +1547,86 @@ mod tests {
         }
         let back_poly: Poly<8, _, Coefficient> = Poly::new(m, back);
         assert_eq!(back_poly, f);
+    }
+
+    // -----------------------------------------------------------------------
+    // N = 1 audit (§5 LWE form): R_{1,q} = Z_q[X]/(X+1) ≅ Z_q. Coefficient-form
+    // only; every op the cascade uses must behave at degree 1.
+    // -----------------------------------------------------------------------
+
+    type N1 = Poly<1, ConstModulus<17>, Coefficient>;
+
+    #[test]
+    fn n1_construct_zero_and_coeff_roundtrip() {
+        let m = ConstModulus::<17>;
+        let z = <N1 as RingPoly<1>>::zero(m);
+        let mut out = [0u128; 1];
+        RingPoly::to_u128_coeffs(&z, &mut out);
+        assert_eq!(out, [0]);
+        let p = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[9]);
+        assert_eq!(RingPoly::coeff(&p, 0).to_u64(), 9);
+    }
+
+    #[test]
+    fn n1_add_sub_neg() {
+        let m = ConstModulus::<17>;
+        let a = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[5]);
+        let b = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[9]);
+        let mut s = [0u128; 1];
+        RingPoly::to_u128_coeffs(&(a + b), &mut s);
+        assert_eq!(s, [14]);
+        RingPoly::to_u128_coeffs(&(a - b), &mut s);
+        assert_eq!(s, [(5 + 17 - 9) as u128]); // 13
+        RingPoly::to_u128_coeffs(&(-a), &mut s);
+        assert_eq!(s, [12]);
+    }
+
+    #[test]
+    fn n1_mul_is_scalar_product() {
+        // In R_{1,q} the product of two degree-0 elements is a0·b0 (no X term).
+        let m = ConstModulus::<17>;
+        let a = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[5]);
+        let b = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[9]);
+        let mut out = [0u128; 1];
+        RingPoly::to_u128_coeffs(&(a * b), &mut out);
+        assert_eq!(out, [(45 % 17) as u128]); // 11
+    }
+
+    #[test]
+    fn n1_mul_x_pow() {
+        // X ≡ -1 in R_{1,q}: mul_x_pow(1) negates the single coefficient.
+        let m = ConstModulus::<17>;
+        let a = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[5]);
+        let mut out = [0u128; 1];
+        RingPoly::to_u128_coeffs(&RingPoly::mul_x_pow(&a, 0), &mut out);
+        assert_eq!(out, [5]);
+        RingPoly::to_u128_coeffs(&RingPoly::mul_x_pow(&a, 1), &mut out);
+        assert_eq!(out, [12]); // -5 mod 17
+    }
+
+    #[test]
+    fn n1_embed_at_2_places_at_slot0() {
+        // The cascade's first embed: [a] -> [a, 0] in R_{2,q}.
+        let m = ConstModulus::<17>;
+        let a = <N1 as RingPoly<1>>::from_u128_coeffs(m, &[7]);
+        let e: Poly<2, ConstModulus<17>, Coefficient> = RingPoly::embed_at::<2>(&a, 0);
+        let mut out = [0u128; 2];
+        RingPoly::to_u128_coeffs(&e, &mut out);
+        assert_eq!(out, [7, 0]);
+    }
+
+    #[test]
+    fn n1_project_at_1_extracts_a_coefficient() {
+        // The cascade key-gen / extr d=1 projection: pick coefficient `slot`.
+        let m = ConstModulus::<17>;
+        let p = <Poly<4, ConstModulus<17>, Coefficient> as RingPoly<4>>::from_u128_coeffs(
+            m,
+            &[1, 2, 3, 4],
+        );
+        let p0: N1 = RingPoly::project_at::<1>(&p, 0);
+        let p2: N1 = RingPoly::project_at::<1>(&p, 2);
+        assert_eq!(RingPoly::coeff(&p0, 0).to_u64(), 1);
+        assert_eq!(RingPoly::coeff(&p2, 0).to_u64(), 3);
     }
 }
 
