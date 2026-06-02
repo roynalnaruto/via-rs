@@ -327,3 +327,35 @@ name = "gates_mod_switch_rgsw_shape"
 path = "fuzz_targets/gates/mod_switch_rgsw_shape.rs"
 test = false
 doc = false
+
+# §5 — MLWE LWE->RLWE conversion cascade.
+
+[[bin]]
+name = "conversion_lwe_encrypt_decrypt"
+path = "fuzz_targets/conversion/lwe_encrypt_decrypt.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "conversion_embed_mlwe_roundtrip"
+path = "fuzz_targets/conversion/embed_mlwe_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "conversion_conv_step_roundtrip"
+path = "fuzz_targets/conversion/conv_step_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "conversion_cascade_roundtrip"
+path = "fuzz_targets/conversion/cascade_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "conversion_extr_roundtrip"
+path = "fuzz_targets/conversion/extr_roundtrip.rs"
+test = false
+doc = false

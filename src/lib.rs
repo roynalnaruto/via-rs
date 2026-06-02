@@ -17,9 +17,11 @@
 //!   move ciphertexts between moduli and ring degrees.
 //! - [`gates`] — Layer 4: homomorphic gates (§4.1–§4.7) — CMux/DMux and their
 //!   recursive trees, controlled rotation (CRot), and RLWE→RGSW conversion.
+//! - [`conversion`] — Layer 5: the MLWE LWE→RLWE conversion cascade (§5.1–§5.5)
+//!   — MLWE embedding, single Conv₂ step, the full $\log_2 n$-deep cascade,
+//!   its key generation, and RLWE→MLWE coefficient extraction (`Extr_d`).
 //!
-//! Further layers (MLWE cascade, protocol composites) will land as further
-//! top-level modules.
+//! Further layers (protocol composites) will land as further top-level modules.
 //!
 //! See `.docs/primitives.md` for the layered primitive overview and
 //! `.docs/via.pdf` for the original paper.
@@ -29,6 +31,7 @@
 #![warn(missing_docs)]
 
 pub mod algebra;
+pub mod conversion;
 pub mod encryption;
 pub mod gates;
 pub mod sampling;

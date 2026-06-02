@@ -92,6 +92,12 @@ jobs:
           - gates_crot_roundtrip
           - gates_rlwe_to_rgsw_usable
           - gates_mod_switch_rgsw_shape
+          # §5 — MLWE LWE->RLWE conversion cascade.
+          - conversion_lwe_encrypt_decrypt
+          - conversion_embed_mlwe_roundtrip
+          - conversion_conv_step_roundtrip
+          - conversion_cascade_roundtrip
+          - conversion_extr_roundtrip
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly

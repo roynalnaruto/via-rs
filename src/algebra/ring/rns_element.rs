@@ -57,8 +57,11 @@ pub struct PolyRns<const N: usize, B: RnsBasis, F: Form> {
 // ---------------------------------------------------------------------------
 
 impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
+    // $N = 1$ realises $R_{1, Q} \cong \mathbb{Z}_Q$ — the LWE-form component
+    // ring of an $(n, 1)$-MLWE at the composite $q_1$ (§5.1), coefficient-form
+    // only (the NTT path is gated separately by `NttFriendly<N>`, $N \ge 2$).
     const _CHECK: () = {
-        assert!(N >= 2, "PolyRns: N >= 2");
+        assert!(N >= 1, "PolyRns: N >= 1");
         assert!(N.is_power_of_two(), "PolyRns: N must be a power of two");
     };
 
@@ -936,6 +939,7 @@ impl<const N: usize, B: RnsBasis, F: Form> fmt::Debug for PolyRns<N, B, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::ring::RingPoly;
     use crate::algebra::rns::basis::{ConstRnsBasis, DynRnsBasis, paper};
     use crate::algebra::zq::modulus::DynModulus;
 
@@ -1411,5 +1415,49 @@ mod tests {
         }
         let back: PolyRns<4, _, Coefficient> = PolyRns::from_u128_array(b, &back_u128);
         assert_eq!(back, f);
+    }
+
+    // -----------------------------------------------------------------------
+    // N = 1 audit (§5 LWE form at the composite q1): R_{1,Q} ≅ Z_Q,
+    // coefficient-form only. Q = 5·11 = 55 here.
+    // -----------------------------------------------------------------------
+
+    type N1 = PolyRns<1, Z55, Coefficient>;
+
+    #[test]
+    fn rns_n1_construct_and_coeff() {
+        let b = Z55::default();
+        let z = <N1 as RingPoly<1>>::zero(b);
+        let mut out = [0u128; 1];
+        RingPoly::to_u128_coeffs(&z, &mut out);
+        assert_eq!(out, [0]);
+        let p = <N1 as RingPoly<1>>::from_u128_coeffs(b, &[23]);
+        assert_eq!(RingPoly::coeff(&p, 0).to_u128(), 23);
+    }
+
+    #[test]
+    fn rns_n1_mul_and_mul_x_pow() {
+        let b = Z55::default();
+        let x = <N1 as RingPoly<1>>::from_u128_coeffs(b, &[6]);
+        let y = <N1 as RingPoly<1>>::from_u128_coeffs(b, &[7]);
+        let mut out = [0u128; 1];
+        RingPoly::to_u128_coeffs(&(x * y), &mut out);
+        assert_eq!(out, [42u128]); // 6·7 = 42 mod 55
+        // X ≡ -1: mul_x_pow(1) negates the lone coefficient.
+        RingPoly::to_u128_coeffs(&RingPoly::mul_x_pow(&x, 1), &mut out);
+        assert_eq!(out, [49u128]); // -6 = 49 mod 55
+    }
+
+    #[test]
+    fn rns_n1_embed_and_project() {
+        let b = Z55::default();
+        let a = <N1 as RingPoly<1>>::from_u128_coeffs(b, &[4]);
+        let e: PolyRns<2, Z55, Coefficient> = RingPoly::embed_at::<2>(&a, 0);
+        let mut out2 = [0u128; 2];
+        RingPoly::to_u128_coeffs(&e, &mut out2);
+        assert_eq!(out2, [4, 0]);
+        let p = <PolyRns<4, Z55, Coefficient> as RingPoly<4>>::from_u128_coeffs(b, &[1, 2, 3, 4]);
+        let p1: N1 = RingPoly::project_at::<1>(&p, 1);
+        assert_eq!(RingPoly::coeff(&p1, 0).to_u128(), 2);
     }
 }
