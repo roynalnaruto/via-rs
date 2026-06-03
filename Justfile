@@ -61,3 +61,24 @@ fuzz-build:
 # Run a single fuzz target for SECS seconds (default 60). Example: `just fuzz zq_reduce 300`.
 fuzz TARGET SECS="60":
     cd fuzz && cargo +nightly fuzz run {{TARGET}} -- -max_total_time={{SECS}}
+
+# ─── KAT vectors ───────────────────────────────────────────────────────────
+#
+# Requires Python >= 3.11 with the `.references/via-spec` reference on the
+# path (the script inserts it itself).
+
+# Regenerate the Layer-3 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer3:
+    cd .references/via-spec && python3 scripts/gen_layer3_kats.py
+
+# Regenerate the Layer-4 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer4:
+    cd .references/via-spec && python3 scripts/gen_layer4_kats.py
+
+# Regenerate the Layer-5 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer5:
+    cd .references/via-spec && python3 scripts/gen_layer5_kats.py
+
+# Regenerate the Layer-6 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer6:
+    cd .references/via-spec && python3 scripts/gen_layer6_kats.py
