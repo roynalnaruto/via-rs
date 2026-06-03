@@ -343,3 +343,174 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Layer-6 SPIKE derisk (intermediate degree).
+//
+// Validates the conv_step machinery + **depth-18** noise closure at the PAPER
+// q₁ basis (`ViaCQ1Rns ≈ 2^75`), base 18, degree **512** (¼ the paper degree).
+// 18^18 ≈ 2^75 ≥ q₁ so base/depth cover the modulus exactly. If this closes,
+// the only remaining unknown for n=2048 is the extra O(n log n) noise from 4×
+// degree. The key (~5.3 MB) is built by value on a large-stack thread (no
+// `unsafe`); the n=2048 boxed builder is a separate follow-up.
+//
+// Heavy (schoolbook O(n²) mult): `#[ignore]`, release-only. Run with:
+//   cargo test -p via-primitives --release -- --ignored spike_n512
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod spike {
+    // `via-primitives` is `#![no_std]`; the test harness links `std`, but we must
+    // name it explicitly to reach `std::thread` for the large-stack spawn.
+    extern crate std;
+
+    use crate::algebra::ring::element::Poly;
+    use crate::algebra::ring::form::Coefficient;
+    use crate::algebra::ring::rns_element::PolyRns;
+    use crate::algebra::rns::basis::paper::ViaCQ1Rns;
+    use crate::algebra::zq::modulus::ConstModulus;
+    use crate::conversion::encrypt_lwe;
+    use crate::encryption::types::SecretKey;
+    use crate::sampling::distribution::Distribution;
+    use crate::sampling::prg::Shake256Prg;
+
+    crate::lwe_to_rlwe_cascade! {
+        n = 512,
+        ring = PolyRns,
+        mod_param = B,
+        mod_bound = crate::algebra::rns::basis::RnsBasis,
+        levels = L,
+        key = LweToRlweKeyRnsN512,
+        gen = gen_lwe_to_rlwe_key_rns_n512,
+        cast = lwe_to_rlwe_rns_n512,
+        steps = [
+            (keys_2, 512, 1, 256, 2),
+            (keys_4, 256, 2, 128, 4),
+            (keys_8, 128, 4, 64, 8),
+            (keys_16, 64, 8, 32, 16),
+            (keys_32, 32, 16, 16, 32),
+            (keys_64, 16, 32, 8, 64),
+            (keys_128, 8, 64, 4, 128),
+            (keys_256, 4, 128, 2, 256),
+            (keys_512, 2, 256, 1, 512),
+        ],
+    }
+
+    /// Depth-18 noise closure at the paper q₁ basis, degree 512. Builds sk + key
+    /// once on a 64 MB-stack thread (key ~5.3 MB by value, no `unsafe`), then
+    /// round-trips all `p = 16` messages, asserting the scalar lands at coeff 0
+    /// and every other coefficient is exactly 0 (no noise leak).
+    #[test]
+    #[ignore = "heavy depth-18 RNS cascade; run: cargo test -p via-primitives --release -- --ignored spike_n512"]
+    fn spike_n512_depth18_noise_closes() {
+        const BASE: u64 = 18;
+        const LV: usize = 18;
+        type RnsQ1 = PolyRns<512, ViaCQ1Rns, Coefficient>;
+        type P512 = Poly<512, ConstModulus<16>, Coefficient>;
+
+        let handle = std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(|| {
+                let basis = ViaCQ1Rns::default();
+                let p = ConstModulus::<16>;
+                let mut prg = Shake256Prg::new(b"spike-n512-depth18");
+                let sk = SecretKey::<512, RnsQ1>::keygen(basis, Distribution::Ternary, &mut prg);
+                let key = gen_lwe_to_rlwe_key_rns_n512::<_, LV>(
+                    &sk,
+                    BASE,
+                    Distribution::Ternary,
+                    &mut prg,
+                );
+                for message in 0..16u64 {
+                    let lwe = encrypt_lwe(&sk, message, 16, Distribution::Ternary, &mut prg);
+                    let rlwe = lwe_to_rlwe_rns_n512::<_, LV>(&lwe, &key, BASE);
+                    let recovered: P512 = sk.decrypt(&rlwe, p);
+                    assert_eq!(recovered.coeff(0).to_u64(), message, "n512 msg {message}");
+                    for i in 1..512 {
+                        assert_eq!(
+                            recovered.coeff(i).to_u64(),
+                            0,
+                            "n512 msg {message} coeff {i} (noise leak)"
+                        );
+                    }
+                }
+            })
+            .expect("spawn spike thread");
+        handle
+            .join()
+            .expect("spike thread panicked (noise did not close?)");
+    }
+
+    // ----- The real thing: full paper degree n = 2048, depth 18 -----
+
+    crate::lwe_to_rlwe_cascade! {
+        n = 2048,
+        ring = PolyRns,
+        mod_param = B,
+        mod_bound = crate::algebra::rns::basis::RnsBasis,
+        levels = L,
+        key = LweToRlweKeyRnsN2048,
+        gen = gen_lwe_to_rlwe_key_rns_n2048,
+        cast = lwe_to_rlwe_rns_n2048,
+        steps = [
+            (keys_2, 2048, 1, 1024, 2),
+            (keys_4, 1024, 2, 512, 4),
+            (keys_8, 512, 4, 256, 8),
+            (keys_16, 256, 8, 128, 16),
+            (keys_32, 128, 16, 64, 32),
+            (keys_64, 64, 32, 32, 64),
+            (keys_128, 32, 64, 16, 128),
+            (keys_256, 16, 128, 8, 256),
+            (keys_512, 8, 256, 4, 512),
+            (keys_1024, 4, 512, 2, 1024),
+            (keys_2048, 2, 1024, 1, 2048),
+        ],
+    }
+
+    /// **The depth-18 SPIKE (R1 GO/NO-GO).** Full paper degree n = 2048 at the
+    /// paper q₁ basis, base 18, depth 18. Builds sk + key once on a 256 MB-stack
+    /// thread (key ~24.75 MB **by value**, no `unsafe` — the production
+    /// field-by-field `Box::new_uninit` builder is a separate follow-up), then
+    /// round-trips all `p = 16` messages, asserting the scalar lands at coeff 0
+    /// and every other coefficient is exactly 0 (no noise leak). PASS ⇒ paper
+    /// path GO; panic ⇒ NO-GO (escalate to the L=20/B=16 param search).
+    #[test]
+    #[ignore = "very heavy depth-18 RNS cascade at n=2048; run: cargo test -p via-primitives --release -- --ignored spike_n2048"]
+    fn spike_n2048_depth18_noise_closes() {
+        const BASE: u64 = 18;
+        const LV: usize = 18;
+        type RnsQ1 = PolyRns<2048, ViaCQ1Rns, Coefficient>;
+        type P2048 = Poly<2048, ConstModulus<16>, Coefficient>;
+
+        let handle = std::thread::Builder::new()
+            .stack_size(256 << 20)
+            .spawn(|| {
+                let basis = ViaCQ1Rns::default();
+                let p = ConstModulus::<16>;
+                let mut prg = Shake256Prg::new(b"spike-n2048-depth18");
+                let sk = SecretKey::<2048, RnsQ1>::keygen(basis, Distribution::Ternary, &mut prg);
+                let key = gen_lwe_to_rlwe_key_rns_n2048::<_, LV>(
+                    &sk,
+                    BASE,
+                    Distribution::Ternary,
+                    &mut prg,
+                );
+                for message in 0..16u64 {
+                    let lwe = encrypt_lwe(&sk, message, 16, Distribution::Ternary, &mut prg);
+                    let rlwe = lwe_to_rlwe_rns_n2048::<_, LV>(&lwe, &key, BASE);
+                    let recovered: P2048 = sk.decrypt(&rlwe, p);
+                    assert_eq!(recovered.coeff(0).to_u64(), message, "n2048 msg {message}");
+                    for i in 1..2048 {
+                        assert_eq!(
+                            recovered.coeff(i).to_u64(),
+                            0,
+                            "n2048 msg {message} coeff {i} (noise leak)"
+                        );
+                    }
+                }
+            })
+            .expect("spawn spike thread");
+        handle
+            .join()
+            .expect("spike thread panicked (depth-18 noise did NOT close — NO-GO)");
+    }
+}
