@@ -22,13 +22,13 @@ test *FLAGS:
 
 # ─── docs ────────────────────────────────────────────────────────────────
 
-# Build rustdoc with KaTeX math rendering and open in a browser.
+# Build rustdoc for via-primitives (KaTeX math rendering) and open in a browser.
 doc:
-    cargo doc --no-deps --document-private-items --open
+    cargo doc --no-deps --document-private-items --package via-primitives --open
 
 # Same as `doc` but without opening a browser — for CI.
 doc-build:
-    cargo doc --no-deps --document-private-items
+    cargo doc --no-deps --document-private-items --package via-primitives
 
 # ─── lint ────────────────────────────────────────────────────────────────
 
@@ -45,6 +45,24 @@ lint-check:
     cargo clippy --all-targets -- -D warnings
     cd fuzz && cargo fmt --all -- --check
     cd fuzz && cargo clippy --all-targets -- -D warnings
+
+# ─── no_std ────────────────────────────────────────────────────────────────
+
+# Verify via-primitives builds for a bare-metal target (no std, no alloc).
+no-std-check:
+    cargo build --target thumbv7em-none-eabihf --package via-primitives
+
+# ─── client ⊥ server structural check ────────────────────────────────────
+
+# NB: detect PRESENCE with `grep -q` + `if` — `grep -qv` is not a correct test
+# (on GNU grep it exits 0 whenever any line lacks the pattern).
+# Assert that via-client and via-server have no transitive dep on each other.
+client-server-check:
+    @if cargo tree --package via-client 2>&1 | grep -q "via-server"; then \
+        echo "FAIL: via-client depends on via-server"; exit 1; fi
+    @if cargo tree --package via-server 2>&1 | grep -q "via-client"; then \
+        echo "FAIL: via-server depends on via-client"; exit 1; fi
+    @echo "OK: client ⊥ server isolation confirmed"
 
 # ─── fuzz ────────────────────────────────────────────────────────────────
 #
