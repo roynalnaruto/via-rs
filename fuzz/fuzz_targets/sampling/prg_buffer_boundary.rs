@@ -17,7 +17,7 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::sampling::Shake256Prg;
+use via_primitives::sampling::Shake256Prg;
 
 /// Cap the seed length at the PRG's accepted maximum (64 bytes) and the
 /// total read at 512 bytes; pick chunk sizes that sum to `total`.

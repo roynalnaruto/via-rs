@@ -14,8 +14,8 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
-use via_rs::sampling::{Distribution, Shake256Prg, lift_centered_i64_into_zq};
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::sampling::{Distribution, Shake256Prg, lift_centered_i64_into_zq};
 
 const KNOWN_MODULI: &[u64] = &[
     17,

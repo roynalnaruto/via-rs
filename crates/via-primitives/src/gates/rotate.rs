@@ -30,12 +30,12 @@ use super::mux::cmux;
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::ring::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::RLWECiphertext;
-/// use via_rs::gates::rotate;
+/// use via_primitives::algebra::ring::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::RLWECiphertext;
+/// use via_primitives::gates::rotate;
 ///
 /// type R = Poly<4, PowerOfTwoModulus<10>, Coefficient>;
 /// let q = PowerOfTwoModulus::<10>;
@@ -101,15 +101,15 @@ pub enum CRotDir {
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::ring::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::rlwe::encode;
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
-/// use via_rs::gates::{crot, CRotDir};
+/// use via_primitives::algebra::ring::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::rlwe::encode;
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+/// use via_primitives::gates::{crot, CRotDir};
 ///
 /// type R = Poly<4, PowerOfTwoModulus<10>, Coefficient>;
 /// type RP = Poly<4, PowerOfTwoModulus<1>, Coefficient>;

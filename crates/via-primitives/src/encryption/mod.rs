@@ -34,12 +34,12 @@
 //! ## Example — full encrypt/decrypt round-trip
 //!
 //! ```
-//! use via_rs::algebra::ring::element::Poly;
-//! use via_rs::algebra::ring::form::Coefficient;
-//! use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-//! use via_rs::encryption::{SecretKey, decode, encode};
-//! use via_rs::sampling::distribution::Distribution;
-//! use via_rs::sampling::prg::Shake256Prg;
+//! use via_primitives::algebra::ring::element::Poly;
+//! use via_primitives::algebra::ring::form::Coefficient;
+//! use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+//! use via_primitives::encryption::{SecretKey, decode, encode};
+//! use via_primitives::sampling::distribution::Distribution;
+//! use via_primitives::sampling::prg::Shake256Prg;
 //!
 //! type Plaintext = Poly<4, PowerOfTwoModulus<4>, Coefficient>;     // p = 16
 //! type Ciphertext = Poly<4, PowerOfTwoModulus<10>, Coefficient>;   // q = 1024
@@ -80,7 +80,7 @@
 //!     Distribution::Ternary,
 //!     &mut prg,
 //! );
-//! let ksk = via_rs::encryption::gen_ksk::<4, Ciphertext, 4>(
+//! let ksk = via_primitives::encryption::gen_ksk::<4, Ciphertext, 4>(
 //!     &sk, &dst_sk, 2, Distribution::Ternary, &mut prg,
 //! );
 //! let _switched = ksk.key_switch(&ct, 2);

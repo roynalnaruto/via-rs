@@ -894,9 +894,9 @@ impl<const N: usize, M: Modulus, F: Form> fmt::Debug for Poly<N, M, F> {
 /// type error.
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::{Coefficient, Evaluation};
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::{Coefficient, Evaluation};
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// type M = ConstModulus<17>;
 /// let c: Poly<4, M, Coefficient> = Poly::zero(M);
 /// let e: Poly<4, M, Evaluation> = Poly::zero(M);
@@ -906,9 +906,9 @@ impl<const N: usize, M: Modulus, F: Form> fmt::Debug for Poly<N, M, F> {
 /// `compile_fail` doctest: `N` must be a power of two.
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// let _: Poly<3, ConstModulus<17>, Coefficient> = Poly::zero(ConstModulus::<17>);
 /// ```
 #[cfg(doctest)]
@@ -1264,9 +1264,9 @@ mod tests {
     /// — there is no `NttFriendly` impl for that modulus type.
     ///
     /// ```compile_fail
-    /// use via_rs::algebra::ring::element::Poly;
-    /// use via_rs::algebra::ring::form::Coefficient;
-    /// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
+    /// use via_primitives::algebra::ring::element::Poly;
+    /// use via_primitives::algebra::ring::form::Coefficient;
+    /// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
     /// type M = PowerOfTwoModulus<4>;
     /// let p: Poly<4, M, Coefficient> = Poly::zero(M);
     /// let _ = p.into_eval();
@@ -1635,9 +1635,9 @@ mod tests {
 /// `N_LARGE` smaller than `N`:
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// type M = ConstModulus<17>;
 /// let f: Poly<8, M, Coefficient> = Poly::zero(M);
 /// let _ = f.embed_at::<4>(0);
@@ -1646,9 +1646,9 @@ mod tests {
 /// `N_LARGE` not a multiple of `N`:
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// type M = ConstModulus<17>;
 /// let f: Poly<4, M, Coefficient> = Poly::zero(M);
 /// let _ = f.embed_at::<6>(0);
@@ -1657,9 +1657,9 @@ mod tests {
 /// `N_LARGE` not a power of two:
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// type M = ConstModulus<17>;
 /// let f: Poly<4, M, Coefficient> = Poly::zero(M);
 /// let _ = f.embed_at::<12>(0);

@@ -15,12 +15,12 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::abstraction::RingPoly;
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::encryption::types::RLWECiphertext;
-use via_rs::switching::mod_switch::mod_switch_asym;
+use via_primitives::algebra::ring::abstraction::RingPoly;
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::encryption::types::RLWECiphertext;
+use via_primitives::switching::mod_switch::mod_switch_asym;
 
 const N: usize = 16;
 type R = Poly<N, DynModulus, Coefficient>;

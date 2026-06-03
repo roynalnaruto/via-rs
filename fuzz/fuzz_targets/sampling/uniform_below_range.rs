@@ -15,7 +15,7 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::sampling::Shake256Prg;
+use via_primitives::sampling::Shake256Prg;
 
 #[derive(Debug)]
 struct Input {

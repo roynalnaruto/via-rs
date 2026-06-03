@@ -32,7 +32,7 @@ use crate::sampling::prg::Shake256Prg;
 /// # Example
 ///
 /// ```
-/// use via_rs::sampling::{Shake256Prg, bounded::bounded_uniform};
+/// use via_primitives::sampling::{Shake256Prg, bounded::bounded_uniform};
 ///
 /// let mut prg = Shake256Prg::new(b"bounded-seed");
 /// let mut out = [0i32; 16];

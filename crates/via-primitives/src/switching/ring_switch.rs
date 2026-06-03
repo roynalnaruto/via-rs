@@ -37,13 +37,13 @@ use crate::sampling::prg::Shake256Prg;
 /// encryptions under $S_2$):
 ///
 /// ```rust
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
-/// use via_rs::switching::ring_switch::{gen_rsk, RingSwitchKey};
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+/// use via_primitives::switching::ring_switch::{gen_rsk, RingSwitchKey};
 ///
 /// // Toy params: N1 = 64, N2 = 16, D = 4, L = 2.
 /// type Q<const N: usize> = Poly<N, PowerOfTwoModulus<32>, Coefficient>;
@@ -158,13 +158,13 @@ impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D
 /// cross-language parity contract (locked by the Part 5 PRG-order KAT).
 ///
 /// ```rust
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
-/// use via_rs::switching::ring_switch::{gen_rsk, RingSwitchKey};
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+/// use via_primitives::switching::ring_switch::{gen_rsk, RingSwitchKey};
 ///
 /// type Q<const N: usize> = Poly<N, PowerOfTwoModulus<32>, Coefficient>;
 /// let qm = PowerOfTwoModulus::<32>;
@@ -214,15 +214,15 @@ pub fn gen_rsk<
 /// $L$ is carried on the key type.
 ///
 /// ```rust
-/// use via_rs::algebra::ring::abstraction::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::rlwe::encode;
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
-/// use via_rs::switching::ring_switch::{gen_rsk, ring_switch, RingSwitchKey};
+/// use via_primitives::algebra::ring::abstraction::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::rlwe::encode;
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+/// use via_primitives::switching::ring_switch::{gen_rsk, ring_switch, RingSwitchKey};
 ///
 /// type Q<const N: usize> = Poly<N, PowerOfTwoModulus<32>, Coefficient>;
 /// type P<const N: usize> = Poly<N, PowerOfTwoModulus<4>, Coefficient>; // p = 16

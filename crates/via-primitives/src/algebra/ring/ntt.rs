@@ -794,8 +794,8 @@ mod tests {
 /// touched.
 ///
 /// ```compile_fail
-/// use via_rs::algebra::ring::ntt::NttFriendly;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::ntt::NttFriendly;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// const _: u64 = <ConstModulus<5> as NttFriendly<4>>::PSI;
 /// ```
 ///
@@ -806,8 +806,8 @@ mod tests {
 /// exactly $8 = 2N$). Locks the happy path alongside the rejection.
 ///
 /// ```
-/// use via_rs::algebra::ring::ntt::NttFriendly;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::algebra::ring::ntt::NttFriendly;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
 /// const PSI: u64 = <ConstModulus<17> as NttFriendly<4>>::PSI;
 /// const N_INV: u64 = <ConstModulus<17> as NttFriendly<4>>::N_INV;
 /// assert_eq!(PSI, 9);

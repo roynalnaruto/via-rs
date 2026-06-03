@@ -33,7 +33,7 @@ use crate::sampling::prg::Shake256Prg;
 /// # Example
 ///
 /// ```
-/// use via_rs::sampling::{Shake256Prg, ternary::ternary};
+/// use via_primitives::sampling::{Shake256Prg, ternary::ternary};
 ///
 /// let mut prg = Shake256Prg::new(b"ternary-seed");
 /// let mut out = [0i8; 16];

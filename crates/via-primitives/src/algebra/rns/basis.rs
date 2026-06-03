@@ -133,7 +133,7 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::rns::basis::{ConstRnsBasis, RnsBasis};
+/// use via_primitives::algebra::rns::basis::{ConstRnsBasis, RnsBasis};
 /// let b = ConstRnsBasis::<5, 11>;
 /// assert_eq!(b.big_q(), 55);
 /// assert_eq!(b.decompose_u128(42), (2, 9));    // 42 mod 5, 42 mod 11
@@ -147,7 +147,7 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
 /// validation block at monomorphisation:
 ///
 /// ```compile_fail
-/// use via_rs::algebra::rns::basis::ConstRnsBasis;
+/// use via_primitives::algebra::rns::basis::ConstRnsBasis;
 /// // gcd(6, 10) = 2 — fails the coprimality assertion in `_CHECK`.
 /// const _: u64 = ConstRnsBasis::<6, 10>::Q0_INV_MOD_Q1;
 /// ```

@@ -9,18 +9,18 @@
 //!
 //! Regenerate the constants with `just regen-kats-layer4`.
 
-use via_rs::algebra::ring::abstraction::RingPoly;
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::encryption::gadget::gadget_vector_values;
-use via_rs::encryption::rlwe::encode;
-use via_rs::encryption::types::{RGSWCiphertext, RLWECiphertext, SecretKey};
-use via_rs::gates::{
+use via_primitives::algebra::ring::abstraction::RingPoly;
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::encryption::gadget::gadget_vector_values;
+use via_primitives::encryption::rlwe::encode;
+use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, SecretKey};
+use via_primitives::gates::{
     CRotDir, cmux, cmux_tree, crot, dmux, dmux_tree, mod_switch_rgsw, rlwe_to_rgsw, rotate,
 };
-use via_rs::sampling::distribution::Distribution;
-use via_rs::sampling::prg::Shake256Prg;
+use via_primitives::sampling::distribution::Distribution;
+use via_primitives::sampling::prg::Shake256Prg;
 
 mod data {
     include!("data/layer4_kats.rs");

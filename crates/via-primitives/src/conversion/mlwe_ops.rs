@@ -132,13 +132,13 @@ pub fn mlwe_to_rlwe<const N: usize, R: RingPoly<N>>(
 /// [`dot_residues`] kernel.
 ///
 /// ```rust
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::ConstModulus;
-/// use via_rs::conversion::{decrypt_lwe, encrypt_lwe};
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::conversion::{decrypt_lwe, encrypt_lwe};
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
 ///
 /// type R = Poly<8, ConstModulus<65537>, Coefficient>;
 /// let q = ConstModulus::<65537>;

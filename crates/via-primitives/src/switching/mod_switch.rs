@@ -33,12 +33,12 @@ use super::kernels::RescaleConsts;
 /// `RespComp` (compressing the answer from $q_2$ to $q_3$).
 ///
 /// ```rust
-/// use via_rs::algebra::ring::abstraction::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::RLWECiphertext;
-/// use via_rs::switching::mod_switch::mod_switch_sym;
+/// use via_primitives::algebra::ring::abstraction::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::RLWECiphertext;
+/// use via_primitives::switching::mod_switch::mod_switch_sym;
 ///
 /// // Rescale a trivial ciphertext from q = 2^8 to q' = 2^4.
 /// type Src = Poly<4, PowerOfTwoModulus<8>, Coefficient>;
@@ -100,12 +100,12 @@ pub fn mod_switch_sym<const N: usize, R_SRC: RingPoly<N>, R_DST: RingPoly<N>>(
 /// Decryption uses [`crate::encryption::SecretKey::decrypt_asymmetric`].
 ///
 /// ```rust
-/// use via_rs::algebra::ring::abstraction::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::RLWECiphertext;
-/// use via_rs::switching::mod_switch::mod_switch_asym;
+/// use via_primitives::algebra::ring::abstraction::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::RLWECiphertext;
+/// use via_primitives::switching::mod_switch::mod_switch_asym;
 ///
 /// // Body-only rescale: mask stays at q = 2^8, body shrinks to 2^4.
 /// type Q8 = Poly<4, PowerOfTwoModulus<8>, Coefficient>;

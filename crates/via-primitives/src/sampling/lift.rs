@@ -72,8 +72,8 @@ pub fn lift_centered_i32_into_zq<M: Modulus>(modulus: M, src: &[i32], dst: &mut 
 /// # Example
 ///
 /// ```
-/// use via_rs::algebra::zq::modulus::ConstModulus;
-/// use via_rs::sampling::lift_centered_i64_into_zq;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::sampling::lift_centered_i64_into_zq;
 ///
 /// let centred: [i64; 5] = [0, 1, -1, 3, -3];
 /// let mut lifted = [0u64; 5];

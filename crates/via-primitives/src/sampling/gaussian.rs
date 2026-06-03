@@ -77,8 +77,8 @@ const TWO_POW_32_F64: f64 = 4_294_967_296.0;
 /// # Example
 ///
 /// ```
-/// use via_rs::sampling::gaussian::discrete_gaussian;
-/// use via_rs::sampling::prg::Shake256Prg;
+/// use via_primitives::sampling::gaussian::discrete_gaussian;
+/// use via_primitives::sampling::prg::Shake256Prg;
 ///
 /// let mut prg = Shake256Prg::new(b"my-seed");
 /// let mut out = [0i64; 16];

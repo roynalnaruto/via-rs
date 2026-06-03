@@ -24,11 +24,11 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
-use via_rs::encryption::{SecretKey, encode};
-use via_rs::sampling::{Distribution, Shake256Prg};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::encryption::{SecretKey, encode};
+use via_primitives::sampling::{Distribution, Shake256Prg};
 
 /// Fixed ring degree for the fuzz target. Const-generic constraints
 /// force a compile-time choice; 16 keeps iterations fast (~4 KiB poly

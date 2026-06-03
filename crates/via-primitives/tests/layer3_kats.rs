@@ -10,17 +10,17 @@
 //!
 //! Regenerate the constants with `just regen-kats`.
 
-use via_rs::algebra::ring::abstraction::RingPoly;
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-use via_rs::encryption::rlwe::encode;
-use via_rs::encryption::types::{RLWECiphertext, SecretKey};
-use via_rs::sampling::distribution::Distribution;
-use via_rs::sampling::prg::Shake256Prg;
-use via_rs::switching::mod_switch::{mod_switch_asym, mod_switch_sym};
-use via_rs::switching::rekey::rekey_secret_key;
-use via_rs::switching::ring_switch::{RingSwitchKey, gen_rsk, ring_switch};
+use via_primitives::algebra::ring::abstraction::RingPoly;
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+use via_primitives::encryption::rlwe::encode;
+use via_primitives::encryption::types::{RLWECiphertext, SecretKey};
+use via_primitives::sampling::distribution::Distribution;
+use via_primitives::sampling::prg::Shake256Prg;
+use via_primitives::switching::mod_switch::{mod_switch_asym, mod_switch_sym};
+use via_primitives::switching::rekey::rekey_secret_key;
+use via_primitives::switching::ring_switch::{RingSwitchKey, gen_rsk, ring_switch};
 
 mod data {
     include!("data/layer3_kats.rs");

@@ -19,8 +19,8 @@ use crate::sampling::prg::Shake256Prg;
 /// # Example
 ///
 /// ```
-/// use via_rs::algebra::zq::modulus::ConstModulus;
-/// use via_rs::sampling::{Shake256Prg, uniform::uniform_zq};
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::sampling::{Shake256Prg, uniform::uniform_zq};
 ///
 /// let mut prg = Shake256Prg::new(b"mask-seed");
 /// let mut mask = [0u64; 16];

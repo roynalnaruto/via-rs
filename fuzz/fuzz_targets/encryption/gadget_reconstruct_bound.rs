@@ -28,10 +28,10 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::encryption::{gadget_decompose_into, reconstruct};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::encryption::{gadget_decompose_into, reconstruct};
 
 const N: usize = 8;
 const L: usize = 4;

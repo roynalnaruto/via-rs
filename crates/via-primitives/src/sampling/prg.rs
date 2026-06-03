@@ -82,7 +82,7 @@ impl Shake256Prg {
     /// # Example
     ///
     /// ```
-    /// use via_rs::sampling::Shake256Prg;
+    /// use via_primitives::sampling::Shake256Prg;
     /// let mut prg = Shake256Prg::new(b"my-seed");
     /// let mut bytes = [0u8; 32];
     /// prg.fill_bytes(&mut bytes);
@@ -171,7 +171,7 @@ impl Shake256Prg {
     /// # Example
     ///
     /// ```
-    /// use via_rs::sampling::Shake256Prg;
+    /// use via_primitives::sampling::Shake256Prg;
     /// let mut prg = Shake256Prg::new(b"example");
     /// for _ in 0..16 {
     ///     let v = prg.uniform_below(17);

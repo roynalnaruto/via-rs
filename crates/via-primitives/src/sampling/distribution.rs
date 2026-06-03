@@ -75,7 +75,7 @@ impl Distribution {
     /// # Example
     ///
     /// ```
-    /// use via_rs::sampling::{Distribution, Shake256Prg};
+    /// use via_primitives::sampling::{Distribution, Shake256Prg};
     ///
     /// let mut prg = Shake256Prg::new(b"dist-seed");
     /// let mut out = [0i64; 16];

@@ -14,17 +14,17 @@
 //!
 //! Regenerate the constants with `just regen-kats-layer5`.
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::conversion::{
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::conversion::{
     conv_step, embed_mlwe, encrypt_lwe, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8, rlwe_to_mlwe,
 };
-use via_rs::encryption::MLWECiphertext;
-use via_rs::encryption::rlwe::encode;
-use via_rs::encryption::types::SecretKey;
-use via_rs::sampling::distribution::Distribution;
-use via_rs::sampling::prg::Shake256Prg;
+use via_primitives::encryption::MLWECiphertext;
+use via_primitives::encryption::rlwe::encode;
+use via_primitives::encryption::types::SecretKey;
+use via_primitives::sampling::distribution::Distribution;
+use via_primitives::sampling::prg::Shake256Prg;
 
 mod data {
     include!("data/layer5_kats.rs");

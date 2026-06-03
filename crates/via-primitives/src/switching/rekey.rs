@@ -58,14 +58,14 @@ impl<const N: usize, R_DST: RingPoly<N>> RekeySource<N, R_DST> for i128 {
 /// would leak the key's Hamming weight through timing).
 ///
 /// ```rust
-/// use via_rs::algebra::ring::abstraction::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::{ConstModulus, PowerOfTwoModulus};
-/// use via_rs::encryption::types::SecretKey;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
-/// use via_rs::switching::rekey::rekey_secret_key;
+/// use via_primitives::algebra::ring::abstraction::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::{ConstModulus, PowerOfTwoModulus};
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+/// use via_primitives::switching::rekey::rekey_secret_key;
 ///
 /// // Sample a ternary key at q2 = 97, rekey to q3 = 2^16.
 /// type Q2 = Poly<8, ConstModulus<97>, Coefficient>;

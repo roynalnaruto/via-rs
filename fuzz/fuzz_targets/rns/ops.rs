@@ -9,9 +9,9 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::algebra::rns::element::RnsZq;
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_primitives::algebra::rns::element::RnsZq;
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
 
 const KNOWN_PAIRS: &[(u64, u64)] = &[
     (268369921, 536608769),

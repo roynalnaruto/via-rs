@@ -10,12 +10,12 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::conversion::{decrypt_lwe, encrypt_lwe};
-use via_rs::encryption::SecretKey;
-use via_rs::sampling::{Distribution, Shake256Prg};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::conversion::{decrypt_lwe, encrypt_lwe};
+use via_primitives::encryption::SecretKey;
+use via_primitives::sampling::{Distribution, Shake256Prg};
 
 const N: usize = 8;
 type R = Poly<N, DynModulus, Coefficient>;

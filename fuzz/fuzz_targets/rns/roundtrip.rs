@@ -10,8 +10,8 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
 
 /// Pairs of distinct, coprime u64s used to seed the dynamic basis arm.
 ///

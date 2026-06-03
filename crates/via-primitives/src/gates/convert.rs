@@ -37,13 +37,13 @@ use crate::switching::mod_switch::mod_switch_sym;
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::{RLevCiphertext, SecretKey};
-/// use via_rs::gates::gen_rlwe_to_rgsw_key;
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::{RLevCiphertext, SecretKey};
+/// use via_primitives::gates::gen_rlwe_to_rgsw_key;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
 ///
 /// type Q = Poly<4, PowerOfTwoModulus<10>, Coefficient>;
 /// let q = PowerOfTwoModulus::<10>;
@@ -100,14 +100,14 @@ pub fn gen_rlwe_to_rgsw_key<const N: usize, R: RingPoly<N>, const L: usize>(
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::ring::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::{RGSWCiphertext, RLWECiphertext, SecretKey};
-/// use via_rs::gates::{gen_rlwe_to_rgsw_key, rlwe_to_rgsw};
-/// use via_rs::sampling::distribution::Distribution;
-/// use via_rs::sampling::prg::Shake256Prg;
+/// use via_primitives::algebra::ring::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, SecretKey};
+/// use via_primitives::gates::{gen_rlwe_to_rgsw_key, rlwe_to_rgsw};
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
 ///
 /// type Q = Poly<4, PowerOfTwoModulus<17>, Coefficient>;
 /// let q = PowerOfTwoModulus::<17>;
@@ -157,12 +157,12 @@ pub fn rlwe_to_rgsw<const N: usize, R: RingPoly<N>, const L_OUT: usize, const L_
 /// # Example
 ///
 /// ```rust
-/// use via_rs::algebra::ring::RingPoly;
-/// use via_rs::algebra::ring::element::Poly;
-/// use via_rs::algebra::ring::form::Coefficient;
-/// use via_rs::algebra::zq::modulus::PowerOfTwoModulus;
-/// use via_rs::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext};
-/// use via_rs::gates::mod_switch_rgsw;
+/// use via_primitives::algebra::ring::RingPoly;
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::PowerOfTwoModulus;
+/// use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext};
+/// use via_primitives::gates::mod_switch_rgsw;
 ///
 /// type Src = Poly<4, PowerOfTwoModulus<10>, Coefficient>;
 /// type Dst = Poly<4, PowerOfTwoModulus<6>, Coefficient>;

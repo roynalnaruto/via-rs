@@ -155,10 +155,10 @@ pub trait RingPoly<const N: usize>:
     /// single-prime impl `debug_assert!`s this before narrowing.
     ///
     /// ```rust
-    /// use via_rs::algebra::ring::abstraction::RingPoly;
-    /// use via_rs::algebra::ring::element::Poly;
-    /// use via_rs::algebra::ring::form::Coefficient;
-    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    /// use via_primitives::algebra::ring::abstraction::RingPoly;
+    /// use via_primitives::algebra::ring::element::Poly;
+    /// use via_primitives::algebra::ring::form::Coefficient;
+    /// use via_primitives::algebra::zq::modulus::ConstModulus;
     ///
     /// type P = Poly<4, ConstModulus<17>, Coefficient>;
     /// let samples = [-8i128, 0, 3, 7];
@@ -223,10 +223,10 @@ pub trait RingPoly<const N: usize>:
     /// `k` — route encrypted-exponent rotation through §4.4 `CRot`.
     ///
     /// ```rust
-    /// use via_rs::algebra::ring::abstraction::RingPoly;
-    /// use via_rs::algebra::ring::element::Poly;
-    /// use via_rs::algebra::ring::form::Coefficient;
-    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    /// use via_primitives::algebra::ring::abstraction::RingPoly;
+    /// use via_primitives::algebra::ring::element::Poly;
+    /// use via_primitives::algebra::ring::form::Coefficient;
+    /// use via_primitives::algebra::zq::modulus::ConstModulus;
     ///
     /// // In R_{4, 17}: X * (1 + 2X + 3X^2 + 4X^3) = -4 + X + 2X^2 + 3X^3.
     /// // The top coefficient wraps negacyclically: 4*X^4 = -4 = 13 mod 17.
@@ -266,10 +266,10 @@ pub trait RingPoly<const N: usize>:
     /// - **Runtime**: `slot >= N_LARGE / N`.
     ///
     /// ```rust
-    /// use via_rs::algebra::ring::abstraction::RingPoly;
-    /// use via_rs::algebra::ring::element::Poly;
-    /// use via_rs::algebra::ring::form::Coefficient;
-    /// use via_rs::algebra::zq::modulus::ConstModulus;
+    /// use via_primitives::algebra::ring::abstraction::RingPoly;
+    /// use via_primitives::algebra::ring::element::Poly;
+    /// use via_primitives::algebra::ring::form::Coefficient;
+    /// use via_primitives::algebra::zq::modulus::ConstModulus;
     ///
     /// // Embed R_{2,17} into R_{4,17} at slot 0: coeff i -> position d*i = 2*i.
     /// type P = Poly<2, ConstModulus<17>, Coefficient>;
