@@ -1,5 +1,11 @@
 //! Ergonomic type aliases for the paper parameter sets.
 //!
+//! Formerly `encryption::aliases`; relocated to the crate root so that
+//! aliases referencing Layer-3 types (e.g.
+//! [`crate::switching::ring_switch::RingSwitchKey`]) do not require an
+//! upward-layer import from within the Layer-2 `encryption` module tree.
+//! Still re-exported as `encryption::aliases` for backward compatibility.
+//!
 //! Layer-2 ciphertext types are generic over `R: RingPoly<N>`. At a call
 //! site like `RLWECiphertext::<2048, Poly<2048, ViaCQ2, Coefficient>>` the
 //! polynomial type is verbose and the `Coefficient` form-marker noise

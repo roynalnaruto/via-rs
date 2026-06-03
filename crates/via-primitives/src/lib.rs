@@ -1,4 +1,4 @@
-//! `via-rs` — a pure-no-std Rust implementation of the VIA, VIA-C, and VIA-B
+//! `via-primitives` — a pure-no-std Rust implementation of the VIA, VIA-C, and VIA-B
 //! single-server PIR schemes (Liu, Wang, Zhang, 2025).
 //!
 //! Each layer of the paper's primitive stack lives in its own top-level module:
@@ -20,8 +20,11 @@
 //! - [`conversion`] — Layer 5: the MLWE LWE→RLWE conversion cascade (§5.1–§5.5)
 //!   — MLWE embedding, single Conv₂ step, the full $\log_2 n$-deep cascade,
 //!   its key generation, and RLWE→MLWE coefficient extraction (`Extr_d`).
+//! - [`params`] — Ergonomic type aliases for the paper parameter sets (formerly
+//!   `encryption::aliases`). Re-exported from `encryption` for backward compat.
 //!
-//! Further layers (protocol composites) will land as further top-level modules.
+//! Further layers (protocol composites) live in `via-protocol`, `via-client`,
+//! and `via-server`.
 //!
 //! See `.docs/primitives.md` for the layered primitive overview and
 //! `.docs/via.pdf` for the original paper.
@@ -34,5 +37,6 @@ pub mod algebra;
 pub mod conversion;
 pub mod encryption;
 pub mod gates;
+pub mod params;
 pub mod sampling;
 pub mod switching;

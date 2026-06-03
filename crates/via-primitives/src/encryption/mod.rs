@@ -86,7 +86,6 @@
 //! let _switched = ksk.key_switch(&ct, 2);
 //! ```
 
-pub mod aliases;
 pub mod gadget;
 pub mod keyswitch;
 pub mod mlwe;
@@ -104,3 +103,8 @@ pub use gadget::{
 pub use mlwe::MLWECiphertext;
 pub use rlwe::{decode, encode};
 pub use types::{ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
+
+/// Backward-compatible re-export: `encryption::aliases` still resolves to the
+/// top-level [`crate::params`] module (relocated there so the paper-parameter
+/// aliases can name Layer-3 types without an upward-layer import).
+pub use crate::params as aliases;

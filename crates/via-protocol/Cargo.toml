@@ -1,0 +1,21 @@
+[package]
+name        = "via-protocol"
+version     = "0.1.0"
+edition     = "2024"
+description = "Wire types, PIRParams presets, and ViaError for the VIA PIR family."
+
+[features]
+default = ["alloc"]
+alloc   = []
+# Variant gates — mirror primitives so callers need only enable one crate's feature.
+via   = ["via-primitives/via"]
+via-c = ["via-primitives/via-c"]
+via-b = ["via-primitives/via-b", "via-c"]
+
+[dependencies]
+via-primitives = { workspace = true }
+tracing        = { workspace = true }
+zeroize        = { workspace = true }
+
+[lints]
+workspace = true
