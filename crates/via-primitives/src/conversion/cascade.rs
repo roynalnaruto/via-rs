@@ -204,6 +204,30 @@ lwe_to_rlwe_cascade! {
     ],
 }
 
+// The VIA-C toy parameter set (`ViaCToyParams<64, 16, …>`) runs query
+// compression at n₁ = 64 on the single-prime backend, so the toy end-to-end
+// path uses this degree-64 cascade. Six steps (`log₂ 64`); the n₆₄ key is
+// small (~150 KB at L = 12), so it stays by-value / no-alloc — unlike the
+// degree-2048 paper instantiation, which needs the boxed builder.
+lwe_to_rlwe_cascade! {
+    n = 64,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    key = LweToRlweKeyN64,
+    gen = gen_lwe_to_rlwe_key_n64,
+    cast = lwe_to_rlwe_n64,
+    steps = [
+        (keys_2, 64, 1, 32, 2),
+        (keys_4, 32, 2, 16, 4),
+        (keys_8, 16, 4, 8, 8),
+        (keys_16, 8, 8, 4, 16),
+        (keys_32, 4, 16, 2, 32),
+        (keys_64, 2, 32, 1, 64),
+    ],
+}
+
 // --- Toy RNS instantiation (paper query compression lives at q₁ RNS) ------
 
 lwe_to_rlwe_cascade! {
@@ -239,6 +263,14 @@ mod tests {
     type R4 = Poly<4, ConstModulus<65537>, Coefficient>;
     type P8 = Poly<8, ConstModulus<16>, Coefficient>;
     type P4 = Poly<4, ConstModulus<16>, Coefficient>;
+
+    // n = 64 toy cascade. A ~2^34 modulus (the paper ViaCQ2 prime) gives ample
+    // noise budget for the 6-step cascade (vs 3 steps at n8); base 8, depth 12
+    // (8^12 = 2^36 ≥ 2^34 covers the modulus for gadget representability).
+    type R64 = Poly<64, ConstModulus<17175674881>, Coefficient>;
+    type P64 = Poly<64, ConstModulus<16>, Coefficient>;
+    const BASE_64: u64 = 8;
+    const L_64: usize = 12;
 
     #[test]
     fn cascade_key_count_n8() {
@@ -298,6 +330,55 @@ mod tests {
             let rlwe = lwe_to_rlwe_n4::<_, L>(&lwe, &key, BASE);
             let recovered: P4 = sk.decrypt(&rlwe, p);
             assert_eq!(recovered.coeff(0).to_u64(), message, "n4 message {message}");
+        }
+    }
+
+    #[test]
+    fn cascade_key_count_n64() {
+        let q = ConstModulus::<17175674881>;
+        let mut prg = Shake256Prg::new(b"key-count-64");
+        let sk = SecretKey::<64, R64>::keygen(q, Distribution::Ternary, &mut prg);
+        let key = gen_lwe_to_rlwe_key_n64::<_, L_64>(&sk, BASE_64, Distribution::Ternary, &mut prg);
+        // 64 + 32 + 16 + 8 + 4 + 2 = 126 = 2·(64−1).
+        assert_eq!(
+            key.keys_2.len()
+                + key.keys_4.len()
+                + key.keys_8.len()
+                + key.keys_16.len()
+                + key.keys_32.len()
+                + key.keys_64.len(),
+            126,
+        );
+        assert_eq!(key.keys_2.len(), 64);
+        assert_eq!(key.keys_64.len(), 2);
+    }
+
+    /// The degree-64 toy end-to-end cascade: every `p = 16` message round-trips
+    /// to coefficient 0 with no noise leak (all other coefficients exactly 0).
+    /// Key is generated once (degree-64 key is ~150 KB, by value / no-alloc).
+    #[test]
+    fn cascade_full_roundtrip_n64() {
+        let q = ConstModulus::<17175674881>;
+        let p = ConstModulus::<16>;
+        let mut prg = Shake256Prg::new(b"cascade-roundtrip-64");
+        let sk = SecretKey::<64, R64>::keygen(q, Distribution::Ternary, &mut prg);
+        let key = gen_lwe_to_rlwe_key_n64::<_, L_64>(&sk, BASE_64, Distribution::Ternary, &mut prg);
+        for message in 0..16u64 {
+            let lwe = encrypt_lwe(&sk, message, 16, Distribution::Ternary, &mut prg);
+            let rlwe = lwe_to_rlwe_n64::<_, L_64>(&lwe, &key, BASE_64);
+            let recovered: P64 = sk.decrypt(&rlwe, p);
+            assert_eq!(
+                recovered.coeff(0).to_u64(),
+                message,
+                "n64 message {message}"
+            );
+            for i in 1..64 {
+                assert_eq!(
+                    recovered.coeff(i).to_u64(),
+                    0,
+                    "n64 msg {message} coeff {i}"
+                );
+            }
         }
     }
 

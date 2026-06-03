@@ -59,13 +59,16 @@ pub mod cascade;
 pub mod extract;
 
 pub use conv::{ConvDims, conv_step, gen_conv_step_key};
-pub use mlwe_ops::{decrypt_lwe, embed_mlwe, encrypt_lwe, mlwe_to_rlwe, rlwe_to_mlwe};
+pub use mlwe_ops::{
+    decrypt_lwe, embed_mlwe, encrypt_lwe, encrypt_lwe_raw, mlwe_to_rlwe, rlwe_to_mlwe,
+};
 // The `lwe_to_rlwe_cascade!` macro is `#[macro_export]`ed at the crate root; the
-// toy-parameter instantiations it produces are re-exported here.
+// toy-parameter instantiations it produces are re-exported here. The degree-64
+// instantiation is the VIA-C toy end-to-end query-compression cascade.
 pub use cascade::{
-    LweToRlweKeyN4, LweToRlweKeyN8, LweToRlweKeyRnsN8, gen_lwe_to_rlwe_key_n4,
-    gen_lwe_to_rlwe_key_n8, gen_lwe_to_rlwe_key_rns_n8, lwe_to_rlwe_n4, lwe_to_rlwe_n8,
-    lwe_to_rlwe_rns_n8,
+    LweToRlweKeyN4, LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN8, gen_lwe_to_rlwe_key_n4,
+    gen_lwe_to_rlwe_key_n8, gen_lwe_to_rlwe_key_n64, gen_lwe_to_rlwe_key_rns_n8, lwe_to_rlwe_n4,
+    lwe_to_rlwe_n8, lwe_to_rlwe_n64, lwe_to_rlwe_rns_n8,
 };
 pub use extract::{ExtrDims, extr};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally

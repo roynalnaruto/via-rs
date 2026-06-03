@@ -175,6 +175,76 @@ pub fn encrypt_lwe<const NLWE: usize, R: LweDot<NLWE>>(
     MLWECiphertext::new(masks, body)
 }
 
+/// Δ-**free** sibling of [`encrypt_lwe`]: encrypt a raw `u128` value directly
+/// into the body, with **no** $\Delta = \lceil q/p \rceil$ encoding.
+///
+/// VIA-C query compression encrypts each gadget level $b \cdot g_i$ (with
+/// $g_i = \lceil q_1 / B^i \rceil$ the gadget value and $b$ the query bit) as a
+/// raw LWE sample; the gadget scaling already places the value where the
+/// downstream `rlwe_to_rgsw` expects it, so no plaintext $\Delta$ is applied.
+/// The message is `u128` because at the paper $q_1 \approx 2^{75}$ the
+/// gadget-scaled $b \cdot g_i$ exceeds `u64` for small $i$.
+///
+/// `body = \sum_i a_i s_i + e + (\text{message} \bmod q)`; the `n` mask scalars
+/// are returned as the `(n, 1)`-MLWE masks.
+///
+/// # PRG consumption order
+///
+/// Identical to [`encrypt_lwe`]: `n` uniform mask scalars first (one
+/// [`RingPoly::random_uniform`] over the degree-$n$ ring), then **one** error
+/// sample. This order is the cross-language parity contract (Part-5 QueryComp
+/// KAT).
+///
+/// # Constant-time
+///
+/// The secret-dependent $\sum_i a_i s_i$ is the constant-time [`LweDot::lwe_dot`]
+/// kernel, as in [`encrypt_lwe`].
+///
+/// ```rust
+/// use via_primitives::algebra::ring::element::Poly;
+/// use via_primitives::algebra::ring::form::Coefficient;
+/// use via_primitives::algebra::zq::modulus::ConstModulus;
+/// use via_primitives::conversion::{decrypt_lwe, encrypt_lwe_raw};
+/// use via_primitives::encryption::types::SecretKey;
+/// use via_primitives::sampling::distribution::Distribution;
+/// use via_primitives::sampling::prg::Shake256Prg;
+///
+/// type R = Poly<8, ConstModulus<65537>, Coefficient>;
+/// let q = ConstModulus::<65537>;
+/// let mut prg = Shake256Prg::new(b"doc-encrypt-lwe-raw");
+/// let sk = SecretKey::<8, R>::keygen(q, Distribution::Ternary, &mut prg);
+/// // A raw LWE of the Δ-scaled value Δ·5 (Δ = ⌈q/p⌉, p = 16) decrypts to 5 —
+/// // i.e. `encrypt_lwe_raw(sk, Δ·m, …)` ≡ `encrypt_lwe(sk, m, p, …)`.
+/// let delta = 65537u128.div_ceil(16);
+/// let ct = encrypt_lwe_raw(&sk, delta * 5, Distribution::Ternary, &mut prg);
+/// assert_eq!(ct.masks.len(), 8); // (n, 1)-MLWE: n masks
+/// assert_eq!(decrypt_lwe(&ct, &sk, 16), 5);
+/// ```
+pub fn encrypt_lwe_raw<const NLWE: usize, R: LweDot<NLWE>>(
+    sk: &SecretKey<NLWE, R>,
+    message: u128,
+    error_dist: Distribution,
+    prg: &mut Shake256Prg,
+) -> MLWECiphertext<NLWE, 1, R::Projected<1>> {
+    let q_mod = RingPoly::modulus(sk.poly());
+    // 1. n uniform mask scalars (same draw as `encrypt_lwe`).
+    let masks_poly = R::random_uniform(q_mod, prg);
+    // 2. dot = Σ aᵢ·sᵢ mod q (degree 1), constant-time kernel.
+    let dot = R::lwe_dot(&masks_poly, sk.poly());
+    // 3. one error sample (same draw as `encrypt_lwe`).
+    let mut error_sample = [0i64; 1];
+    error_dist.sample_into(prg, &mut error_sample);
+    let error = <R::Projected<1> as RingPoly<1>>::from_centered_i64s(q_mod, &error_sample);
+    // 4. raw message mod q — NO Δ encoding (the gadget scaling is already baked in).
+    let q_val = <R as RingPoly<NLWE>>::modulus_value(q_mod);
+    let m_val = message % q_val;
+    let encoded = <R::Projected<1> as RingPoly<1>>::from_u128_coeffs(q_mod, &[m_val]);
+    // 5. body = dot + e + m ; masks = the n coefficients of `masks_poly`.
+    let body = dot + error + encoded;
+    let masks = core::array::from_fn(|i| masks_poly.project_at::<1>(i));
+    MLWECiphertext::new(masks, body)
+}
+
 /// §5.1 — decrypt an $(n, 1)$-MLWE to a scalar in $[0, p)$:
 /// $\mathrm{decode}\bigl(B - \sum_i a_i \cdot s_i\bigr)$. The decode rounding
 /// mirrors [`crate::encryption::decode`] exactly (centre, then
@@ -318,6 +388,87 @@ mod tests {
             let ct = encrypt_lwe(&sk, message, 2, Distribution::Ternary, &mut prg);
             let _: PolyRns<1, ConstRnsBasis<5, 11>, Coefficient> = ct.body;
             assert_eq!(decrypt_lwe(&ct, &sk, 2), message, "rns message {message}");
+        }
+    }
+
+    // -- §5.1 encrypt_lwe_raw (Δ-free) ------------------------------------
+
+    /// `encrypt_lwe_raw(sk, Δ·m mod q, …)` must produce a bit-identical
+    /// ciphertext to `encrypt_lwe(sk, m, p, …)` under the same PRG seed — this
+    /// pins both correctness (the only difference is the missing Δ encoding) and
+    /// the shared PRG consumption order (n masks, then error).
+    #[test]
+    fn encrypt_lwe_raw_equals_delta_scaled_encrypt_lwe() {
+        let q = ConstModulus::<65537>;
+        let q_val = 65537u128;
+        let delta = q_val.div_ceil(16);
+        for m in 0..16u64 {
+            let raw = (delta * u128::from(m)) % q_val;
+
+            let mut prg_a = Shake256Prg::new(b"lwe-raw-eq");
+            let sk_a = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg_a);
+            let ct_scaled = encrypt_lwe(&sk_a, m, 16, Distribution::Ternary, &mut prg_a);
+
+            let mut prg_b = Shake256Prg::new(b"lwe-raw-eq");
+            let sk_b = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg_b);
+            let ct_raw = encrypt_lwe_raw(&sk_b, raw, Distribution::Ternary, &mut prg_b);
+
+            for i in 0..8 {
+                assert_eq!(
+                    ct_scaled.masks[i].coeff(0).to_u64(),
+                    ct_raw.masks[i].coeff(0).to_u64(),
+                    "m {m}, mask {i}"
+                );
+            }
+            assert_eq!(
+                ct_scaled.body.coeff(0).to_u64(),
+                ct_raw.body.coeff(0).to_u64(),
+                "m {m}, body"
+            );
+        }
+    }
+
+    /// Same seed ⇒ identical ciphertext (PRG-order determinism).
+    #[test]
+    fn encrypt_lwe_raw_deterministic() {
+        let q = ConstModulus::<65537>;
+        let mk = || {
+            let mut prg = Shake256Prg::new(b"lwe-raw-det");
+            let sk = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg);
+            encrypt_lwe_raw(&sk, 12345, Distribution::Ternary, &mut prg)
+        };
+        let a = mk();
+        let b = mk();
+        for i in 0..8 {
+            assert_eq!(a.masks[i].coeff(0).to_u64(), b.masks[i].coeff(0).to_u64());
+        }
+        assert_eq!(a.body.coeff(0).to_u64(), b.body.coeff(0).to_u64());
+    }
+
+    /// Paper-class: at the composite $q_1 \approx 2^{75}$ the Δ-scaled value
+    /// $\Delta \cdot m$ exceeds `u64`, so this exercises the `u128` message path
+    /// (the whole reason `encrypt_lwe_raw` takes `u128`). `decrypt_lwe` recovers
+    /// `m` for all `p = 16` messages.
+    #[test]
+    fn encrypt_lwe_raw_u128_message_at_q1() {
+        type RnsQ1 = PolyRns<8, ConstRnsBasis<137438822401, 274810798081>, Coefficient>;
+        let basis = ConstRnsBasis::<137438822401, 274810798081>;
+        let q1: u128 = 137438822401u128 * 274810798081u128;
+        let delta = q1.div_ceil(16);
+        assert!(
+            delta > u128::from(u64::MAX),
+            "Δ must exceed u64 to genuinely exercise the u128 path"
+        );
+        for message in 0..16u64 {
+            let mut prg = Shake256Prg::new(b"lwe-raw-q1");
+            let sk = SecretKey::<8, RnsQ1>::keygen(basis, Distribution::Ternary, &mut prg);
+            let raw = delta * u128::from(message);
+            let ct = encrypt_lwe_raw(&sk, raw, Distribution::Ternary, &mut prg);
+            assert_eq!(
+                decrypt_lwe(&ct, &sk, 16),
+                message,
+                "q1 raw message {message}"
+            );
         }
     }
 }
