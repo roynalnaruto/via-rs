@@ -15,6 +15,7 @@ extern crate alloc;
 mod error;
 mod params;
 mod presets;
+mod wire;
 
 // Re-export primitives so protocol consumers only need one dep declaration.
 pub use via_primitives as primitives;
@@ -24,6 +25,10 @@ pub use params::{KeyDist, PIRParams};
 pub use presets::{
     REALISTIC_PARAMS, TOY_PARAMS, ViaCPublicParams, ViaCRealisticParams, ViaCToyParams,
     pir_params_matches_preset,
+};
+pub use wire::{
+    CompressedAnswer, CompressedQuery, DecompressedQuery, PrgCompressed, PublicParams,
+    QueryCompressionKey, Uncompressed, WireFormat,
 };
 
 #[cfg(test)]
