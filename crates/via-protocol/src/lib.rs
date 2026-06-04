@@ -8,8 +8,23 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![warn(missing_docs)]
 
+extern crate alloc;
+
+// Internal modules. The public API is re-exported at the crate root below —
+// consumers import `via_protocol::{…}`, not submodule paths.
+mod error;
+mod params;
+mod presets;
+
 // Re-export primitives so protocol consumers only need one dep declaration.
 pub use via_primitives as primitives;
+
+pub use error::{Result, ViaError};
+pub use params::{KeyDist, PIRParams};
+pub use presets::{
+    REALISTIC_PARAMS, TOY_PARAMS, ViaCPublicParams, ViaCRealisticParams, ViaCToyParams,
+    pir_params_matches_preset,
+};
 
 #[cfg(test)]
 mod smoke {
