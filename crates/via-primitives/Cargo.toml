@@ -26,4 +26,6 @@ subtle    = { workspace = true }
 zeroize   = { workspace = true }
 
 [package.metadata.docs.rs]
+# Document the full API, including the `alloc`-gated paper-scale cascade path.
+features = ["alloc"]
 rustdoc-args = ["--html-in-header", "katex-header.html"]

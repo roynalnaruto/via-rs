@@ -63,11 +63,14 @@ jobs:
       # the build on any broken intra-doc link. Scoped to via-primitives so the
       # KaTeX rustdocflags (crates/via-primitives/.cargo/config.toml) apply;
       # protocol/client/server docs are added in a later layer.
+      # `--features alloc` documents the paper-scale `…_boxed` builders + n2048
+      # path (otherwise the by-value gen's intra-doc link to its `…_boxed`
+      # sibling, which is alloc-gated, is unresolved and fails the deny lint).
       - name: Build rustdoc (via-primitives)
-        run: cargo doc --no-deps --document-private-items --package via-primitives
+        run: cargo doc --no-deps --document-private-items --package via-primitives --features alloc
 
       - name: Doctests (via-primitives)
-        run: cargo test --doc --package via-primitives
+        run: cargo test --doc --package via-primitives --features alloc
 
   # Fuzz smoke runs live in their own workflow — see `.github/workflows/fuzz.yml`.
 
