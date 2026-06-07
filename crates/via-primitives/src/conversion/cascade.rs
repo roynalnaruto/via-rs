@@ -153,11 +153,13 @@ macro_rules! lwe_to_rlwe_cascade {
         #[cfg(feature = "alloc")]
         #[doc = concat!(
             "§5.4 — heap-build the degree-", stringify!($n),
-            " cascade key field-by-field into an uninitialised `Box`, so the whole ",
-            "(potentially ~24.75 MB at n=2048) key **never transits the stack** — peak ",
-            "stack stays at one step key (~2.36 MB max). The required constructor for ",
-            "large keys. Draws PRG bytes in the **same order** as [`", stringify!($gen),
-            "`] (ascending output-degree), so the two produce identical keys."
+            " cascade key **one step key at a time** into an uninitialised `Box`, so the ",
+            "whole (potentially ~24.75 MB at n=2048) key **never transits the stack** — peak ",
+            "stack stays at a single `RLev` (the per-field temporaries reuse one slot and sum ",
+            "to only ~2.36 MB across all degrees). The required constructor for large keys: a ",
+            "whole-array-per-field write would accumulate to the full key size (RLev `Drop` glue ",
+            "defeats slot reuse) and overflow the stack. Draws PRG bytes in the **same order** as ",
+            "[`", stringify!($gen), "`], so the two produce identical keys."
         )]
         // The metavariables used inside the `unsafe` block below are the field
         // ident, step literals, ring/modulus types, and this fn's own params —
@@ -562,6 +564,24 @@ mod tests {
                 "body coeff {i}"
             );
         }
+    }
+
+    /// Guards the paper-scale key layout (CCD Hotspot 2): 11 fields, each
+    /// `RANK_IN · N_OUT = 2·n1 = 4096` RLev-bytes-worth at depth 18 over a
+    /// 2-prime RNS. Each step key is `576 · 4096` bytes (`L·2limbs·2(mask+body)·8
+    /// · (RANK_IN·N_OUT)`), so the whole key is `11 · 576 · 4096` =
+    /// 25,952,256 B ≈ 24.75 MB. Instant (pure type layout); catches accidental
+    /// field/degree/depth drift in the n2048 instantiation.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn n2048_key_layout_is_24_75_mib() {
+        use crate::algebra::rns::basis::paper::ViaCQ1Rns;
+        let bytes = core::mem::size_of::<super::LweToRlweKeyRnsN2048<ViaCQ1Rns, 18>>();
+        assert_eq!(
+            bytes,
+            11 * 576 * 4096,
+            "n2048 key layout drifted from ~24.75 MB"
+        );
     }
 }
 

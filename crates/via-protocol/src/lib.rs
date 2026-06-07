@@ -42,7 +42,9 @@ mod smoke {
     //! paths (and every field type, e.g. `RLevCiphertext`) across the crate
     //! boundary — catching any `pub(crate)` that should have been `pub`.
     use via_primitives::algebra::zq::modulus::ConstModulus;
-    use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8};
+    use via_primitives::conversion::{
+        LweToRlweKeyN8, LweToRlweKeyN64, gen_lwe_to_rlwe_key_n8, gen_lwe_to_rlwe_key_n64,
+    };
 
     #[test]
     fn cascade_key_type_importable_from_dependent_crate() {
@@ -52,5 +54,11 @@ mod smoke {
         // The generator fn must also be nameable here (not necessarily callable
         // without a full SecretKey).
         let _gen = gen_lwe_to_rlwe_key_n8::<ConstModulus<65537>, 2>;
+
+        // Also name the degree-64 toy cascade — the `K` the VIA-C toy path uses
+        // (the n2048 paper type is `alloc`-gated and absent in this isolated
+        // `via-protocol` test build).
+        let _ = core::mem::size_of::<LweToRlweKeyN64<ConstModulus<65537>, 20>>();
+        let _gen64 = gen_lwe_to_rlwe_key_n64::<ConstModulus<65537>, 20>;
     }
 }
