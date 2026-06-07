@@ -6,6 +6,11 @@ description  = "Pure no_std arithmetic + cryptographic primitives for the VIA PI
 license      = "MIT OR Apache-2.0"
 
 [features]
+# Optional `alloc` support. Default-OFF so the crate stays no-alloc for bare-metal
+# (`thumbv7em`). Gates only the heap-using paper-scale paths — the LWE→RLWE
+# `…_boxed` cascade-key builders and the full n=2048 instantiation — whose key
+# (~24.75 MB) can only live on the heap. Downstream alloc crates enable it.
+alloc = []
 # Variant feature gates — declared here so downstream crates can enable them.
 # No in-fn `cfg` gating in primitives: the gate is at re-export boundary only.
 # via-b implies via-c (via-c implies nothing extra in primitives itself).

@@ -144,17 +144,54 @@ where
             "gen_conv_step_key: NLWE must equal RANK_IN · N_IN",
         );
     }
-    let m = RANK_IN / 2;
     core::array::from_fn(|key_idx| {
-        let group = key_idx / m;
-        let j = key_idx % m;
-        let source = sk
-            .poly()
-            .project_at::<N_IN>(m * group + j)
-            .embed_at::<N_OUT>(0);
-        let target = SecretKey::from_poly(sk.poly().project_at::<N_OUT>(j));
-        target.encrypt_rlev::<L>(&source, base, error_dist, prg)
+        gen_conv_step_key_element::<NLWE, N_IN, N_OUT, RANK_IN, R, L>(
+            sk, key_idx, base, error_dist, prg,
+        )
     })
+}
+
+/// §5.4 (per-step, per-key) — generate **one** RLev step key (index `key_idx` in
+/// `0..RANK_IN`) for a Conv₂ step. This is the per-element body of
+/// [`gen_conv_step_key`]; calling it for `key_idx = 0, 1, …, RANK_IN-1` in order
+/// reproduces that function's PRG draw order exactly.
+///
+/// Exposed so a heap builder can write each step key **directly into its
+/// destination slot** (one `RLev` at a time) instead of materialising the whole
+/// `[RLev; RANK_IN]` array on the stack — the difference between a peak stack of
+/// one `RLev` and one of the entire (~24.75 MB at n=2048) cascade key.
+///
+/// # PRG consumption order
+///
+/// One [`SecretKey::encrypt_rlev`] (drawing `[mask, error]` per gadget level).
+#[allow(non_camel_case_types)]
+pub fn gen_conv_step_key_element<
+    const NLWE: usize,
+    const N_IN: usize,
+    const N_OUT: usize,
+    const RANK_IN: usize,
+    R: RingPoly<NLWE>,
+    const L: usize,
+>(
+    sk: &SecretKey<NLWE, R>,
+    key_idx: usize,
+    base: u64,
+    error_dist: Distribution,
+    prg: &mut Shake256Prg,
+) -> RLevCiphertext<N_OUT, R::Projected<N_OUT>, L>
+where
+    R::Projected<N_IN>: RingPoly<N_IN, Embedded<N_OUT> = R::Projected<N_OUT>>,
+    R::Projected<N_OUT>: RingPoly<N_OUT>,
+{
+    let m = RANK_IN / 2;
+    let group = key_idx / m;
+    let j = key_idx % m;
+    let source = sk
+        .poly()
+        .project_at::<N_IN>(m * group + j)
+        .embed_at::<N_OUT>(0);
+    let target = SecretKey::from_poly(sk.poly().project_at::<N_OUT>(j));
+    target.encrypt_rlev::<L>(&source, base, error_dist, prg)
 }
 
 #[cfg(test)]

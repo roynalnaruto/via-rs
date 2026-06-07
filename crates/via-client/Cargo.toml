@@ -6,7 +6,7 @@ description = "Client-side keygen, query compression, and recovery for the VIA P
 
 [features]
 default = ["alloc"]
-alloc   = ["via-protocol/alloc"]
+alloc   = ["via-protocol/alloc", "via-primitives/alloc"]
 via   = ["via-protocol/via"]
 via-c = ["via-protocol/via-c"]
 via-b = ["via-protocol/via-b"]

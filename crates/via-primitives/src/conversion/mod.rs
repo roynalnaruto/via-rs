@@ -58,7 +58,7 @@ pub mod cascade;
 // §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
 pub mod extract;
 
-pub use conv::{ConvDims, conv_step, gen_conv_step_key};
+pub use conv::{ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element};
 pub use mlwe_ops::{
     decrypt_lwe, embed_mlwe, encrypt_lwe, encrypt_lwe_raw, mlwe_to_rlwe, rlwe_to_mlwe,
 };
@@ -69,6 +69,15 @@ pub use cascade::{
     LweToRlweKeyN4, LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN8, gen_lwe_to_rlwe_key_n4,
     gen_lwe_to_rlwe_key_n8, gen_lwe_to_rlwe_key_n64, gen_lwe_to_rlwe_key_rns_n8, lwe_to_rlwe_n4,
     lwe_to_rlwe_n8, lwe_to_rlwe_n64, lwe_to_rlwe_rns_n8,
+};
+// Paper-scale n₁ = 2048 cascade (`alloc`-only — its ~24.75 MB key is heap-built).
+// The supported constructor is the heap builder `gen_lwe_to_rlwe_key_rns_n2048_boxed`;
+// the by-value generator is intentionally NOT re-exported (it would overflow the
+// stack). `LweToRlweKeyRnsN2048` is the `K` in `QueryCompressionKey<K>`; the server
+// consumes `lwe_to_rlwe_rns_n2048`.
+#[cfg(feature = "alloc")]
+pub use cascade::{
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
 };
 pub use extract::{ExtrDims, extr};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally

@@ -71,6 +71,7 @@ macro_rules! lwe_to_rlwe_cascade {
         levels = $lev:ident,
         key = $key:ident,
         gen = $gen:ident,
+        gen_boxed = $genb:ident,
         cast = $cast:ident,
         steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
     ) => {
@@ -122,9 +123,12 @@ macro_rules! lwe_to_rlwe_cascade {
 
         #[doc = concat!(
             "§5.4 — generate the degree-", stringify!($n),
-            " cascade key from the single secret key `sk`. Calls ",
+            " cascade key **by value** from the single secret key `sk`. Calls ",
             "[`gen_conv_step_key`](crate::conversion::gen_conv_step_key) once per step, in ",
-            "ascending output-degree order — the cross-language PRG-order contract."
+            "ascending output-degree order — the cross-language PRG-order contract.\n\n",
+            "The whole key is returned on the stack; for large degrees whose key exceeds a ",
+            "thread stack (e.g. n=2048, ~24.75 MB) use [`", stringify!($genb),
+            "`] (the heap builder) instead."
         )]
         pub fn $gen<$modp: $modbound, const $lev: usize>(
             sk: &$crate::encryption::SecretKey<
@@ -143,6 +147,56 @@ macro_rules! lwe_to_rlwe_cascade {
                         $lev,
                     >(sk, base, error_dist, prg),
                 )+
+            }
+        }
+
+        #[cfg(feature = "alloc")]
+        #[doc = concat!(
+            "§5.4 — heap-build the degree-", stringify!($n),
+            " cascade key field-by-field into an uninitialised `Box`, so the whole ",
+            "(potentially ~24.75 MB at n=2048) key **never transits the stack** — peak ",
+            "stack stays at one step key (~2.36 MB max). The required constructor for ",
+            "large keys. Draws PRG bytes in the **same order** as [`", stringify!($gen),
+            "`] (ascending output-degree), so the two produce identical keys."
+        )]
+        // The metavariables used inside the `unsafe` block below are the field
+        // ident, step literals, ring/modulus types, and this fn's own params —
+        // none are caller-injected expressions, so the macro cannot smuggle
+        // unsafe code into a caller.
+        #[allow(clippy::macro_metavars_in_unsafe)]
+        pub fn $genb<$modp: $modbound, const $lev: usize>(
+            sk: &$crate::encryption::SecretKey<
+                $n,
+                $ring<$n, $modp, $crate::algebra::ring::form::Coefficient>,
+            >,
+            base: u64,
+            error_dist: $crate::sampling::distribution::Distribution,
+            prg: &mut $crate::sampling::prg::Shake256Prg,
+        ) -> ::alloc::boxed::Box<$key<$modp, $lev>> {
+            let mut boxed = ::alloc::boxed::Box::<$key<$modp, $lev>>::new_uninit();
+            let ptr = boxed.as_mut_ptr();
+            // SAFETY: every element of every field is written exactly once, in
+            // `(field, key_idx)` declaration order, so the whole `*ptr` is
+            // initialised before `assume_init`. We write **one `RLev` at a time**
+            // straight into its heap slot via `addr_of_mut!`, never forming a
+            // reference to uninitialised memory. Because each loop reuses its
+            // single `rlev` stack slot, peak stack stays at one step key (the
+            // per-field temporaries sum to ~2.36 MB across all degrees) instead
+            // of the whole ~24.75 MB key — a whole-array write per field does NOT
+            // share stack slots (the `RLev` `Drop` glue defeats reuse), so it
+            // would accumulate to the full key size and overflow the stack.
+            unsafe {
+                $(
+                    for key_idx in 0..$rin {
+                        let rlev = $crate::conversion::gen_conv_step_key_element::<
+                            $n, $nin, $nout, $rin,
+                            $ring<$n, $modp, $crate::algebra::ring::form::Coefficient>,
+                            $lev,
+                        >(sk, key_idx, base, error_dist, prg);
+                        ::core::ptr::addr_of_mut!((*ptr).$field[key_idx]).write(rlev);
+                    }
+                )+
+                boxed.assume_init()
             }
         }
 
@@ -181,6 +235,7 @@ lwe_to_rlwe_cascade! {
     levels = L,
     key = LweToRlweKeyN8,
     gen = gen_lwe_to_rlwe_key_n8,
+    gen_boxed = gen_lwe_to_rlwe_key_n8_boxed,
     cast = lwe_to_rlwe_n8,
     steps = [
         (keys_2, 8, 1, 4, 2),
@@ -197,6 +252,7 @@ lwe_to_rlwe_cascade! {
     levels = L,
     key = LweToRlweKeyN4,
     gen = gen_lwe_to_rlwe_key_n4,
+    gen_boxed = gen_lwe_to_rlwe_key_n4_boxed,
     cast = lwe_to_rlwe_n4,
     steps = [
         (keys_2, 4, 1, 2, 2),
@@ -217,6 +273,7 @@ lwe_to_rlwe_cascade! {
     levels = L,
     key = LweToRlweKeyN64,
     gen = gen_lwe_to_rlwe_key_n64,
+    gen_boxed = gen_lwe_to_rlwe_key_n64_boxed,
     cast = lwe_to_rlwe_n64,
     steps = [
         (keys_2, 64, 1, 32, 2),
@@ -238,11 +295,46 @@ lwe_to_rlwe_cascade! {
     levels = L,
     key = LweToRlweKeyRnsN8,
     gen = gen_lwe_to_rlwe_key_rns_n8,
+    gen_boxed = gen_lwe_to_rlwe_key_rns_n8_boxed,
     cast = lwe_to_rlwe_rns_n8,
     steps = [
         (keys_2, 8, 1, 4, 2),
         (keys_4, 4, 2, 2, 4),
         (keys_8, 2, 4, 1, 8),
+    ],
+}
+
+// --- Paper-scale RNS instantiation (n₁ = 2048, depth 18) ------------------
+//
+// The VIA-C query-compression cascade key (`pp_qck`'s `ĉ_toRLWE` half). Its key
+// is ~24.75 MB, so it can only be built on the heap — hence the whole
+// instantiation is gated behind the `alloc` feature, and the heap builder
+// `gen_lwe_to_rlwe_key_rns_n2048_boxed` is the supported constructor (the
+// by-value `gen_…` would overflow any normal thread stack and is not
+// re-exported). The cast `lwe_to_rlwe_rns_n2048` is consumed by the server.
+#[cfg(feature = "alloc")]
+lwe_to_rlwe_cascade! {
+    n = 2048,
+    ring = PolyRns,
+    mod_param = B,
+    mod_bound = crate::algebra::rns::basis::RnsBasis,
+    levels = L,
+    key = LweToRlweKeyRnsN2048,
+    gen = gen_lwe_to_rlwe_key_rns_n2048,
+    gen_boxed = gen_lwe_to_rlwe_key_rns_n2048_boxed,
+    cast = lwe_to_rlwe_rns_n2048,
+    steps = [
+        (keys_2, 2048, 1, 1024, 2),
+        (keys_4, 1024, 2, 512, 4),
+        (keys_8, 512, 4, 256, 8),
+        (keys_16, 256, 8, 128, 16),
+        (keys_32, 128, 16, 64, 32),
+        (keys_64, 64, 32, 32, 64),
+        (keys_128, 32, 64, 16, 128),
+        (keys_256, 16, 128, 8, 256),
+        (keys_512, 8, 256, 4, 512),
+        (keys_1024, 4, 512, 2, 1024),
+        (keys_2048, 2, 1024, 1, 2048),
     ],
 }
 
@@ -423,27 +515,78 @@ mod tests {
             );
         }
     }
+
+    /// The field-by-field `…_boxed` builder draws PRG bytes in the same order as
+    /// the by-value builder, so from the same `sk` + seed the two keys are
+    /// functionally identical (verified here at the cheap n8 via equal cascade
+    /// output). This is the correctness guard for the `unsafe` uninit writes.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn boxed_gen_matches_by_value_n8() {
+        let q = ConstModulus::<65537>;
+        let mut prg = Shake256Prg::new(b"boxed-eq-sk");
+        let sk = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg);
+
+        let by_value = gen_lwe_to_rlwe_key_n8::<_, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut Shake256Prg::new(b"boxed-eq-keygen"),
+        );
+        let boxed = gen_lwe_to_rlwe_key_n8_boxed::<_, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut Shake256Prg::new(b"boxed-eq-keygen"),
+        );
+
+        // Both keys must drive the cascade to the same output for the same input.
+        let lwe = encrypt_lwe(
+            &sk,
+            5,
+            16,
+            Distribution::Ternary,
+            &mut Shake256Prg::new(b"boxed-eq-enc"),
+        );
+        let ra = lwe_to_rlwe_n8::<_, L>(&lwe, &by_value, BASE);
+        let rb = lwe_to_rlwe_n8::<_, L>(&lwe, &boxed, BASE);
+        for i in 0..8 {
+            assert_eq!(
+                ra.mask.coeff(i).to_u64(),
+                rb.mask.coeff(i).to_u64(),
+                "mask coeff {i}"
+            );
+            assert_eq!(
+                ra.body.coeff(i).to_u64(),
+                rb.body.coeff(i).to_u64(),
+                "body coeff {i}"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Layer-6 SPIKE derisk (intermediate degree).
+// Layer-6 SPIKE — depth-18 noise GO/NO-GO + boxed-builder peak-stack check.
 //
-// Validates the conv_step machinery + **depth-18** noise closure at the PAPER
-// q₁ basis (`ViaCQ1Rns ≈ 2^75`), base 18, degree **512** (¼ the paper degree).
-// 18^18 ≈ 2^75 ≥ q₁ so base/depth cover the modulus exactly. If this closes,
-// the only remaining unknown for n=2048 is the extra O(n log n) noise from 4×
-// degree. The key (~5.3 MB) is built by value on a large-stack thread (no
-// `unsafe`); the n=2048 boxed builder is a separate follow-up.
-//
-// Heavy (schoolbook O(n²) mult): `#[ignore]`, release-only. Run with:
-//   cargo test -p via-primitives --release -- --ignored spike_n512
+// Validates depth-18 noise closure at the PAPER q₁ basis (`ViaCQ1Rns ≈ 2^75`,
+// base 18) AND that the field-by-field `…_boxed` builder keeps peak stack small:
+// each key is built with the heap builder on an 8 MB-stack thread — far below
+// the whole-key size (~24.75 MB at n=2048 / ~5.3 MB at n=512), which a by-value
+// build would require. `alloc`-gated (the boxed builders are); heavy (schoolbook
+// O(n²)) so `#[ignore]`, release-only:
+//   cargo test -p via-primitives --features alloc --release -- --ignored spike
 // ---------------------------------------------------------------------------
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod spike {
-    // `via-primitives` is `#![no_std]`; the test harness links `std`, but we must
-    // name it explicitly to reach `std::thread` for the large-stack spawn.
+    // The macro emits a by-value generator for the n512 instantiation that this
+    // module deliberately does not call (it uses only the boxed builder).
+    #![allow(dead_code)]
+
+    // `via-primitives` is `#![no_std]`; the test harness links `std`, but we name
+    // it explicitly to reach `std::thread` for the bounded-stack spawn.
     extern crate std;
 
+    use super::{gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048};
     use crate::algebra::ring::element::Poly;
     use crate::algebra::ring::form::Coefficient;
     use crate::algebra::ring::rns_element::PolyRns;
@@ -454,6 +597,8 @@ mod spike {
     use crate::sampling::distribution::Distribution;
     use crate::sampling::prg::Shake256Prg;
 
+    // Intermediate-degree (n=512) instantiation — a cheap (~3 s) regression guard
+    // for the cascade machinery at the paper basis/depth.
     crate::lwe_to_rlwe_cascade! {
         n = 512,
         ring = PolyRns,
@@ -462,6 +607,7 @@ mod spike {
         levels = L,
         key = LweToRlweKeyRnsN512,
         gen = gen_lwe_to_rlwe_key_rns_n512,
+        gen_boxed = gen_lwe_to_rlwe_key_rns_n512_boxed,
         cast = lwe_to_rlwe_rns_n512,
         steps = [
             (keys_2, 512, 1, 256, 2),
@@ -476,26 +622,27 @@ mod spike {
         ],
     }
 
-    /// Depth-18 noise closure at the paper q₁ basis, degree 512. Builds sk + key
-    /// once on a 64 MB-stack thread (key ~5.3 MB by value, no `unsafe`), then
-    /// round-trips all `p = 16` messages, asserting the scalar lands at coeff 0
-    /// and every other coefficient is exactly 0 (no noise leak).
+    const BASE: u64 = 18;
+    const LV: usize = 18;
+    const STACK: usize = 8 << 20; // 8 MB ≪ 24.75 MB whole key — boxing must hold.
+
+    /// Depth-18 noise closure at the paper q₁ basis, degree 512 (¼ paper degree).
+    /// Builds the key with the **boxed** builder on an 8 MB thread, then
+    /// round-trips all `p = 16` messages with exact-zero noise.
     #[test]
-    #[ignore = "heavy depth-18 RNS cascade; run: cargo test -p via-primitives --release -- --ignored spike_n512"]
+    #[ignore = "heavy depth-18 RNS cascade; run with --features alloc --release -- --ignored"]
     fn spike_n512_depth18_noise_closes() {
-        const BASE: u64 = 18;
-        const LV: usize = 18;
         type RnsQ1 = PolyRns<512, ViaCQ1Rns, Coefficient>;
         type P512 = Poly<512, ConstModulus<16>, Coefficient>;
 
-        let handle = std::thread::Builder::new()
-            .stack_size(64 << 20)
+        std::thread::Builder::new()
+            .stack_size(STACK)
             .spawn(|| {
                 let basis = ViaCQ1Rns::default();
                 let p = ConstModulus::<16>;
                 let mut prg = Shake256Prg::new(b"spike-n512-depth18");
                 let sk = SecretKey::<512, RnsQ1>::keygen(basis, Distribution::Ternary, &mut prg);
-                let key = gen_lwe_to_rlwe_key_rns_n512::<_, LV>(
+                let key = gen_lwe_to_rlwe_key_rns_n512_boxed::<_, LV>(
                     &sk,
                     BASE,
                     Distribution::Ternary,
@@ -510,66 +657,35 @@ mod spike {
                         assert_eq!(
                             recovered.coeff(i).to_u64(),
                             0,
-                            "n512 msg {message} coeff {i} (noise leak)"
+                            "n512 msg {message} coeff {i}"
                         );
                     }
                 }
             })
-            .expect("spawn spike thread");
-        handle
+            .expect("spawn spike thread")
             .join()
-            .expect("spike thread panicked (noise did not close?)");
+            .expect("spike panicked (noise did not close, or 8 MB stack overflowed?)");
     }
 
-    // ----- The real thing: full paper degree n = 2048, depth 18 -----
-
-    crate::lwe_to_rlwe_cascade! {
-        n = 2048,
-        ring = PolyRns,
-        mod_param = B,
-        mod_bound = crate::algebra::rns::basis::RnsBasis,
-        levels = L,
-        key = LweToRlweKeyRnsN2048,
-        gen = gen_lwe_to_rlwe_key_rns_n2048,
-        cast = lwe_to_rlwe_rns_n2048,
-        steps = [
-            (keys_2, 2048, 1, 1024, 2),
-            (keys_4, 1024, 2, 512, 4),
-            (keys_8, 512, 4, 256, 8),
-            (keys_16, 256, 8, 128, 16),
-            (keys_32, 128, 16, 64, 32),
-            (keys_64, 64, 32, 32, 64),
-            (keys_128, 32, 64, 16, 128),
-            (keys_256, 16, 128, 8, 256),
-            (keys_512, 8, 256, 4, 512),
-            (keys_1024, 4, 512, 2, 1024),
-            (keys_2048, 2, 1024, 1, 2048),
-        ],
-    }
-
-    /// **The depth-18 SPIKE (R1 GO/NO-GO).** Full paper degree n = 2048 at the
-    /// paper q₁ basis, base 18, depth 18. Builds sk + key once on a 256 MB-stack
-    /// thread (key ~24.75 MB **by value**, no `unsafe` — the production
-    /// field-by-field `Box::new_uninit` builder is a separate follow-up), then
-    /// round-trips all `p = 16` messages, asserting the scalar lands at coeff 0
-    /// and every other coefficient is exactly 0 (no noise leak). PASS ⇒ paper
-    /// path GO; panic ⇒ NO-GO (escalate to the L=20/B=16 param search).
+    /// **The depth-18 SPIKE (R1 GO/NO-GO).** Full paper degree n = 2048. Builds
+    /// the ~24.75 MB key with the production **boxed** builder on an 8 MB thread
+    /// (proving field-by-field boxing keeps peak stack ≪ the whole key), then
+    /// round-trips all `p = 16` messages with exact-zero noise. PASS ⇒ paper path
+    /// GO; panic ⇒ NO-GO (escalate to the L=20/B=16 param search).
     #[test]
-    #[ignore = "very heavy depth-18 RNS cascade at n=2048; run: cargo test -p via-primitives --release -- --ignored spike_n2048"]
+    #[ignore = "very heavy depth-18 RNS cascade at n=2048; run with --features alloc --release -- --ignored"]
     fn spike_n2048_depth18_noise_closes() {
-        const BASE: u64 = 18;
-        const LV: usize = 18;
         type RnsQ1 = PolyRns<2048, ViaCQ1Rns, Coefficient>;
         type P2048 = Poly<2048, ConstModulus<16>, Coefficient>;
 
-        let handle = std::thread::Builder::new()
-            .stack_size(256 << 20)
+        std::thread::Builder::new()
+            .stack_size(STACK)
             .spawn(|| {
                 let basis = ViaCQ1Rns::default();
                 let p = ConstModulus::<16>;
                 let mut prg = Shake256Prg::new(b"spike-n2048-depth18");
                 let sk = SecretKey::<2048, RnsQ1>::keygen(basis, Distribution::Ternary, &mut prg);
-                let key = gen_lwe_to_rlwe_key_rns_n2048::<_, LV>(
+                let key = gen_lwe_to_rlwe_key_rns_n2048_boxed::<_, LV>(
                     &sk,
                     BASE,
                     Distribution::Ternary,
@@ -584,14 +700,13 @@ mod spike {
                         assert_eq!(
                             recovered.coeff(i).to_u64(),
                             0,
-                            "n2048 msg {message} coeff {i} (noise leak)"
+                            "n2048 msg {message} coeff {i}"
                         );
                     }
                 }
             })
-            .expect("spawn spike thread");
-        handle
+            .expect("spawn spike thread")
             .join()
-            .expect("spike thread panicked (depth-18 noise did NOT close — NO-GO)");
+            .expect("spike panicked (depth-18 noise did NOT close, or 8 MB stack overflowed)");
     }
 }

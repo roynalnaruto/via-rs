@@ -33,6 +33,11 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![warn(missing_docs)]
 
+// Optional heap support (the `alloc` feature). Used only by the paper-scale
+// LWE→RLWE `…_boxed` cascade builders; the crate is otherwise no-alloc.
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 pub mod algebra;
 pub mod conversion;
 pub mod encryption;
