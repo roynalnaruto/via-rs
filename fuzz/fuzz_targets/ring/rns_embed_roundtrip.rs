@@ -6,10 +6,10 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::ring::rns_element::PolyRns;
-use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::algebra::zq::modulus::DynModulus;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::ring::rns_element::PolyRns;
+use via_primitives::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_primitives::algebra::zq::modulus::DynModulus;
 
 const N_SMALL: usize = 4;
 const N_LARGE: usize = 16;

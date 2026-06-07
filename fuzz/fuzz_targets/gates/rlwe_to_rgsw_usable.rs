@@ -14,15 +14,15 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::RingPoly;
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::encryption::gadget::gadget_vector_values;
-use via_rs::encryption::types::RLWECiphertext;
-use via_rs::encryption::{SecretKey, encode};
-use via_rs::gates::{gen_rlwe_to_rgsw_key, rlwe_to_rgsw};
-use via_rs::sampling::{Distribution, Shake256Prg};
+use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::encryption::gadget::gadget_vector_values;
+use via_primitives::encryption::types::RLWECiphertext;
+use via_primitives::encryption::{SecretKey, encode};
+use via_primitives::gates::{gen_rlwe_to_rgsw_key, rlwe_to_rgsw};
+use via_primitives::sampling::{Distribution, Shake256Prg};
 
 const N: usize = 8;
 const L_OUT: usize = 3;

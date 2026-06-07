@@ -6,8 +6,8 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::ops;
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::algebra::ring::ops;
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
 
 const N: usize = 8;
 

@@ -22,13 +22,15 @@ test *FLAGS:
 
 # ─── docs ────────────────────────────────────────────────────────────────
 
-# Build rustdoc with KaTeX math rendering and open in a browser.
+# Build rustdoc for via-primitives (KaTeX math rendering) and open in a browser.
+# `--features alloc` so the paper-scale `…_boxed` builders + n2048 path are
+# documented and their intra-doc links resolve.
 doc:
-    cargo doc --no-deps --document-private-items --open
+    cargo doc --no-deps --document-private-items --package via-primitives --features alloc --open
 
 # Same as `doc` but without opening a browser — for CI.
 doc-build:
-    cargo doc --no-deps --document-private-items
+    cargo doc --no-deps --document-private-items --package via-primitives --features alloc
 
 # ─── lint ────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,24 @@ lint-check:
     cd fuzz && cargo fmt --all -- --check
     cd fuzz && cargo clippy --all-targets -- -D warnings
 
+# ─── no_std ────────────────────────────────────────────────────────────────
+
+# Verify via-primitives builds for a bare-metal target (no std, no alloc).
+no-std-check:
+    cargo build --target thumbv7em-none-eabihf --package via-primitives
+
+# ─── client ⊥ server structural check ────────────────────────────────────
+
+# NB: detect PRESENCE with `grep -q` + `if` — `grep -qv` is not a correct test
+# (on GNU grep it exits 0 whenever any line lacks the pattern).
+# Assert that via-client and via-server have no transitive dep on each other.
+client-server-check:
+    @if cargo tree --package via-client 2>&1 | grep -q "via-server"; then \
+        echo "FAIL: via-client depends on via-server"; exit 1; fi
+    @if cargo tree --package via-server 2>&1 | grep -q "via-client"; then \
+        echo "FAIL: via-server depends on via-client"; exit 1; fi
+    @echo "OK: client ⊥ server isolation confirmed"
+
 # ─── fuzz ────────────────────────────────────────────────────────────────
 #
 # Requires `cargo install cargo-fuzz` and a nightly toolchain.
@@ -61,3 +81,24 @@ fuzz-build:
 # Run a single fuzz target for SECS seconds (default 60). Example: `just fuzz zq_reduce 300`.
 fuzz TARGET SECS="60":
     cd fuzz && cargo +nightly fuzz run {{TARGET}} -- -max_total_time={{SECS}}
+
+# ─── KAT vectors ───────────────────────────────────────────────────────────
+#
+# Requires Python >= 3.11 with the `.references/via-spec` reference on the
+# path (the script inserts it itself).
+
+# Regenerate the Layer-3 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer3:
+    cd .references/via-spec && python3 scripts/gen_layer3_kats.py
+
+# Regenerate the Layer-4 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer4:
+    cd .references/via-spec && python3 scripts/gen_layer4_kats.py
+
+# Regenerate the Layer-5 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer5:
+    cd .references/via-spec && python3 scripts/gen_layer5_kats.py
+
+# Regenerate the Layer-6 cross-language KAT constants in crates/via-primitives/tests/data/.
+regen-kats-layer6:
+    cd .references/via-spec && python3 scripts/gen_layer6_kats.py

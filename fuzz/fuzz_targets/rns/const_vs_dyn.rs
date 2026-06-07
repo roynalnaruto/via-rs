@@ -7,9 +7,9 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::algebra::rns::element::RnsZq;
-use via_rs::algebra::zq::modulus::DynModulus;
+use via_primitives::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_primitives::algebra::rns::element::RnsZq;
+use via_primitives::algebra::zq::modulus::DynModulus;
 
 #[derive(Debug, Arbitrary, Clone, Copy)]
 enum WhichBasis {

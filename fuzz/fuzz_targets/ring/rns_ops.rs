@@ -7,11 +7,11 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::form::{Coefficient, Evaluation};
-use via_rs::algebra::ring::rns_element::PolyRns;
-use via_rs::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
-use via_rs::algebra::rns::ops as rns_ops;
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::algebra::ring::form::{Coefficient, Evaluation};
+use via_primitives::algebra::ring::rns_element::PolyRns;
+use via_primitives::algebra::rns::basis::{DynRnsBasis, RnsBasis, paper};
+use via_primitives::algebra::rns::ops as rns_ops;
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
 
 const N: usize = 16;
 

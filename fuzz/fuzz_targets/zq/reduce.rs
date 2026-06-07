@@ -8,7 +8,7 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::zq::modulus::{DynModulus, Modulus};
+use via_primitives::algebra::zq::modulus::{DynModulus, Modulus};
 
 /// Paper-pinned moduli, plus a small set of representative odd composites,
 /// gives the fuzzer a strong starting point for corpus expansion.

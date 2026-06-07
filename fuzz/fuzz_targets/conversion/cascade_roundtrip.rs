@@ -12,12 +12,12 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::conversion::{encrypt_lwe, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8};
-use via_rs::encryption::types::SecretKey;
-use via_rs::sampling::{Distribution, Shake256Prg};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::conversion::{encrypt_lwe, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8};
+use via_primitives::encryption::types::SecretKey;
+use via_primitives::sampling::{Distribution, Shake256Prg};
 
 const N: usize = 8;
 const DEPTH: usize = 8;

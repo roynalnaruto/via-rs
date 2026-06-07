@@ -17,8 +17,8 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1.4", features = ["derive"] }
 
-[dependencies.via-rs]
-path = ".."
+[dependencies.via-primitives]
+path = "../crates/via-primitives"
 
 # Each fuzz target gets its own [[bin]] entry. Targets are grouped on disk by
 # the `src/primitives/` module they exercise — `fuzz_targets/{zq,rns,ring}/` —

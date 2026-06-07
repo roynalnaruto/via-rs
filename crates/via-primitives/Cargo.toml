@@ -1,0 +1,31 @@
+[package]
+name         = "via-primitives"
+version      = "0.1.0"
+edition      = "2024"
+description  = "Pure no_std arithmetic + cryptographic primitives for the VIA PIR family."
+license      = "MIT OR Apache-2.0"
+
+[features]
+# Optional `alloc` support. Default-OFF so the crate stays no-alloc for bare-metal
+# (`thumbv7em`). Gates only the heap-using paper-scale paths — the LWE→RLWE
+# `…_boxed` cascade-key builders and the full n=2048 instantiation — whose key
+# (~24.75 MB) can only live on the heap. Downstream alloc crates enable it.
+alloc = []
+# Variant feature gates — declared here so downstream crates can enable them.
+# No in-fn `cfg` gating in primitives: the gate is at re-export boundary only.
+# via-b implies via-c (via-c implies nothing extra in primitives itself).
+via   = []
+via-c = []
+via-b = ["via-c"]
+
+[dependencies]
+libm      = { workspace = true }
+rand_core = { workspace = true }
+sha3      = { workspace = true }
+subtle    = { workspace = true }
+zeroize   = { workspace = true }
+
+[package.metadata.docs.rs]
+# Document the full API, including the `alloc`-gated paper-scale cascade path.
+features = ["alloc"]
+rustdoc-args = ["--html-in-header", "katex-header.html"]

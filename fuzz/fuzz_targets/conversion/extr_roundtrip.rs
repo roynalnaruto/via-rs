@@ -13,13 +13,13 @@
 use arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::DynModulus;
-use via_rs::conversion::extr;
-use via_rs::encryption::types::SecretKey;
-use via_rs::encryption::{MLWECiphertext, decode, encode};
-use via_rs::sampling::{Distribution, Shake256Prg};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::DynModulus;
+use via_primitives::conversion::extr;
+use via_primitives::encryption::types::SecretKey;
+use via_primitives::encryption::{MLWECiphertext, decode, encode};
+use via_primitives::sampling::{Distribution, Shake256Prg};
 
 const N: usize = 8;
 type R8 = Poly<N, DynModulus, Coefficient>;

@@ -7,9 +7,9 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use via_rs::algebra::ring::element::Poly;
-use via_rs::algebra::ring::form::Coefficient;
-use via_rs::algebra::zq::modulus::{ConstModulus, DynModulus, Modulus, paper};
+use via_primitives::algebra::ring::element::Poly;
+use via_primitives::algebra::ring::form::Coefficient;
+use via_primitives::algebra::zq::modulus::{ConstModulus, DynModulus, Modulus, paper};
 
 // (N_small, N_large) = (8, 32) — d = 4 slots.
 const N_SMALL: usize = 8;

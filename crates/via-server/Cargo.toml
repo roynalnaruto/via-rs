@@ -1,0 +1,23 @@
+[package]
+name        = "via-server"
+version     = "0.1.0"
+edition     = "2024"
+description = "Server-side DB setup and query answering for the VIA PIR family."
+
+[features]
+default = ["alloc"]
+alloc   = ["via-protocol/alloc", "via-primitives/alloc"]
+via   = ["via-protocol/via"]
+via-c = ["via-protocol/via-c"]
+via-b = ["via-protocol/via-b"]
+
+[dependencies]
+via-primitives = { workspace = true }
+via-protocol   = { workspace = true, default-features = false }
+tracing        = { workspace = true }
+zeroize        = { workspace = true }
+
+# via-client is intentionally NOT listed here (client ⊥ server invariant).
+
+[lints]
+workspace = true
