@@ -53,7 +53,14 @@ impl<'a> Arbitrary<'a> for Input {
         for v in &mut values {
             *v = u.int_in_range::<u64>(0..=P - 1)?;
         }
-        Ok(Input { sk_seed, enc_seed, num_rows, num_cols, target, values })
+        Ok(Input {
+            sk_seed,
+            enc_seed,
+            num_rows,
+            num_cols,
+            target,
+            values,
+        })
     }
 }
 
@@ -74,7 +81,11 @@ fuzz_target!(|input: Input| {
             let mut coeffs = [0u64; N];
             coeffs[0] = input.values[row];
             let msg = R::new(p, coeffs);
-            sk.encrypt(&encode::<N, R, R>(&msg, q), Distribution::Ternary, &mut enc_prg)
+            sk.encrypt(
+                &encode::<N, R, R>(&msg, q),
+                Distribution::Ternary,
+                &mut enc_prg,
+            )
         })
         .collect();
 

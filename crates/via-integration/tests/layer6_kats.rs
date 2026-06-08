@@ -78,9 +78,26 @@ fn assert_coeffs<const DEG: usize>(
 /// The shared toy `PIRParams` (identical to `client_server_e2e.rs`).
 fn toy_params() -> PIRParams {
     PIRParams::new(
-        N1, N2, Q1 as u128, Q2, Q3, Q4, P, //
-        B_QUERY, L_QUERY, B_QUERY, L_QUERY, B_RSK, L_RSK, //
-        KeyDist::Ternary, KeyDist::Ternary, 1, None, None, None, 40,
+        N1,
+        N2,
+        Q1 as u128,
+        Q2,
+        Q3,
+        Q4,
+        P, //
+        B_QUERY,
+        L_QUERY,
+        B_QUERY,
+        L_QUERY,
+        B_RSK,
+        L_RSK, //
+        KeyDist::Ternary,
+        KeyDist::Ternary,
+        1,
+        None,
+        None,
+        None,
+        40,
     )
 }
 
@@ -95,7 +112,11 @@ fn kat_encrypt_lwe_raw() {
     let message: u128 = 0xDEAD_BEEFu128 % (Q1 as u128);
     let lwe = encrypt_lwe_raw(&sk, message, Distribution::Ternary, enc_prg);
     for (i, &e) in data::ENCRYPT_LWE_RAW_MASKS.iter().enumerate() {
-        assert_eq!(lwe.masks[i].coeff(0).to_u64(), e, "encrypt_lwe_raw mask {i}");
+        assert_eq!(
+            lwe.masks[i].coeff(0).to_u64(),
+            e,
+            "encrypt_lwe_raw mask {i}"
+        );
     }
     assert_eq!(
         lwe.body.coeff(0).to_u64(),
@@ -201,16 +222,29 @@ fn kat_resp_comp() {
     // Representative answer ciphertext at q2 under S1 (constant term = 3).
     let enc_prg = &mut Shake256Prg::new(b"layer6-kat-rc-enc");
     let msg = R8::new(p, [3, 0, 0, 0, 0, 0, 0, 0]);
-    let ct = sk1.encrypt(&encode::<N1, R8, R8>(&msg, q2), Distribution::Ternary, enc_prg);
+    let ct = sk1.encrypt(
+        &encode::<N1, R8, R8>(&msg, q2),
+        Distribution::Ternary,
+        enc_prg,
+    );
 
     // Ring-switch key S1→S2 @ q3 (rekey S1: q2→q3 first, then gen_rsk).
     let s1_q3 = rekey_secret_key::<N1, R8, R8>(&sk1, q3);
     let rsk_prg = &mut Shake256Prg::new(b"layer6-kat-rc-rsk");
-    let rsk = gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &sk2, B_RSK, Distribution::Ternary, rsk_prg);
+    let rsk =
+        gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &sk2, B_RSK, Distribution::Ternary, rsk_prg);
 
     // Paper path: sym q2→q3 → ring_switch n1→n2 @ q3 → asym q3→q4 (body only).
     let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk, q3, q4, B_RSK);
 
-    assert_coeffs(&answer.mask, &data::RESP_COMP_MASK_Q3, "resp_comp mask @ q3");
-    assert_coeffs(&answer.body, &data::RESP_COMP_BODY_Q4, "resp_comp body @ q4");
+    assert_coeffs(
+        &answer.mask,
+        &data::RESP_COMP_MASK_Q3,
+        "resp_comp mask @ q3",
+    );
+    assert_coeffs(
+        &answer.body,
+        &data::RESP_COMP_BODY_Q4,
+        "resp_comp body @ q4",
+    );
 }

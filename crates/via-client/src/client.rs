@@ -362,7 +362,10 @@ mod tests {
         let (client, _pp) = toy_setup(2, 2, &mut prg); // num_records = D·2·2 = 8
         assert!(matches!(
             client.query(8, &mut prg),
-            Err(ViaError::IndexOutOfRange { index: 8, num_records: 8 })
+            Err(ViaError::IndexOutOfRange {
+                index: 8,
+                num_records: 8
+            })
         ));
     }
 }

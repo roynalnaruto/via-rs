@@ -82,12 +82,22 @@ fuzz_target!(|input: Input| {
     let mut coeffs = [0u64; N1];
     coeffs[0] = c;
     let msg = R8::new(p, coeffs);
-    let ct = sk1.encrypt(&encode::<N1, R8, R8>(&msg, q2), Distribution::Ternary, &mut enc_prg);
+    let ct = sk1.encrypt(
+        &encode::<N1, R8, R8>(&msg, q2),
+        Distribution::Ternary,
+        &mut enc_prg,
+    );
 
     // Ring-switch key S1→S2 @ q3 (rekey S1: q2→q3, then gen_rsk).
     let s1_q3 = rekey_secret_key::<N1, R8, R8>(&sk1, q3);
     let mut rsk_prg = Shake256Prg::new(&input.rsk_seed);
-    let rsk = gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &sk2, B_RSK, Distribution::Ternary, &mut rsk_prg);
+    let rsk = gen_rsk::<N1, N2, R8, R4, L_RSK, D>(
+        &s1_q3,
+        &sk2,
+        B_RSK,
+        Distribution::Ternary,
+        &mut rsk_prg,
+    );
 
     let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk, q3, q4, B_RSK);
 
@@ -98,5 +108,9 @@ fuzz_target!(|input: Input| {
     }
 
     let recovered: R4 = sk2.decrypt_asymmetric::<R4, R4, R4>(&answer, q3, q4, p);
-    assert_eq!(recovered.coeff(0).to_u64(), c, "resp_comp round-trip diverged");
+    assert_eq!(
+        recovered.coeff(0).to_u64(),
+        c,
+        "resp_comp round-trip diverged"
+    );
 });

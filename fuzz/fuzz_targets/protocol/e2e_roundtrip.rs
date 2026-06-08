@@ -71,15 +71,36 @@ impl<'a> Arbitrary<'a> for Input {
                 *coeff = u.int_in_range::<u64>(0..=P - 1)?;
             }
         }
-        Ok(Input { seed, index, records })
+        Ok(Input {
+            seed,
+            index,
+            records,
+        })
     }
 }
 
 fn toy_params() -> PIRParams {
     PIRParams::new(
-        N1, N2, Q1 as u128, Q2, Q3, Q4, P, //
-        B_QUERY, L_QUERY, B_QUERY, L_QUERY, B_RSK, L_RSK, //
-        KeyDist::Ternary, KeyDist::Ternary, 1, None, None, None, 40,
+        N1,
+        N2,
+        Q1 as u128,
+        Q2,
+        Q3,
+        Q4,
+        P, //
+        B_QUERY,
+        L_QUERY,
+        B_QUERY,
+        L_QUERY,
+        B_RSK,
+        L_RSK, //
+        KeyDist::Ternary,
+        KeyDist::Ternary,
+        1,
+        None,
+        None,
+        None,
+        40,
     )
 }
 
@@ -126,5 +147,9 @@ fuzz_target!(|input: Input| {
         .recover::<R4, R4, R4>(&answer, q3, q4, p)
         .expect("client recover");
 
-    assert_eq!(recovered, records[input.index], "e2e diverged at index {}", input.index);
+    assert_eq!(
+        recovered, records[input.index],
+        "e2e diverged at index {}",
+        input.index
+    );
 });
