@@ -11,7 +11,7 @@ use via_primitives::gates::gen_rlwe_to_rgsw_key_boxed;
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::RingSwitchKey;
-use via_protocol::{CompressedQuery, PIRParams, PublicParams, QueryCompressionKey};
+use via_protocol::{CompressedQuery, PIRParams, PublicParams, QueryCompressionKey, ViaError};
 use zeroize::ZeroizeOnDrop;
 
 use crate::query::build_compressed_query;
@@ -83,6 +83,11 @@ impl<
     /// (`RLev_{S1}(S1²)`), then the ring-switch key (`D` RLev samples,
     /// mask-then-error per level).
     ///
+    /// # Errors
+    ///
+    /// [`ViaError::DimMismatch`] if `num_rows` or `num_cols` is not a power of
+    /// two — the DMux/CMux bit decomposition assumes power-of-two dimensions.
+    ///
     /// `paper:via_c/client.py:58-144`
     #[allow(clippy::too_many_arguments)]
     pub fn setup<K, GenCascade, GenRsk>(
@@ -98,10 +103,13 @@ impl<
         prg: &mut Shake256Prg,
         gen_cascade_key: GenCascade,
         gen_ring_switch_key: GenRsk,
-    ) -> (
-        Self,
-        PublicParams<K, N1, N2, R1, R2, L_QUERY, L_CK, L_RSK, D>,
-    )
+    ) -> Result<
+        (
+            Self,
+            PublicParams<K, N1, N2, R1, R2, L_QUERY, L_CK, L_RSK, D>,
+        ),
+        ViaError,
+    >
     where
         K: zeroize::Zeroize,
         // Returns `Box<K>` (not `K`): the paper cascade key is ~24.75 MB and is
@@ -116,6 +124,16 @@ impl<
             &mut Shake256Prg,
         ) -> RingSwitchKey<N1, N2, R2, L_RSK, D>,
     {
+        let _span = tracing::debug_span!("client_setup", num_rows, num_cols).entered();
+
+        // The DMux/CMux trees split on bits of the row/col indices, so the
+        // dimensions must be powers of two.
+        if !num_rows.is_power_of_two() || !num_cols.is_power_of_two() {
+            return Err(ViaError::DimMismatch(
+                "num_rows and num_cols must be powers of two",
+            ));
+        }
+
         // 1–2. Secret keys.
         let sk1 = SecretKey::<N1, R1>::keygen(q1_mod, key_dist_1, prg);
         let sk2 = SecretKey::<N2, R2>::keygen(q3_mod, key_dist_2, prg);
@@ -155,22 +173,33 @@ impl<
             cmux_base,
             error_dist,
         };
-        (client, pp)
+        Ok((client, pp))
     }
 
     /// VIA-C `Query` — compress a flat database `index` into a
     /// [`CompressedQuery`]. See [`crate::query`] for the PRG-order contract.
+    ///
+    /// # Errors
+    ///
+    /// [`ViaError::IndexOutOfRange`] if `index >= D · num_rows · num_cols`.
+    /// Without this guard an out-of-range index silently encodes an invalid
+    /// rotation and recovers the wrong record.
     ///
     /// `paper:via_c/client.py:146-176`
     pub fn query(
         &self,
         index: usize,
         prg: &mut Shake256Prg,
-    ) -> CompressedQuery<N1, 1, R1::Projected<1>>
+    ) -> Result<CompressedQuery<N1, 1, R1::Projected<1>>, ViaError>
     where
         R1: LweDot<N1>,
     {
-        build_compressed_query::<N1, R1, L_QUERY>(
+        let _span = tracing::debug_span!("client_query", index).entered();
+        let num_records = D * self.num_rows * self.num_cols;
+        if index >= num_records {
+            return Err(ViaError::IndexOutOfRange { index, num_records });
+        }
+        Ok(build_compressed_query::<N1, R1, L_QUERY>(
             index,
             &self.sk1,
             self.num_rows,
@@ -180,7 +209,7 @@ impl<
             self.cmux_base,
             self.error_dist,
             prg,
-        )
+        ))
     }
 
     /// VIA-C `Recover` — decrypt the (paper-asymmetric) server answer with `S2`,
@@ -191,6 +220,12 @@ impl<
     /// unwrapped at the boundary. Mirrors the generic server, which returns the
     /// raw ciphertext.
     ///
+    /// # Errors
+    ///
+    /// Currently infallible (decryption cannot fail), but returns [`Result`] for
+    /// symmetry with [`Self::query`] and the server's `answer_one_query`, so the
+    /// whole client boundary is uniformly `Result`-typed.
+    ///
     /// `paper:via_c/client.py:178-203`
     pub fn recover<RM, RB, RP>(
         &self,
@@ -198,15 +233,17 @@ impl<
         q3_mod: RM::Modulus,
         q4_mod: RB::Modulus,
         p_mod: RP::Modulus,
-    ) -> RP
+    ) -> Result<RP, ViaError>
     where
         R2: RingPoly<N2, CenteredScalar = i64>,
         RM: RingPoly<N2>,
         RB: RingPoly<N2>,
         RP: RingPoly<N2>,
     {
-        self.sk2
-            .decrypt_asymmetric::<RM, RB, RP>(answer, q3_mod, q4_mod, p_mod)
+        let _span = tracing::debug_span!("client_recover").entered();
+        Ok(self
+            .sk2
+            .decrypt_asymmetric::<RM, RB, RP>(answer, q3_mod, q4_mod, p_mod))
     }
 }
 
@@ -294,6 +331,7 @@ mod tests {
                 gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, sk2, RSK_BASE, dist, p)
             },
         )
+        .expect("toy setup dims are powers of two")
     }
 
     /// `setup` returns a `PublicParams` carrying the dimensions/bases it was given.
@@ -313,7 +351,21 @@ mod tests {
     fn query_length_is_l_query_times_total_bits() {
         let mut prg = Shake256Prg::new(b"client-query-len");
         let (client, _pp) = toy_setup(2, 2, &mut prg);
-        let cq = client.query(5, &mut prg);
+        let cq = client.query(5, &mut prg).expect("index 5 is in range");
         assert_eq!(cq.ciphertexts.len(), L_QUERY * (1 + 1 + 1));
+    }
+
+    /// `query` rejects an out-of-range index instead of silently mis-encoding.
+    #[test]
+    fn query_rejects_out_of_range_index() {
+        let mut prg = Shake256Prg::new(b"client-query-oob");
+        let (client, _pp) = toy_setup(2, 2, &mut prg); // num_records = D·2·2 = 8
+        assert!(matches!(
+            client.query(8, &mut prg),
+            Err(ViaError::IndexOutOfRange {
+                index: 8,
+                num_records: 8
+            })
+        ));
     }
 }

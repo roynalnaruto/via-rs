@@ -140,10 +140,11 @@ fn build_fixture() -> Fixture {
         &mut prg,
         gen_cascade,
         gen_rsk_closure,
-    );
+    )
+    .expect("client setup");
     let records: Vec<R4> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
     let encoded_db = setup_db::<N1, N2, R8, R4>(&records, NUM_ROWS, NUM_COLS, p);
-    let query = client.query(INDEX, &mut prg);
+    let query = client.query(INDEX, &mut prg).expect("client query");
 
     Fixture {
         client,
@@ -317,7 +318,7 @@ fn toy_benches(c: &mut Criterion) {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-toy-e2e"),
             |mut prg| {
-                let query = fx.client.query(INDEX, &mut prg);
+                let query = fx.client.query(INDEX, &mut prg).expect("client query");
                 let ans = answer_one_query::<
                     N1,
                     N2,
