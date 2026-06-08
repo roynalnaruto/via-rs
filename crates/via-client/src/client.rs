@@ -107,7 +107,8 @@ impl<
         // Returns `Box<K>` (not `K`): the paper cascade key is ~24.75 MB and is
         // built directly on the heap (`gen_..._boxed`); moving it by value would
         // overflow the stack. The toy path just wraps its small key in `Box::new`.
-        GenCascade: FnOnce(&SecretKey<N1, R1>, u64, Distribution, &mut Shake256Prg) -> alloc::boxed::Box<K>,
+        GenCascade:
+            FnOnce(&SecretKey<N1, R1>, u64, Distribution, &mut Shake256Prg) -> alloc::boxed::Box<K>,
         GenRsk: FnOnce(
             &SecretKey<N1, R1>,
             &SecretKey<N2, R2>,
@@ -271,7 +272,9 @@ mod tests {
             Distribution::Ternary,
             prg,
             |sk, base, dist, p| {
-                alloc::boxed::Box::new(gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>(sk, base, dist, p))
+                alloc::boxed::Box::new(gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>(
+                    sk, base, dist, p,
+                ))
             },
             |sk1, sk2, dist, p| {
                 let q3 = RingPoly::modulus(sk2.poly());

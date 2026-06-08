@@ -102,9 +102,33 @@ where
 
     // Order is [DMux | CMux | CRot] (query_decomp slices them in that order).
     // DMux MSB-first @ b1; CMux + CRot LSB-first @ b2.
-    push_bit_group(&dmux_bits(alpha, ceil_log2(num_rows)), &g_dmux, sk1, q1_val, error_dist, prg, &mut cts);
-    push_bit_group(&cmux_bits(beta, ceil_log2(num_cols)), &g_cmux, sk1, q1_val, error_dist, prg, &mut cts);
-    push_bit_group(&crot_bits(gamma, ceil_log2(d)), &g_cmux, sk1, q1_val, error_dist, prg, &mut cts);
+    push_bit_group(
+        &dmux_bits(alpha, ceil_log2(num_rows)),
+        &g_dmux,
+        sk1,
+        q1_val,
+        error_dist,
+        prg,
+        &mut cts,
+    );
+    push_bit_group(
+        &cmux_bits(beta, ceil_log2(num_cols)),
+        &g_cmux,
+        sk1,
+        q1_val,
+        error_dist,
+        prg,
+        &mut cts,
+    );
+    push_bit_group(
+        &crot_bits(gamma, ceil_log2(d)),
+        &g_cmux,
+        sk1,
+        q1_val,
+        error_dist,
+        prg,
+        &mut cts,
+    );
 
     CompressedQuery::new(cts)
 }
