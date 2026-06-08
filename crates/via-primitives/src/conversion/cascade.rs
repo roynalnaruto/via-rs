@@ -190,12 +190,22 @@ macro_rules! lwe_to_rlwe_cascade {
             unsafe {
                 $(
                     for key_idx in 0..$rin {
-                        let rlev = $crate::conversion::gen_conv_step_key_element::<
+                        // Write each step-key RLev **straight into its heap slot**,
+                        // one RLWE sample at a time — so even the largest single
+                        // step key (~1.125 MB at the high-degree n=2048 steps) is
+                        // never assembled on the stack. Peak stack is one RLWE.
+                        $crate::conversion::gen_conv_step_key_element_into::<
                             $n, $nin, $nout, $rin,
                             $ring<$n, $modp, $crate::algebra::ring::form::Coefficient>,
                             $lev,
-                        >(sk, key_idx, base, error_dist, prg);
-                        ::core::ptr::addr_of_mut!((*ptr).$field[key_idx]).write(rlev);
+                        >(
+                            sk,
+                            key_idx,
+                            base,
+                            error_dist,
+                            prg,
+                            ::core::ptr::addr_of_mut!((*ptr).$field[key_idx]),
+                        );
                     }
                 )+
                 boxed.assume_init()

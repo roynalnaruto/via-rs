@@ -58,7 +58,10 @@ pub mod cascade;
 // §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
 pub mod extract;
 
-pub use conv::{ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element};
+pub use conv::{
+    ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element,
+    gen_conv_step_key_element_into,
+};
 pub use mlwe_ops::{
     decrypt_lwe, embed_mlwe, encrypt_lwe, encrypt_lwe_raw, mlwe_to_rlwe, rlwe_to_mlwe,
 };

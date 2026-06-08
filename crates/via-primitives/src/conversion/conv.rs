@@ -194,6 +194,48 @@ where
     target.encrypt_rlev::<L>(&source, base, error_dist, prg)
 }
 
+/// [`gen_conv_step_key_element`] writing the step key **directly into `dst`**
+/// instead of returning it by value. Lets the cascade boxed builder avoid
+/// assembling the whole step-key RLev (~1.125 MiB at the high-degree n=2048
+/// steps) on the stack — each of its `L` RLWE samples is written straight into
+/// the heap slot. PRG draws are identical to [`gen_conv_step_key_element`].
+///
+/// # Safety
+///
+/// `dst` must point to memory valid for one
+/// `RLevCiphertext<N_OUT, R::Projected<N_OUT>, L>`.
+#[allow(non_camel_case_types)]
+pub unsafe fn gen_conv_step_key_element_into<
+    const NLWE: usize,
+    const N_IN: usize,
+    const N_OUT: usize,
+    const RANK_IN: usize,
+    R: RingPoly<NLWE>,
+    const L: usize,
+>(
+    sk: &SecretKey<NLWE, R>,
+    key_idx: usize,
+    base: u64,
+    error_dist: Distribution,
+    prg: &mut Shake256Prg,
+    dst: *mut RLevCiphertext<N_OUT, R::Projected<N_OUT>, L>,
+) where
+    R::Projected<N_IN>: RingPoly<N_IN, Embedded<N_OUT> = R::Projected<N_OUT>>,
+    R::Projected<N_OUT>: RingPoly<N_OUT>,
+{
+    let m = RANK_IN / 2;
+    let group = key_idx / m;
+    let j = key_idx % m;
+    let source = sk
+        .poly()
+        .project_at::<N_IN>(m * group + j)
+        .embed_at::<N_OUT>(0);
+    let target = SecretKey::from_poly(sk.poly().project_at::<N_OUT>(j));
+    // SAFETY: `dst` is valid for one RLev (caller contract); `encrypt_rlev_into`
+    // initialises every sample, drawing PRG identically to `encrypt_rlev`.
+    unsafe { target.encrypt_rlev_into::<L>(dst, &source, base, error_dist, prg) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -78,6 +78,46 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     /// (sample `i` ascending: `g_i·message`, then `encrypt` = mask-then-error),
     /// so the two produce the same key — guarded by an equivalence unit test.
     /// Mirrors the cascade `gen_..._boxed` builder pattern.
+    /// Write an RLev encryption of `message` **directly into `dst`**, one RLWE
+    /// sample at a time — the peak stack is one RLWE (≈ `2N·word`) instead of the
+    /// whole `[RLWECiphertext; L]` array. PRG draws are byte-identical to
+    /// [`encrypt_rlev`](Self::encrypt_rlev). This is the building block for both
+    /// [`encrypt_rlev_boxed`](Self::encrypt_rlev_boxed) and the cascade key's
+    /// per-element heap builder.
+    ///
+    /// # Safety
+    ///
+    /// `dst` must point to memory valid for writes of one
+    /// `RLevCiphertext<N, R, L>` (typically uninitialised, e.g. a `Box`
+    /// allocation or a field slot). Every `samples[i]` for `i ∈ 0..L` is
+    /// initialised exactly once; the caller must not read `*dst` before this
+    /// returns and is responsible for treating `*dst` as initialised afterwards.
+    pub(crate) unsafe fn encrypt_rlev_into<const L: usize>(
+        &self,
+        dst: *mut RLevCiphertext<N, R, L>,
+        message: &R,
+        base: u64,
+        error_dist: Distribution,
+        prg: &mut Shake256Prg,
+    ) {
+        let modulus = self.poly.modulus();
+        let g_values = gadget_vector_values::<N, R, L>(modulus, base);
+        for (i, &g_i) in g_values.iter().enumerate() {
+            let mut g_const = [0u128; N];
+            g_const[0] = g_i;
+            let g_poly = R::from_u128_coeffs(modulus, &g_const);
+            let scaled: R = *message * g_poly;
+            let sample = self.encrypt(&scaled, error_dist, prg);
+            // SAFETY: `dst` is valid for one RLev (caller contract); `samples[i]`
+            // with `i ∈ 0..L` is written exactly once, in ascending order.
+            unsafe { core::ptr::addr_of_mut!((*dst).samples[i]).write(sample) };
+        }
+    }
+
+    /// Heap-allocating wrapper over [`encrypt_rlev_into`](Self::encrypt_rlev_into):
+    /// the full `[RLWECiphertext; L]` array (≈ 1.125 MiB at the paper depth-18
+    /// n=2048 conversion key) is built straight into the `Box`, never on the
+    /// stack. Byte-identical to [`encrypt_rlev`](Self::encrypt_rlev).
     #[cfg(feature = "alloc")]
     pub fn encrypt_rlev_boxed<const L: usize>(
         &self,
@@ -86,24 +126,11 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         error_dist: Distribution,
         prg: &mut Shake256Prg,
     ) -> alloc::boxed::Box<RLevCiphertext<N, R, L>> {
-        let modulus = self.poly.modulus();
-        let g_values = gadget_vector_values::<N, R, L>(modulus, base);
-
         let mut boxed = alloc::boxed::Box::<RLevCiphertext<N, R, L>>::new_uninit();
-        let ptr = boxed.as_mut_ptr();
-        // SAFETY: `samples[i]` is written exactly once, for every `i ∈ 0..L`, in
-        // ascending order, so `*ptr` is fully initialised before `assume_init`.
-        // Each iteration reuses one `sample` stack slot, so peak stack is one
-        // RLWE (≈ 2N·word) instead of the whole RLev.
+        // SAFETY: `as_mut_ptr` is valid for one (uninit) RLev; `encrypt_rlev_into`
+        // initialises every `samples[i]`, so `assume_init` is sound.
         unsafe {
-            for (i, &g_i) in g_values.iter().enumerate() {
-                let mut g_const = [0u128; N];
-                g_const[0] = g_i;
-                let g_poly = R::from_u128_coeffs(modulus, &g_const);
-                let scaled: R = *message * g_poly;
-                let sample = self.encrypt(&scaled, error_dist, prg);
-                core::ptr::addr_of_mut!((*ptr).samples[i]).write(sample);
-            }
+            self.encrypt_rlev_into(boxed.as_mut_ptr(), message, base, error_dist, prg);
             boxed.assume_init()
         }
     }
