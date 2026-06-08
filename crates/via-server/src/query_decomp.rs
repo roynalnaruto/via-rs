@@ -34,6 +34,11 @@ use zeroize::Zeroize;
 ///
 /// if `lwe_query.len() != (num_dmux + num_cmux + num_crot) * L_QUERY`.
 ///
+/// # Constant-time: No
+///
+/// Operates on the (public) compressed query and conversion keys; no
+/// secret-dependent branching. Timing varies only on the public modulus/depth.
+///
 /// `paper:primitives/query_comp.py:263-353`
 #[allow(clippy::too_many_arguments)]
 pub fn query_decomp<

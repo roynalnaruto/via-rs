@@ -82,8 +82,22 @@ use crate::resp_comp::resp_comp;
 ///
 /// # Noise
 ///
-/// Toy-param closure (the full cascade→…→ring-switch chain) is the job of the
-/// Task-31 e2e gate; paper-scale closure rides the P2 SPIKE budget.
+/// Toy-param closure (the full cascade→…→ring-switch chain) is verified by the
+/// `e2e_toy` gate; paper-scale closure rides the P2 SPIKE budget.
+///
+/// # Parallelism (GPU)
+///
+/// Steps 4 (FirstDim) and 5 (CMux) carry the bulk of the work — the FirstDim
+/// column MAC is the kernel boundary (via `RLWECiphertext::Mul`'s
+/// `negacyclic_mul_slice`), CMux is a log-depth gate tree. Both are sequential
+/// here; a batched GPU FirstDim would wrap [`first_dim`]. Each step is wrapped
+/// in a `tracing::debug_span!` (`step1_query_decomp` … `step7_resp_comp`) for
+/// per-step timing.
+///
+/// # Constant-time: No
+///
+/// The query ciphertexts and database are RLWE/RGSW-uniform; no secret data is
+/// branched on. `%`/division timing varies only on the public moduli.
 ///
 /// `paper:via_c/server.py:103-236`
 #[allow(
@@ -119,6 +133,15 @@ pub fn answer_one_query<
 where
     CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
 {
+    // Parent span; the seven step spans nest under it (held for the whole call,
+    // dropped on every return path including the early error guards).
+    let _span = tracing::debug_span!(
+        "answer_one_query",
+        num_rows = pp.num_rows,
+        num_cols = pp.num_cols
+    )
+    .entered();
+
     let params = &pp.params;
     let num_rows = pp.num_rows;
     let num_cols = pp.num_cols;
@@ -158,75 +181,89 @@ where
     let b_rsk = params.gadget_base_rsk; // ring-switch @ q3
 
     // --- Step 1: QueryDecomp — LWEs → 3 RGSW groups @ q1 ------------------
-    let dq = query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
-        &query.ciphertexts,
-        &pp.query_comp_key,
-        num_dmux,
-        num_cmux,
-        num_crot,
-        ck_base,
-        ck_base,
-        cascade,
-    );
+    let dq = tracing::debug_span!("step1_query_decomp").in_scope(|| {
+        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
+            &query.ciphertexts,
+            &pp.query_comp_key,
+            num_dmux,
+            num_cmux,
+            num_crot,
+            ck_base,
+            ck_base,
+            cascade,
+        )
+    });
 
     // --- Step 2: DMux @ q1 — trivial RLWE(Δ·1) demuxed to I slots ---------
-    let mut delta_coeffs = [0u128; N1];
-    delta_coeffs[0] = params.delta();
-    let delta_poly = R1::from_u128_coeffs(q1_mod, &delta_coeffs);
-    let trivial = RLWECiphertext::trivial(q1_mod, &delta_poly);
+    let dmux_out = tracing::debug_span!("step2_dmux").in_scope(|| {
+        let mut delta_coeffs = [0u128; N1];
+        delta_coeffs[0] = params.delta();
+        let delta_poly = R1::from_u128_coeffs(q1_mod, &delta_coeffs);
+        let trivial = RLWECiphertext::trivial(q1_mod, &delta_poly);
 
-    let zero_q1 = RLWECiphertext::new(R1::zero(q1_mod), R1::zero(q1_mod));
-    let mut dmux_out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; num_rows];
-    dmux_tree(&dq.dmux_bits, trivial, &mut dmux_out, b1, b1);
+        let zero_q1 = RLWECiphertext::new(R1::zero(q1_mod), R1::zero(q1_mod));
+        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; num_rows];
+        dmux_tree(&dq.dmux_bits, trivial, &mut out, b1, b1);
+        out
+    });
 
     // --- Step 3: ModSwitch q1 → q2, ×I -----------------------------------
-    let switched: Vec<RLWECiphertext<N1, R2>> = dmux_out
-        .iter()
-        .map(|ct| mod_switch_sym::<N1, R1, R2>(ct, q2_mod))
-        .collect();
-
-    // Lift the p-encoded DB to q2 (coefficient reinterpretation: values in
-    // [0,p) ⊂ [0,q2), no rescale).
-    let db_q2: Vec<Vec<R2>> = encoded_db
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|cell| {
-                    let mut c = [0u128; N1];
-                    cell.to_u128_coeffs(&mut c);
-                    R2::from_u128_coeffs(q2_mod, &c)
-                })
-                .collect()
-        })
-        .collect();
+    let switched = tracing::debug_span!("step3_mod_switch").in_scope(|| {
+        dmux_out
+            .iter()
+            .map(|ct| mod_switch_sym::<N1, R1, R2>(ct, q2_mod))
+            .collect::<Vec<RLWECiphertext<N1, R2>>>()
+    });
 
     // --- Step 4: FirstDim — Σ_i c_i · db[i][j] → J columns @ q2 -----------
-    let mut fd_results = first_dim::<N1, R2>(&switched, &db_q2, q2_mod);
+    let mut fd_results = tracing::debug_span!("step4_first_dim").in_scope(|| {
+        // Lift the p-encoded DB to q2 (coefficient reinterpretation: values in
+        // [0,p) ⊂ [0,q2), no rescale).
+        let db_q2: Vec<Vec<R2>> = encoded_db
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| {
+                        let mut c = [0u128; N1];
+                        cell.to_u128_coeffs(&mut c);
+                        R2::from_u128_coeffs(q2_mod, &c)
+                    })
+                    .collect()
+            })
+            .collect();
+        first_dim::<N1, R2>(&switched, &db_q2, q2_mod)
+    });
 
     // --- Step 5: CMux @ q2 (LSB-first) — select 1 column -----------------
-    let cmux_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
-        .cmux_bits
-        .iter()
-        .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
-        .collect();
-    let selected = cmux_tree(&cmux_q2, &mut fd_results, b2, b2);
+    let selected = tracing::debug_span!("step5_cmux").in_scope(|| {
+        let cmux_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
+            .cmux_bits
+            .iter()
+            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
+            .collect();
+        cmux_tree(&cmux_q2, &mut fd_results, b2, b2)
+    });
 
     // --- Step 6: CRot @ q2 (SlotExtract, LSB-first) — rotate target slot → 0
-    let crot_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
-        .crot_bits
-        .iter()
-        .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
-        .collect();
-    let rotated = crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2);
+    let rotated = tracing::debug_span!("step6_crot").in_scope(|| {
+        let crot_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
+            .crot_bits
+            .iter()
+            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
+            .collect();
+        crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
+    });
 
     // --- Step 7: RespComp — paper-asymmetric q2 → q3 → n2 → q4 ------------
-    let answer = resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
-        &rotated,
-        &pp.ring_switch_key,
-        q3_mod,
-        q4_mod,
-        b_rsk,
-    );
+    let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
+        resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
+            &rotated,
+            &pp.ring_switch_key,
+            q3_mod,
+            q4_mod,
+            b_rsk,
+        )
+    });
 
     Ok(answer)
 }
@@ -247,6 +284,11 @@ where
 /// The four moduli are stored (they cannot be reconstructed from
 /// [`PIRParams`](via_protocol::PIRParams) generically); the cascade function is
 /// supplied per `answer` call.
+///
+/// # Constant-time: No
+///
+/// Answering branches only on public data (query ciphertexts, the cleartext
+/// database); see [`answer_one_query`].
 pub struct Server<
     K: Zeroize,
     const N1: usize,

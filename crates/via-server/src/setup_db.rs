@@ -34,6 +34,11 @@ use via_primitives::algebra::ring::RingPoly;
 ///
 /// Compile-time (`_CHECK`): `N1 < N_REC` or `N1 % N_REC != 0`.
 ///
+/// # Constant-time: No
+///
+/// The database is public (the server holds it in the clear); coefficient
+/// arithmetic is data-independent apart from the public modulus.
+///
 /// `paper:via_c/params.py:157-208`
 pub fn setup_db<
     const N1: usize,

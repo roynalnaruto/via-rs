@@ -30,6 +30,26 @@ use via_primitives::encryption::types::RLWECiphertext;
 /// - `switched.len() != encoded_db.len()` (I mismatch).
 /// - `J == 0`, or any row's length `!= J`.
 ///
+/// # Noise
+///
+/// Each `c_i · db[i][j]` scales the ciphertext noise by `‖db[i][j]‖` (cell
+/// coefficients are in `[0,p)`); the `I` products sum, so the output noise is
+/// roughly `I·p·` the input noise. The downstream `mod_switch`/`ring_switch`
+/// budget (RespComp) must absorb it.
+///
+/// # Parallelism (GPU)
+///
+/// Each column `j` is independent — the `j`-loop and the inner negacyclic
+/// MAC map onto a 2-D grid `(thread_j, thread_coeff)`. The per-coefficient
+/// kernel boundary already exists in `via-primitives` as `negacyclic_mul_slice`
+/// (reached through `RLWECiphertext::Mul`); a batched GPU FirstDim would wrap
+/// this whole function. The CPU path is sequential.
+///
+/// # Constant-time: No
+///
+/// Operates on RLWE-uniform ciphertext and public database coefficients; no
+/// secret data is branched on.
+///
 /// `paper:via_c/server.py:174-186`
 pub fn first_dim<const N1: usize, Q2: RingPoly<N1>>(
     switched: &[RLWECiphertext<N1, Q2>],

@@ -37,6 +37,16 @@ use via_primitives::switching::ring_switch::ring_switch;
 /// `q4 / (2p)`. Toy params close (see tests); paper-scale closure rides on the
 /// P2 SPIKE budget.
 ///
+/// # Panics
+///
+/// The `ring_switch` step requires `N1 = N2·D` — enforced at compile time by
+/// `RingSwitchKey`'s `_CHECK` const when the key is built.
+///
+/// # Constant-time: No
+///
+/// Operates on RLWE-uniform ciphertext coefficients; no secret data is branched
+/// on. `%`/division timing varies only on the public moduli.
+///
 /// `paper:via.pdf Figure 7`
 #[allow(non_camel_case_types)]
 pub fn resp_comp<
