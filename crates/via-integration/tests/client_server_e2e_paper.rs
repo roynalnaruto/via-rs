@@ -77,6 +77,7 @@ fn paper_setup(prg: &mut Shake256Prg) -> (PaperClient, PaperPp) {
             gen_rsk::<N1, N2, R3N1, R3N2, L_RSK, D>(&s1_q3, sk2, 8, dist, prg)
         },
     )
+    .expect("client setup")
 }
 
 fn paper_params() -> PIRParams {
@@ -128,11 +129,13 @@ fn round_trip(index: usize) -> (Rec, Rec) {
     let server = PaperServer::setup::<Rec>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Query → Answer → Recover ----------------------------------------
-    let query = client.query(index, &mut prg);
+    let query = client.query(index, &mut prg).expect("client query");
     let answer = server
         .answer::<R3N1, _>(&query, lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>)
         .expect("server answer");
-    let recovered: Rec = client.recover::<R3N2, R4N2, Rec>(&answer, q3, q4, p);
+    let recovered: Rec = client
+        .recover::<R3N2, R4N2, Rec>(&answer, q3, q4, p)
+        .expect("client recover");
 
     (recovered, records[index])
 }

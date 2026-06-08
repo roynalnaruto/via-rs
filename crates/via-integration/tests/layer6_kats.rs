@@ -155,10 +155,11 @@ fn kat_query_comp() {
             let s1_q3 = rekey_secret_key::<N1, R8, R8>(sk1, q3_mod);
             gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, sk2, B_RSK, dist, prg)
         },
-    );
+    )
+    .expect("client setup");
 
     let query_prg = &mut Shake256Prg::new(b"layer6-kat-qc-query");
-    let query = client.query(5, query_prg);
+    let query = client.query(5, query_prg).expect("client query");
 
     // 3 bits × L_QUERY levels = 21 LWE ciphertexts, ct-major mask layout.
     assert_eq!(query.ciphertexts.len(), 21, "query length");

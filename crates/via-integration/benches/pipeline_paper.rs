@@ -127,10 +127,11 @@ fn build_fixture() -> Fixture {
         &mut prg,
         gen_lwe_to_rlwe_key_rns_n2048_boxed::<ViaCQ1Rns, L_CK>,
         gen_rsk_closure,
-    );
+    )
+    .expect("client setup");
     let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
     let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, NUM_ROWS, NUM_COLS, p);
-    let query = client.query(INDEX, &mut prg);
+    let query = client.query(INDEX, &mut prg).expect("client query");
     Fixture {
         client,
         pp,
@@ -302,7 +303,7 @@ fn paper_benches(c: &mut Criterion) {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-paper-e2e"),
             |mut prg| {
-                let query = fx.client.query(INDEX, &mut prg);
+                let query = fx.client.query(INDEX, &mut prg).expect("client query");
                 let ans = answer_one_query::<
                     N1,
                     N2,

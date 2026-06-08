@@ -112,16 +112,19 @@ fuzz_target!(|input: Input| {
             let s1_q3 = rekey_secret_key::<N1, R8, R8>(sk1, q3_mod);
             gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, sk2, B_RSK, dist, prg)
         },
-    );
+    )
+    .expect("client setup");
 
     let records: Vec<R4> = input.records.iter().map(|c| R4::new(p, *c)).collect();
     let server = ToyServer::setup::<R4>(&records, pp, q1, q2, q3, q4, p);
 
-    let query = client.query(input.index, &mut prg);
+    let query = client.query(input.index, &mut prg).expect("client query");
     let answer = server
         .answer::<R8, _>(&query, lwe_to_rlwe_n8::<DynModulus, L_CK>)
         .expect("server answer");
-    let recovered: R4 = client.recover::<R4, R4, R4>(&answer, q3, q4, p);
+    let recovered: R4 = client
+        .recover::<R4, R4, R4>(&answer, q3, q4, p)
+        .expect("client recover");
 
     assert_eq!(recovered, records[input.index], "e2e diverged at index {}", input.index);
 });
