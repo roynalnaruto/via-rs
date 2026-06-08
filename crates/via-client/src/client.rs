@@ -136,7 +136,15 @@ impl<
         // params). Read before `params` is moved into PublicParams.
         let dmux_base = params.gadget_base_1;
         let cmux_base = params.gadget_base_2;
-        let pp = PublicParams::new(qck, rsk, params, num_rows, num_cols, ck_base, L_CK);
+        let pp = PublicParams::new(
+            qck,
+            alloc::boxed::Box::new(rsk),
+            params,
+            num_rows,
+            num_cols,
+            ck_base,
+            L_CK,
+        );
 
         let client = Self {
             sk1,

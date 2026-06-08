@@ -132,7 +132,7 @@ fn key_bundle_constructs_redacts_zeroizes() {
         L_CK,
         L_RSK,
         D,
-    >::new(qck2, rsk, TOY_PARAMS, 2, 2, 2, L_CK);
+    >::new(qck2, alloc::boxed::Box::new(rsk), TOY_PARAMS, 2, 2, 2, L_CK);
     assert!(alloc::format!("{pp:?}").contains("<redacted>"));
     assert_eq!(pp.num_rows, 2);
 

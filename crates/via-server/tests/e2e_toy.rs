@@ -113,7 +113,15 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize, via_server: bool) 
         None,
         40,
     );
-    let pp = PublicParams::new(qck, rsk, params, NUM_ROWS, NUM_COLS, CK_BASE, L_CK);
+    let pp = PublicParams::new(
+        qck,
+        Box::new(rsk),
+        params,
+        NUM_ROWS,
+        NUM_COLS,
+        CK_BASE,
+        L_CK,
+    );
 
     // --- Database: d·I·J = 8 distinct records ----------------------------
     let records: Vec<R4> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();

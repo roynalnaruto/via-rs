@@ -484,7 +484,15 @@ mod tests {
             None,
             40,
         );
-        let pp = PublicParams::new(qck, rsk, params, num_rows, num_cols, ck_base, L_CK);
+        let pp = PublicParams::new(
+            qck,
+            alloc::boxed::Box::new(rsk),
+            params,
+            num_rows,
+            num_cols,
+            ck_base,
+            L_CK,
+        );
 
         let db = crate::setup_db::setup_db::<N1, N2, R8, R4>(records, num_rows, num_cols, p);
         (pp, db, s1, s2, q1, q2, q3, q4, p)
