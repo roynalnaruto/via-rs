@@ -114,7 +114,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         }
     }
 
-    /// Heap-allocating wrapper over [`encrypt_rlev_into`](Self::encrypt_rlev_into):
+    /// Heap-allocating wrapper over the crate-private `encrypt_rlev_into`:
     /// the full `[RLWECiphertext; L]` array (≈ 1.125 MiB at the paper depth-18
     /// n=2048 conversion key) is built straight into the `Box`, never on the
     /// stack. Byte-identical to [`encrypt_rlev`](Self::encrypt_rlev).
