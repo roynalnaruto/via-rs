@@ -142,16 +142,24 @@ fn round_trip(index: usize) -> (Rec, Rec) {
 #[test]
 #[ignore = "paper-scale n2048 RNS pipeline — heavy; run with --release -- --ignored"]
 fn client_server_e2e_paper_scale_index_15() {
-    // Stack-size knob for bisecting the tightest-passing stack without
-    // recompiling: VIA_E2E_STACK_MB=N selects N MiB (default 32). Measured
-    // baseline (pre-optimization): the full n2048 pipeline needs ~13.5 MB
-    // (8 MB overflows, 14 MB passes), driven by Client::setup keygen moving the
-    // inline ~1.125 MiB conv-key RLev by value. A spawn is required regardless
-    // (the default test thread is only ~2 MB).
+    // Default 6 MB stack (2× margin over the measured ~3 MB tightest). Override
+    // with VIA_E2E_STACK_MB=N to bisect without recompiling.
+    //
+    // The `perf/client-keygen` work cut the requirement from ~12 MB to ~3 MB by
+    // heap-building the per-S1 keys (conv-key RLev, ring-switch key) and the
+    // cascade key per-sample, so keygen no longer moves ~MiB blocks by value
+    // (setup-only is now ~2 MB). The residual ~3 MB is the answer phase, driven
+    // by the depth-18 RNS cascade operation (~2 MB) — the summed O(N) stack
+    // scratch along its `cascade → conv_step → key_switch → gadget_product`
+    // chain, not data liveness or inlining (both ruled out by measurement).
+    // Pushing under the 2 MB default would mean heap-ifying that hot-path
+    // scratch, a poor time-for-stack trade in the compute-bound answer; a small
+    // explicit stack is the right call. A spawn is needed regardless (the
+    // default test thread is ~2 MB).
     let stack_mb: usize = std::env::var("VIA_E2E_STACK_MB")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(32);
+        .unwrap_or(6);
     std::thread::Builder::new()
         .stack_size(stack_mb << 20)
         .spawn(|| {
@@ -176,7 +184,7 @@ fn client_setup_only_paper_scale() {
     let stack_mb: usize = std::env::var("VIA_E2E_STACK_MB")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(32);
+        .unwrap_or(6);
     std::thread::Builder::new()
         .stack_size(stack_mb << 20)
         .spawn(|| {
