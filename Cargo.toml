@@ -8,6 +8,7 @@ members = [
     "crates/via-protocol",
     "crates/via-client",
     "crates/via-server",
+    "crates/via-integration",
 ]
 exclude = ["fuzz"]
 
