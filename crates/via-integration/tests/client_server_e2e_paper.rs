@@ -28,7 +28,7 @@ use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
-use via_protocol::{KeyDist, PIRParams};
+use via_protocol::{KeyDist, PIRParams, PublicParams};
 use via_server::Server;
 
 const N1: usize = 2048;
@@ -54,6 +54,30 @@ type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
 type PaperServer = Server<K, N1, N2, R1, R2N1, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperPp = PublicParams<K, N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
+
+/// Client `setup` (the keygen-heavy phase) factored out for reuse by both the
+/// full round-trip and the setup-only stack-attribution test.
+fn paper_setup(prg: &mut Shake256Prg) -> (PaperClient, PaperPp) {
+    PaperClient::setup(
+        ViaCQ1Rns::default(),
+        ViaCQ3::default(),
+        paper_params(),
+        NUM_ROWS,
+        NUM_COLS,
+        CK_BASE,
+        Distribution::Ternary,
+        Distribution::Ternary,
+        Distribution::Ternary,
+        prg,
+        gen_lwe_to_rlwe_key_rns_n2048_boxed::<ViaCQ1Rns, L_CK>,
+        |sk1, sk2, dist, prg| {
+            let q3_mod = RingPoly::modulus(sk2.poly());
+            let s1_q3 = rekey_secret_key::<N1, R1, R3N1>(sk1, q3_mod);
+            gen_rsk::<N1, N2, R3N1, R3N2, L_RSK, D>(&s1_q3, sk2, 8, dist, prg)
+        },
+    )
+}
 
 fn paper_params() -> PIRParams {
     PIRParams::new(
@@ -97,25 +121,7 @@ fn round_trip(index: usize) -> (Rec, Rec) {
     let mut prg = Shake256Prg::new(b"via-c-paper-scale-e2e");
 
     // --- Client setup ----------------------------------------------------
-    let (client, pp) = PaperClient::setup(
-        q1,
-        q3,
-        paper_params(),
-        NUM_ROWS,
-        NUM_COLS,
-        CK_BASE,
-        Distribution::Ternary,
-        Distribution::Ternary,
-        Distribution::Ternary,
-        &mut prg,
-        // The boxed cascade-key builder (heap, ~24.75 MB) returns Box<K> directly.
-        gen_lwe_to_rlwe_key_rns_n2048_boxed::<ViaCQ1Rns, L_CK>,
-        |sk1, sk2, dist, prg| {
-            let q3_mod = RingPoly::modulus(sk2.poly());
-            let s1_q3 = rekey_secret_key::<N1, R1, R3N1>(sk1, q3_mod);
-            gen_rsk::<N1, N2, R3N1, R3N2, L_RSK, D>(&s1_q3, sk2, 8, dist, prg)
-        },
-    );
+    let (client, pp) = paper_setup(&mut prg);
 
     // --- Server setup ----------------------------------------------------
     let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
@@ -158,4 +164,27 @@ fn client_server_e2e_paper_scale_index_15() {
         .expect("spawn paper-scale thread")
         .join()
         .expect("paper-scale e2e thread panicked");
+}
+
+/// Setup-only stack attribution: run just `Client::setup` (the keygen phase)
+/// and black-box the result, so its stack can be bisected in isolation
+/// (`VIA_E2E_STACK_MB`). Comparing this against the full pipeline tells us how
+/// much of the requirement is keygen vs the answer pipeline.
+#[test]
+#[ignore = "paper-scale setup-only stack attribution; run with --release -- --ignored"]
+fn client_setup_only_paper_scale() {
+    let stack_mb: usize = std::env::var("VIA_E2E_STACK_MB")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(32);
+    std::thread::Builder::new()
+        .stack_size(stack_mb << 20)
+        .spawn(|| {
+            let mut prg = Shake256Prg::new(b"via-c-paper-setup-only");
+            let (client, pp) = paper_setup(&mut prg);
+            core::hint::black_box((&client, &pp));
+        })
+        .expect("spawn setup-only thread")
+        .join()
+        .expect("setup-only thread panicked");
 }
