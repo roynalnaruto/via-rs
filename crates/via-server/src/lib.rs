@@ -10,11 +10,13 @@
 
 extern crate alloc;
 
+pub mod answer;
 pub mod first_dim;
 pub mod query_decomp;
 pub mod resp_comp;
 pub mod setup_db;
 
+pub use answer::answer_one_query;
 pub use first_dim::first_dim;
 pub use query_decomp::query_decomp;
 pub use resp_comp::resp_comp;
