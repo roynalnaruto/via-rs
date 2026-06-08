@@ -131,7 +131,10 @@ mod tests {
             gen_lwe_to_rlwe_key_n8(&sk, BASE, Distribution::Ternary, &mut prg);
         let conv_key =
             gen_rlwe_to_rgsw_key::<N1, R8, L_CK>(&sk, BASE, Distribution::Ternary, &mut prg);
-        let comp_key = QueryCompressionKey::new(alloc::boxed::Box::new(cascade_key), conv_key);
+        let comp_key = QueryCompressionKey::new(
+            alloc::boxed::Box::new(cascade_key),
+            alloc::boxed::Box::new(conv_key),
+        );
 
         // 10 trivial-zero LWEs (shape only — decrypt-correctness is the e2e test).
         let zero_lwe = encrypt_lwe(&sk, 0u64, 16, Distribution::Ternary, &mut prg);
@@ -163,7 +166,10 @@ mod tests {
             gen_lwe_to_rlwe_key_n8(&sk, BASE, Distribution::Ternary, &mut prg);
         let conv_key =
             gen_rlwe_to_rgsw_key::<N1, R8, L_CK>(&sk, BASE, Distribution::Ternary, &mut prg);
-        let comp_key = QueryCompressionKey::new(alloc::boxed::Box::new(cascade_key), conv_key);
+        let comp_key = QueryCompressionKey::new(
+            alloc::boxed::Box::new(cascade_key),
+            alloc::boxed::Box::new(conv_key),
+        );
         let zero_lwe = encrypt_lwe(&sk, 0u64, 16, Distribution::Ternary, &mut prg);
         let lwe_query = alloc::vec![zero_lwe; 9]; // not 10
 

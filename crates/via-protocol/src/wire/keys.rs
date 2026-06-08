@@ -30,16 +30,21 @@ pub struct QueryCompressionKey<K: Zeroize, const N1: usize, R1: RingPoly<N1>, co
     /// LWE→RLWE conversion (cascade) key, heap-boxed to avoid a ~24.75 MB
     /// by-value stack transit when the caller hands it over.
     pub lwe_to_rlwe_key: Box<K>,
-    /// $\mathrm{RLev}_{S_1}(S_1^2)$ — the RLWE→RGSW conversion key at depth `L_CK`.
-    pub rlwe_to_rgsw_key: RLevCiphertext<N1, R1, L_CK>,
+    /// $\mathrm{RLev}_{S_1}(S_1^2)$ — the RLWE→RGSW conversion key at depth
+    /// `L_CK`, heap-boxed (≈ 1.125 MiB at paper depth 18 / n=2048) to keep it
+    /// off the stack across the `setup → PublicParams → Server::setup` hand-off.
+    pub rlwe_to_rgsw_key: Box<RLevCiphertext<N1, R1, L_CK>>,
 }
 
 impl<K: Zeroize, const N1: usize, R1: RingPoly<N1>, const L_CK: usize>
     QueryCompressionKey<K, N1, R1, L_CK>
 {
-    /// Construct a `QueryCompressionKey` from its two halves. The cascade key
-    /// must be supplied box-wrapped (avoids a large by-value stack transit).
-    pub fn new(lwe_to_rlwe_key: Box<K>, rlwe_to_rgsw_key: RLevCiphertext<N1, R1, L_CK>) -> Self {
+    /// Construct a `QueryCompressionKey` from its two halves. Both keys must be
+    /// supplied box-wrapped (avoids large by-value stack transits).
+    pub fn new(
+        lwe_to_rlwe_key: Box<K>,
+        rlwe_to_rgsw_key: Box<RLevCiphertext<N1, R1, L_CK>>,
+    ) -> Self {
         Self {
             lwe_to_rlwe_key,
             rlwe_to_rgsw_key,
@@ -117,7 +122,11 @@ pub struct PublicParams<
     /// $R_{N_1, q_3}$ to $R_{N_2, q_3}$ (paper Lemma C.5 — the key is built and
     /// operates at $q_3$; the $q_2$ in the security proof's Hyb1 is only the
     /// indistinguishability target, not the generation modulus).
-    pub ring_switch_key: RingSwitchKey<N1, N2, R2, L_RSK, D>,
+    ///
+    /// Heap-boxed so it does not transit the stack by value through the
+    /// `setup → PublicParams → Server::setup` hand-off (small at toy scale,
+    /// ~0.25 MiB at paper scale — boxed for consistency with the conv key).
+    pub ring_switch_key: Box<RingSwitchKey<N1, N2, R2, L_RSK, D>>,
     /// Runtime parameter sidecar (moduli, bases, distributions).
     pub params: PIRParams,
     /// Number of rows $I$ in the database matrix.
@@ -153,7 +162,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         query_comp_key: QueryCompressionKey<K, N1, R1, L_CK>,
-        ring_switch_key: RingSwitchKey<N1, N2, R2, L_RSK, D>,
+        ring_switch_key: Box<RingSwitchKey<N1, N2, R2, L_RSK, D>>,
         params: PIRParams,
         num_rows: usize,
         num_cols: usize,
@@ -267,7 +276,7 @@ mod tests {
     fn query_compression_key_constructs_and_debug_redacts() {
         let qck = QueryCompressionKey::<StubKey, N1, ViaCPolyQ1Rns<N1>, L_CK>::new(
             Box::new(StubKey(42)),
-            zero_rlev_q1(),
+            Box::new(zero_rlev_q1()),
         );
         let dbg = alloc::format!("{qck:?}");
         assert!(dbg.contains("<redacted>"));
@@ -278,7 +287,7 @@ mod tests {
     fn query_compression_key_zeroize_clears_stub() {
         let mut qck = QueryCompressionKey::<StubKey, N1, ViaCPolyQ1Rns<N1>, L_CK>::new(
             Box::new(StubKey(99)),
-            zero_rlev_q1(),
+            Box::new(zero_rlev_q1()),
         );
         qck.zeroize();
         assert_eq!(qck.lwe_to_rlwe_key.0, 0, "stub was not zeroized");
@@ -288,7 +297,7 @@ mod tests {
     fn public_params_constructs_and_cross_asserts() {
         let qck = QueryCompressionKey::<StubKey, N1, ViaCPolyQ1Rns<N1>, L_CK>::new(
             Box::new(StubKey(7)),
-            zero_rlev_q1(),
+            Box::new(zero_rlev_q1()),
         );
         // L_QUERY = 20 matches TOY_PARAMS.gadget_depth_1.
         let pp = PublicParams::<
@@ -303,7 +312,7 @@ mod tests {
             D,
         >::new(
             qck,
-            zero_rsk(),
+            Box::new(zero_rsk()),
             TOY_PARAMS,
             2,    // num_rows = TOY_I
             2,    // num_cols = TOY_J
