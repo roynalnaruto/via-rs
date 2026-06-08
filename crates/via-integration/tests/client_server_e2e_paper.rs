@@ -136,14 +136,18 @@ fn round_trip(index: usize) -> (Rec, Rec) {
 #[test]
 #[ignore = "paper-scale n2048 RNS pipeline — heavy; run with --release -- --ignored"]
 fn client_server_e2e_paper_scale_index_15() {
-    // 32 MB stack. The boxed cascade-key *builder* stays under ~2.4 MB (its
-    // whole point), but the full n2048 *pipeline* peaks higher: the depth-18
-    // RNS cascade's per-step keyswitch decomposition buffers, run 8× inside
-    // `server.answer`, dominate. Measured: 8 MB overflows, 16 MB passes — so the
-    // real peak is ~8–16 MB; 32 MB is a comfortable margin. (The 2 MB default
-    // test thread is far too small, so a spawn is required regardless.)
+    // Stack-size knob for bisecting the tightest-passing stack without
+    // recompiling: VIA_E2E_STACK_MB=N selects N MiB (default 32). Measured
+    // baseline (pre-optimization): the full n2048 pipeline needs ~13.5 MB
+    // (8 MB overflows, 14 MB passes), driven by Client::setup keygen moving the
+    // inline ~1.125 MiB conv-key RLev by value. A spawn is required regardless
+    // (the default test thread is only ~2 MB).
+    let stack_mb: usize = std::env::var("VIA_E2E_STACK_MB")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(32);
     std::thread::Builder::new()
-        .stack_size(32 << 20)
+        .stack_size(stack_mb << 20)
         .spawn(|| {
             let (got, want) = round_trip(15);
             assert_eq!(
