@@ -31,8 +31,7 @@ use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams, QueryCompressionKey};
-use via_server::answer_one_query;
-use via_server::setup_db;
+use via_server::{Server, answer_one_query, setup_db};
 
 const N1: usize = 8;
 const N2: usize = 4;
@@ -68,7 +67,11 @@ fn record(m: usize, p: DynModulus) -> R4 {
 }
 
 /// Run the full pipeline selecting `(i, j, k)` and return `(recovered, expected)`.
-fn run_e2e(target_i: usize, target_j: usize, target_k: usize) -> (R4, R4) {
+///
+/// `via_server == true` routes through the [`Server`] struct (`setup` +
+/// `answer`); `false` calls [`setup_db`] + [`answer_one_query`] directly. Both
+/// paths must agree.
+fn run_e2e(target_i: usize, target_j: usize, target_k: usize, via_server: bool) -> (R4, R4) {
     let q1 = DynModulus::new(Q1);
     let q2 = DynModulus::new(Q2);
     let q3 = DynModulus::new(Q3);
@@ -128,7 +131,14 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize) -> (R4, R4) {
     let query = CompressedQuery::new(lwes);
 
     // --- Answer + recover ------------------------------------------------
-    let answer =
+    let answer = if via_server {
+        let server = Server::<Cascade, N1, N2, R8, R8, R4, R4, R8, L_QUERY, L_CK, L_RSK, D>::setup::<
+            R4,
+        >(&records, pp, q1, q2, q3, q4, p);
+        server
+            .answer::<R8, _>(&query, lwe_to_rlwe_n8::<DynModulus, L_CK>)
+            .expect("server answer")
+    } else {
         answer_one_query::<N1, N2, R8, R8, R8, R4, R4, R8, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
             &query,
             &pp,
@@ -139,7 +149,8 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize) -> (R4, R4) {
             q4,
             lwe_to_rlwe_n8::<DynModulus, L_CK>,
         )
-        .expect("answer");
+        .expect("answer")
+    };
     let recovered: R4 = s2.decrypt_asymmetric(&answer, q3, q4, p);
 
     let flat = target_k * NUM_ROWS * NUM_COLS + target_i * NUM_COLS + target_j;
@@ -149,34 +160,43 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize) -> (R4, R4) {
 /// Index 0 (all query bits zero) — isolates noise closure from bit-selection.
 #[test]
 fn e2e_toy_recovers_index_000() {
-    let (got, want) = run_e2e(0, 0, 0);
+    let (got, want) = run_e2e(0, 0, 0, false);
     assert_eq!(got, want, "select (0,0,0) → record[0]");
 }
 
 /// DMux bit set (`i=1`) — selects row 1 → `record[2]`.
 #[test]
 fn e2e_toy_recovers_index_100() {
-    let (got, want) = run_e2e(1, 0, 0);
+    let (got, want) = run_e2e(1, 0, 0, false);
     assert_eq!(got, want, "select (i=1,j=0,k=0) → record[2]");
 }
 
 /// CMux bit set (`j=1`) — selects column 1 → `record[1]`.
 #[test]
 fn e2e_toy_recovers_index_010() {
-    let (got, want) = run_e2e(0, 1, 0);
+    let (got, want) = run_e2e(0, 1, 0, false);
     assert_eq!(got, want, "select (i=0,j=1,k=0) → record[1]");
 }
 
 /// CRot bit set (`k=1`) — extracts slot 1 → `record[4]`.
 #[test]
 fn e2e_toy_recovers_index_001() {
-    let (got, want) = run_e2e(0, 0, 1);
+    let (got, want) = run_e2e(0, 0, 1, false);
     assert_eq!(got, want, "select (i=0,j=0,k=1) → record[4]");
 }
 
 /// All bits set (`i=j=k=1`) — `record[7]`; exercises every gate together.
 #[test]
 fn e2e_toy_recovers_index_111() {
-    let (got, want) = run_e2e(1, 1, 1);
+    let (got, want) = run_e2e(1, 1, 1, false);
     assert_eq!(got, want, "select (1,1,1) → record[7]");
+}
+
+/// Same pipeline routed through the [`Server`] struct (`setup` + `answer`):
+/// select `(i=0,j=1,k=1)` → `record[5]`. Locks that `Server` delegates to
+/// `answer_one_query` identically and stays decrypt-correct.
+#[test]
+fn e2e_toy_via_server_struct_recovers_record() {
+    let (got, want) = run_e2e(0, 1, 1, true);
+    assert_eq!(got, want, "Server::answer select (0,1,1) → record[5]");
 }

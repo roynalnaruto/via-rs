@@ -231,6 +231,122 @@ where
     Ok(answer)
 }
 
+/// A VIA-C server: public parameters + the pre-encoded database + the four ring
+/// moduli, bundled so the caller issues `server.answer(&query, cascade)` instead
+/// of the 9-argument [`answer_one_query`].
+///
+/// The engine is generic over the ring backend (toy single-prime `Poly` or
+/// paper RNS `PolyRns`); [`Server::answer`] returns the raw paper-asymmetric
+/// [`ModSwitchedCiphertext`]. The wire type `via_protocol::CompressedAnswer` is
+/// **locked to the paper q3/q4 rings** (the VIA-C answer is always at paper
+/// moduli), so the paper instantiation wraps the result —
+/// `CompressedAnswer::new(server.answer(&q, cascade)?)` — at the wire boundary;
+/// the generic `Server` stays one rung below it (and so is testable at the toy
+/// rings). VIA-B (Layer 7) will likewise wrap [`answer_one_query`] directly.
+///
+/// The four moduli are stored (they cannot be reconstructed from
+/// [`PIRParams`](via_protocol::PIRParams) generically); the cascade function is
+/// supplied per `answer` call.
+pub struct Server<
+    K: Zeroize,
+    const N1: usize,
+    const N2: usize,
+    R1: RingPoly<N1>,
+    R2: RingPoly<N1>,
+    R3: RingPoly<N2>,
+    R4: RingPoly<N2>,
+    Rp: RingPoly<N1>,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> {
+    public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
+    encoded_db: Vec<Vec<Rp>>,
+    q1_mod: R1::Modulus,
+    q2_mod: R2::Modulus,
+    q3_mod: R3::Modulus,
+    q4_mod: R4::Modulus,
+}
+
+impl<
+    K: Zeroize,
+    const N1: usize,
+    const N2: usize,
+    R1: RingPoly<N1>,
+    R2: RingPoly<N1>,
+    R3: RingPoly<N2>,
+    R4: RingPoly<N2>,
+    Rp: RingPoly<N1>,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> Server<K, N1, N2, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>
+{
+    /// Build a server from raw `p`-encoded records and public parameters.
+    ///
+    /// Encodes the `I×J` database via [`setup_db`](crate::setup_db()) (packing
+    /// `d = N1/N2` records per cell at modulus `p`); the per-query lift `p → q2`
+    /// happens inside [`answer`](Server::answer). `RRec` is the record ring at
+    /// `(p, n2)`; `p_mod` is its modulus.
+    #[allow(clippy::too_many_arguments)]
+    pub fn setup<RRec>(
+        records: &[RRec],
+        public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
+        q1_mod: R1::Modulus,
+        q2_mod: R2::Modulus,
+        q3_mod: R3::Modulus,
+        q4_mod: R4::Modulus,
+        p_mod: Rp::Modulus,
+    ) -> Self
+    where
+        RRec: RingPoly<N2, Modulus = Rp::Modulus, Embedded<N1> = Rp>,
+    {
+        let encoded_db = crate::setup_db::setup_db::<N1, N2, Rp, RRec>(
+            records,
+            public_params.num_rows,
+            public_params.num_cols,
+            p_mod,
+        );
+        Self {
+            public_params,
+            encoded_db,
+            q1_mod,
+            q2_mod,
+            q3_mod,
+            q4_mod,
+        }
+    }
+
+    /// Run the 7-step answer pipeline for one query (delegates to
+    /// [`answer_one_query`]; see it for the error conditions).
+    ///
+    /// `R3L` is the `q3`-at-`n1` `mod_switch_sym` intermediate
+    /// (`Projected<N2> = R3`); supply it at the call site (toy: the `q3` ring at
+    /// `n1`; paper: `ViaCPolyQ3` at `n1`).
+    pub fn answer<R3L, CascadeFn>(
+        &self,
+        query: &CompressedQuery<N1, 1, R1::Projected<1>>,
+        cascade: CascadeFn,
+    ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
+    where
+        R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
+        CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    {
+        answer_one_query::<N1, N2, R1, R2, R3L, R3, R4, Rp, K, L_QUERY, L_CK, L_RSK, D, CascadeFn>(
+            query,
+            &self.public_params,
+            &self.encoded_db,
+            self.q1_mod,
+            self.q2_mod,
+            self.q3_mod,
+            self.q4_mod,
+            cascade,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
