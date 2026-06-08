@@ -10,6 +10,9 @@
 
 extern crate alloc;
 
+pub mod client;
 pub mod decompose;
+pub mod query;
 
+pub use client::Client;
 pub use decompose::decompose_index;
