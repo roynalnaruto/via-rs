@@ -10,6 +10,8 @@
 
 extern crate alloc;
 
+pub mod query_decomp;
 pub mod setup_db;
 
+pub use query_decomp::query_decomp;
 pub use setup_db::setup_db;
