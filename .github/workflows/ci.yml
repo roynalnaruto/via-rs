@@ -44,8 +44,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # `--lib --bins --tests` runs unit + integration tests only. NOT
+      # `--all-targets`: that also expands to `--benches`, which *runs* every
+      # criterion bench once in test mode — including the heavy paper-scale
+      # `pipeline_paper` (full n2048 fixture + all steps). Benches are still
+      # compile-checked by the lint-and-build job (`build`/`clippy --all-targets`).
+      # `#[ignore]`d tests (paper e2e, cascade SPIKE) are skipped by default.
       - name: Unit + integration tests
-        run: cargo test --all-targets
+        run: cargo test --lib --bins --tests
 
       - name: Doctests
         run: cargo test --doc
