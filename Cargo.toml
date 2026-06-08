@@ -20,6 +20,10 @@ sha3        = { version = "0.10", default-features = false }
 subtle      = { version = "2.6",  default-features = false }
 zeroize     = { version = "1.8",  default-features = false, features = ["derive"] }
 tracing     = { version = "0.1",  default-features = false }
+# Benchmarking (dev-only). `cargo_bench_support` enables the `cargo bench`
+# harness + `--save-baseline`/`--baseline` regression comparison; plotting deps
+# are dropped (the textual report is what the perf gate uses).
+criterion   = { version = "0.5",  default-features = false, features = ["cargo_bench_support"] }
 
 # ---------- internal ----------
 via-primitives = { path = "crates/via-primitives",                       version = "0.1.0" }

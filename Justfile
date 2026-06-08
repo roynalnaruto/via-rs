@@ -20,6 +20,29 @@ build *FLAGS:
 test *FLAGS:
     cargo test {{FLAGS}}
 
+# ─── bench ───────────────────────────────────────────────────────────────
+#
+# Per-step + full-pipeline perf benchmarks (criterion). Use the save/compare
+# pair to justify a change: `just bench-save before`, make the change, then
+# `just bench-cmp before` — criterion reports each step's % delta + whether it
+# is a statistically significant regression.
+
+# Run the fast (toy-scale) per-step benchmark suite (seconds).
+bench:
+    cargo bench --bench pipeline_toy
+
+# Run the paper-scale suite (n2048 RNS; reduced sampling; minutes) — on demand.
+bench-paper:
+    cargo bench --bench pipeline_paper
+
+# Save the current fast-suite timings as a named baseline (run BEFORE a change).
+bench-save NAME="main":
+    cargo bench --bench pipeline_toy -- --save-baseline {{NAME}}
+
+# Compare current fast-suite timings against a saved baseline (run AFTER a change).
+bench-cmp NAME="main":
+    cargo bench --bench pipeline_toy -- --baseline {{NAME}}
+
 # ─── docs ────────────────────────────────────────────────────────────────
 
 # Build rustdoc for via-primitives (KaTeX math rendering) and open in a browser.

@@ -13,6 +13,16 @@ via-primitives = { workspace = true, features = ["alloc"] }
 via-protocol   = { workspace = true, features = ["alloc"] }
 via-client     = { path = "../via-client" }
 via-server     = { path = "../via-server" }
+criterion      = { workspace = true }
+
+# Per-step + full-pipeline perf benchmarks (see benches/ and `just bench`).
+[[bench]]
+name    = "pipeline_toy"
+harness = false
+
+[[bench]]
+name    = "pipeline_paper"
+harness = false
 
 [lints]
 workspace = true

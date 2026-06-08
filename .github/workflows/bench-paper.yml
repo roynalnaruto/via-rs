@@ -1,0 +1,41 @@
+name: Bench (paper, manual)
+
+# Manually triggered ONLY. The paper-scale (n2048 RNS, depth-18 cascade) suite
+# is heavy (~15 min) and must never run on push/PR — use it on demand to get
+# authoritative per-step numbers at the real parameters.
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Criterion bench-id substring (blank = whole paper suite; e.g. '07_resp_comp')"
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench-paper:
+    name: Paper-scale benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # An empty filter is the substring "" — criterion matches every bench.
+      - name: Run paper-scale pipeline benchmarks
+        run: cargo bench --bench pipeline_paper -- "${{ inputs.filter }}"
+
+      # Per-step timings + criterion HTML reports, downloadable from the run.
+      - name: Upload criterion reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-paper-report
+          path: target/criterion/
+          if-no-files-found: warn
