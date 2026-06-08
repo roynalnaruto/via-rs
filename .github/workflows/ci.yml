@@ -118,3 +118,22 @@ jobs:
           if cargo tree --package via-server 2>&1 | grep -q "via-client"; then
             echo "FAIL: via-server transitively depends on via-client"; exit 1
           fi
+
+  # ─── 6. Benchmarks (informational; non-blocking) ──────────────────────────
+  # Runs the fast (toy-scale) per-step pipeline benchmarks and surfaces the
+  # timings in the log so PRs reveal perf shifts. `continue-on-error` keeps it
+  # non-blocking — shared-runner noise makes hard gating unreliable; the
+  # authoritative regression check is the local `just bench-save`/`bench-cmp`
+  # baseline compare (and `just bench-paper` at paper scale).
+  bench:
+    name: Bench (informational)
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Fast per-step pipeline benchmarks
+        run: cargo bench --bench pipeline_toy
