@@ -7,3 +7,9 @@
 #![cfg_attr(not(feature = "alloc"), no_std)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![warn(missing_docs)]
+
+extern crate alloc;
+
+pub mod decompose;
+
+pub use decompose::decompose_index;
