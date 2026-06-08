@@ -124,6 +124,3 @@ jobs:
           if cargo tree --package via-server 2>&1 | grep -q "via-client"; then
             echo "FAIL: via-server transitively depends on via-client"; exit 1
           fi
-
-  # Benchmarks (informational; non-blocking) live in their own workflow — see
-  # `.github/workflows/bench.yml`. The paper-scale suite is `bench-paper.yml`.
