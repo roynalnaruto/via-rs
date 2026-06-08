@@ -108,7 +108,7 @@ fn key_bundle_constructs_redacts_zeroizes() {
     let rlev = RLevCiphertext::new([RLWECiphertext::new(z, z); L_CK]);
     let mut qck = QueryCompressionKey::<StubKey, N1, ViaCPolyQ1Rns<N1>, L_CK>::new(
         alloc::boxed::Box::new(StubKey(0xABCD)),
-        rlev,
+        alloc::boxed::Box::new(rlev),
     );
     let dbg = alloc::format!("{qck:?}");
     assert!(dbg.contains("<redacted>") && !dbg.contains("ABCD"));
@@ -120,7 +120,7 @@ fn key_bundle_constructs_redacts_zeroizes() {
 
     let qck2 = QueryCompressionKey::<StubKey, N1, ViaCPolyQ1Rns<N1>, L_CK>::new(
         alloc::boxed::Box::new(StubKey(1)),
-        RLevCiphertext::new([RLWECiphertext::new(z, z); L_CK]),
+        alloc::boxed::Box::new(RLevCiphertext::new([RLWECiphertext::new(z, z); L_CK])),
     );
     let pp = PublicParams::<
         StubKey,

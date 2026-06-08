@@ -41,4 +41,6 @@ pub use mux::{cmux_tree, dmux_tree};
 pub use rotate::{CRotDir, crot};
 
 // Part 3 — conversion (§4.6 rlwe_to_rgsw, §4.7 mod_switch_rgsw).
+#[cfg(feature = "alloc")]
+pub use convert::gen_rlwe_to_rgsw_key_boxed;
 pub use convert::{gen_rlwe_to_rgsw_key, mod_switch_rgsw, rlwe_to_rgsw};

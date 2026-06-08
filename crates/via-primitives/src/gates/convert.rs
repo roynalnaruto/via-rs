@@ -63,6 +63,21 @@ pub fn gen_rlwe_to_rgsw_key<const N: usize, R: RingPoly<N>, const L: usize>(
     sk.encrypt_rlev::<L>(&s_squared, base, error_dist, prg)
 }
 
+/// Heap-building sibling of [`gen_rlwe_to_rgsw_key`]: builds
+/// $\mathrm{RLev}_{S}(S^2)$ directly into a `Box` (never assembling the
+/// ~1.125 MiB depth-18 n=2048 RLev on the stack). PRG draws are byte-identical
+/// to the by-value version.
+#[cfg(feature = "alloc")]
+pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize>(
+    sk: &SecretKey<N, R>,
+    base: u64,
+    error_dist: Distribution,
+    prg: &mut Shake256Prg,
+) -> alloc::boxed::Box<RLevCiphertext<N, R, L>> {
+    let s_squared = *sk.poly() * *sk.poly();
+    sk.encrypt_rlev_boxed::<L>(&s_squared, base, error_dist, prg)
+}
+
 /// §4.6 — Convert per-gadget-level RLWE ciphertexts `rlwe_levels[i] =
 /// RLWE_S(M·g[i])` into an `RGSW_S(M)` using the conversion key `conv_key =
 /// RLev_S(S^2)`.
@@ -228,6 +243,25 @@ mod tests {
         let expected = sk.encrypt_rlev::<L>(&s2, 2, Distribution::Ternary, &mut prg2);
 
         assert_eq!(key.samples, expected.samples);
+    }
+
+    /// The heap-building `gen_rlwe_to_rgsw_key_boxed` produces a byte-identical
+    /// key to the by-value `gen_rlwe_to_rgsw_key` (PRG-order parity).
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn gen_rlwe_to_rgsw_key_boxed_matches_by_value() {
+        type Q = Poly<4, PowerOfTwoModulus<10>, Coefficient>;
+        const L: usize = 10;
+        let q = PowerOfTwoModulus::<10>;
+        let mut sk_prg = Shake256Prg::new(b"genck-boxed-sk");
+        let sk = SecretKey::<4, Q>::keygen(q, Distribution::Ternary, &mut sk_prg);
+
+        let mut prg1 = Shake256Prg::new(b"genck-boxed-enc");
+        let by_value = gen_rlwe_to_rgsw_key::<4, Q, L>(&sk, 2, Distribution::Ternary, &mut prg1);
+        let mut prg2 = Shake256Prg::new(b"genck-boxed-enc");
+        let boxed = gen_rlwe_to_rgsw_key_boxed::<4, Q, L>(&sk, 2, Distribution::Ternary, &mut prg2);
+
+        assert_eq!(by_value.samples, boxed.samples);
     }
 
     // ----- rlwe_to_rgsw -----

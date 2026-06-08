@@ -7,7 +7,7 @@
 use via_primitives::algebra::ring::RingPoly;
 use via_primitives::conversion::mlwe_ops::LweDot;
 use via_primitives::encryption::types::{ModSwitchedCiphertext, SecretKey};
-use via_primitives::gates::gen_rlwe_to_rgsw_key;
+use via_primitives::gates::gen_rlwe_to_rgsw_key_boxed;
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::RingSwitchKey;
@@ -121,8 +121,12 @@ impl<
         let sk2 = SecretKey::<N2, R2>::keygen(q3_mod, key_dist_2, prg);
 
         // 3–4. Query-compression key: cascade (PRG first), then RLev_{S1}(S1²).
+        // Both keys are built straight onto the heap so neither (the ~24.75 MiB
+        // cascade key, the ~1.125 MiB conv-key RLev at paper scale) transits the
+        // stack.
         let cascade_key = gen_cascade_key(&sk1, ck_base, error_dist, prg);
-        let rlwe_to_rgsw_key = gen_rlwe_to_rgsw_key::<N1, R1, L_CK>(&sk1, ck_base, error_dist, prg);
+        let rlwe_to_rgsw_key =
+            gen_rlwe_to_rgsw_key_boxed::<N1, R1, L_CK>(&sk1, ck_base, error_dist, prg);
         let qck = QueryCompressionKey::new(cascade_key, rlwe_to_rgsw_key);
 
         // 5. Ring-switch key (rekey S1→q3 then gen_rsk, inside the closure).

@@ -68,6 +68,45 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         });
         RLevCiphertext::new(samples)
     }
+
+    /// Heap-building sibling of [`encrypt_rlev`](Self::encrypt_rlev): writes the
+    /// `L` samples **one at a time straight into a `Box`**, so the full
+    /// `[RLWECiphertext; L]` array (≈ `L · 2N · word` bytes — ~1.125 MiB at the
+    /// paper depth-18 n=2048 conversion key) is never assembled on the stack.
+    ///
+    /// PRG draws are **byte-identical** to [`encrypt_rlev`](Self::encrypt_rlev)
+    /// (sample `i` ascending: `g_i·message`, then `encrypt` = mask-then-error),
+    /// so the two produce the same key — guarded by an equivalence unit test.
+    /// Mirrors the cascade `gen_..._boxed` builder pattern.
+    #[cfg(feature = "alloc")]
+    pub fn encrypt_rlev_boxed<const L: usize>(
+        &self,
+        message: &R,
+        base: u64,
+        error_dist: Distribution,
+        prg: &mut Shake256Prg,
+    ) -> alloc::boxed::Box<RLevCiphertext<N, R, L>> {
+        let modulus = self.poly.modulus();
+        let g_values = gadget_vector_values::<N, R, L>(modulus, base);
+
+        let mut boxed = alloc::boxed::Box::<RLevCiphertext<N, R, L>>::new_uninit();
+        let ptr = boxed.as_mut_ptr();
+        // SAFETY: `samples[i]` is written exactly once, for every `i ∈ 0..L`, in
+        // ascending order, so `*ptr` is fully initialised before `assume_init`.
+        // Each iteration reuses one `sample` stack slot, so peak stack is one
+        // RLWE (≈ 2N·word) instead of the whole RLev.
+        unsafe {
+            for (i, &g_i) in g_values.iter().enumerate() {
+                let mut g_const = [0u128; N];
+                g_const[0] = g_i;
+                let g_poly = R::from_u128_coeffs(modulus, &g_const);
+                let scaled: R = *message * g_poly;
+                let sample = self.encrypt(&scaled, error_dist, prg);
+                core::ptr::addr_of_mut!((*ptr).samples[i]).write(sample);
+            }
+            boxed.assume_init()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,5 +500,41 @@ mod tests {
                 "VIA-C q₂ gadget product noise at coeff {j}: {c}"
             );
         }
+    }
+
+    /// `encrypt_rlev_boxed` must draw PRG identically to `encrypt_rlev` and so
+    /// produce a byte-identical RLev (the heap-building must not perturb the
+    /// key). Exercised at the paper RNS q₁ — the case it exists for.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn encrypt_rlev_boxed_matches_by_value_rns_q1() {
+        let basis = crate::algebra::rns::basis::paper::ViaCQ1Rns::default();
+        const L: usize = 8;
+        let mut sk_prg = Shake256Prg::new(b"sk-rlev-boxed-parity");
+        let sk =
+            SecretKey::<16, RnsPolyViaCQ1<16>>::keygen(basis, Distribution::Ternary, &mut sk_prg);
+        let message_coeffs: [i64; 16] = [1, -1, 0, 2, -2, 1, 0, 0, 1, -1, 0, 0, 1, 0, -1, 1];
+        let message =
+            <RnsPolyViaCQ1<16> as RingPoly<16>>::from_centered_i64s(basis, &message_coeffs);
+
+        let mut prg_a = Shake256Prg::new(b"rlev-boxed-parity-enc");
+        let by_value = sk.encrypt_rlev::<L>(
+            &message,
+            8,
+            Distribution::Gaussian { sigma: 4.0 },
+            &mut prg_a,
+        );
+        let mut prg_b = Shake256Prg::new(b"rlev-boxed-parity-enc");
+        let boxed = sk.encrypt_rlev_boxed::<L>(
+            &message,
+            8,
+            Distribution::Gaussian { sigma: 4.0 },
+            &mut prg_b,
+        );
+
+        assert_eq!(
+            by_value.samples, boxed.samples,
+            "boxed RLev must be byte-identical to the by-value RLev"
+        );
     }
 }

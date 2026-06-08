@@ -86,7 +86,7 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize, via_server: bool) 
         gen_lwe_to_rlwe_key_n8::<_, L_CK>(&s1, CK_BASE, Distribution::Ternary, &mut prg);
     let conv_key =
         gen_rlwe_to_rgsw_key::<N1, R8, L_CK>(&s1, CK_BASE, Distribution::Ternary, &mut prg);
-    let qck = QueryCompressionKey::new(Box::new(cascade_key), conv_key);
+    let qck = QueryCompressionKey::new(Box::new(cascade_key), Box::new(conv_key));
     let s1_q3 = rekey_secret_key::<N1, R8, R8>(&s1, q3);
     let rsk =
         gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &s2, B_RSK, Distribution::Ternary, &mut prg);
