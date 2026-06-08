@@ -20,6 +20,19 @@ arbitrary = { version = "1.4", features = ["derive"] }
 [dependencies.via-primitives]
 path = "../crates/via-primitives"
 
+# Layer-6 protocol composites (FirstDim, RespComp, the client↔server e2e) live in
+# the protocol crates, so the §6 fuzz targets pull them in. `via-client` and
+# `via-server` stay mutually independent — depending on both here is the harness
+# observing them together, not a dependency between them.
+[dependencies.via-protocol]
+path = "../crates/via-protocol"
+
+[dependencies.via-client]
+path = "../crates/via-client"
+
+[dependencies.via-server]
+path = "../crates/via-server"
+
 # Each fuzz target gets its own [[bin]] entry. Targets are grouped on disk by
 # the `src/primitives/` module they exercise — `fuzz_targets/{zq,rns,ring}/` —
 # but the public `name = "..."` identifier (used by the CI matrix, the
@@ -357,5 +370,31 @@ doc = false
 [[bin]]
 name = "conversion_extr_roundtrip"
 path = "fuzz_targets/conversion/extr_roundtrip.rs"
+test = false
+doc = false
+
+# §6 — VIA-C protocol composites (FirstDim, RespComp, client↔server e2e).
+
+[[bin]]
+name = "protocol_encrypt_lwe_raw_roundtrip"
+path = "fuzz_targets/protocol/encrypt_lwe_raw_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "protocol_first_dim_select"
+path = "fuzz_targets/protocol/first_dim_select.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "protocol_resp_comp_roundtrip"
+path = "fuzz_targets/protocol/resp_comp_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "protocol_e2e_roundtrip"
+path = "fuzz_targets/protocol/e2e_roundtrip.rs"
 test = false
 doc = false

@@ -98,6 +98,11 @@ jobs:
           - conversion_conv_step_roundtrip
           - conversion_cascade_roundtrip
           - conversion_extr_roundtrip
+          # §6 — VIA-C protocol composites.
+          - protocol_encrypt_lwe_raw_roundtrip
+          - protocol_first_dim_select
+          - protocol_resp_comp_roundtrip
+          - protocol_e2e_roundtrip
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
