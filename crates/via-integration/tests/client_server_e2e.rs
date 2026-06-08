@@ -108,7 +108,11 @@ fn round_trip(index: usize) -> (R4, R4) {
         Distribution::Ternary,
         Distribution::Ternary,
         &mut prg,
-        gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>,
+        |sk, base, dist, prg| {
+            Box::new(gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>(
+                sk, base, dist, prg,
+            ))
+        },
         |sk1, sk2, dist, prg| {
             // rekey S1 → q3 (S2's modulus) before gen_rsk — concrete types so
             // the private RekeySource bound resolves.

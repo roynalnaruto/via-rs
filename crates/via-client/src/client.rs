@@ -45,7 +45,9 @@ pub struct Client<
     #[zeroize(skip)]
     num_cols: usize,
     #[zeroize(skip)]
-    query_base: u64,
+    dmux_base: u64,
+    #[zeroize(skip)]
+    cmux_base: u64,
     #[zeroize(skip)]
     error_dist: Distribution,
 }
@@ -102,7 +104,10 @@ impl<
     )
     where
         K: zeroize::Zeroize,
-        GenCascade: FnOnce(&SecretKey<N1, R1>, u64, Distribution, &mut Shake256Prg) -> K,
+        // Returns `Box<K>` (not `K`): the paper cascade key is ~24.75 MB and is
+        // built directly on the heap (`gen_..._boxed`); moving it by value would
+        // overflow the stack. The toy path just wraps its small key in `Box::new`.
+        GenCascade: FnOnce(&SecretKey<N1, R1>, u64, Distribution, &mut Shake256Prg) -> alloc::boxed::Box<K>,
         GenRsk: FnOnce(
             &SecretKey<N1, R1>,
             &SecretKey<N2, R2>,
@@ -117,13 +122,15 @@ impl<
         // 3–4. Query-compression key: cascade (PRG first), then RLev_{S1}(S1²).
         let cascade_key = gen_cascade_key(&sk1, ck_base, error_dist, prg);
         let rlwe_to_rgsw_key = gen_rlwe_to_rgsw_key::<N1, R1, L_CK>(&sk1, ck_base, error_dist, prg);
-        let qck = QueryCompressionKey::new(alloc::boxed::Box::new(cascade_key), rlwe_to_rgsw_key);
+        let qck = QueryCompressionKey::new(cascade_key, rlwe_to_rgsw_key);
 
         // 5. Ring-switch key (rekey S1→q3 then gen_rsk, inside the closure).
         let rsk = gen_ring_switch_key(&sk1, &sk2, error_dist, prg);
 
-        // Query gadget base = the DMux/CMux gadget base (b1) from PIRParams.
-        let query_base = params.gadget_base_1;
+        // Query gadget bases: DMux uses b1, CMux/CRot use b2 (differ at paper
+        // params). Read before `params` is moved into PublicParams.
+        let dmux_base = params.gadget_base_1;
+        let cmux_base = params.gadget_base_2;
         let pp = PublicParams::new(qck, rsk, params, num_rows, num_cols, ck_base, L_CK);
 
         let client = Self {
@@ -131,7 +138,8 @@ impl<
             sk2,
             num_rows,
             num_cols,
-            query_base,
+            dmux_base,
+            cmux_base,
             error_dist,
         };
         (client, pp)
@@ -155,7 +163,8 @@ impl<
             self.num_rows,
             self.num_cols,
             D,
-            self.query_base,
+            self.dmux_base,
+            self.cmux_base,
             self.error_dist,
             prg,
         )
@@ -261,7 +270,9 @@ mod tests {
             Distribution::Ternary,
             Distribution::Ternary,
             prg,
-            gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>,
+            |sk, base, dist, p| {
+                alloc::boxed::Box::new(gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>(sk, base, dist, p))
+            },
             |sk1, sk2, dist, p| {
                 let q3 = RingPoly::modulus(sk2.poly());
                 let s1_q3 = rekey_secret_key::<N1, R8, R8>(sk1, q3);

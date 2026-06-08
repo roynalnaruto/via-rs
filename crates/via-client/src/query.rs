@@ -42,12 +42,37 @@ fn ceil_log2(n: usize) -> usize {
     }
 }
 
+/// Encrypt one bit group: for each bit, for each gadget level, push an LWE of
+/// `b·g[i] mod q1`. Bit-major / level-minor (the PRG-order contract).
+fn push_bit_group<const N1: usize, R1, const L_QUERY: usize>(
+    bits: &[u8],
+    g: &[u128; L_QUERY],
+    sk1: &SecretKey<N1, R1>,
+    q1_val: u128,
+    error_dist: Distribution,
+    prg: &mut Shake256Prg,
+    out: &mut Vec<MLWECiphertext<N1, 1, R1::Projected<1>>>,
+) where
+    R1: RingPoly<N1> + LweDot<N1>,
+{
+    for &b in bits {
+        for &gi in g.iter() {
+            let msg = if b == 0 { 0u128 } else { gi % q1_val };
+            out.push(encrypt_lwe_raw(sk1, msg, error_dist, prg));
+        }
+    }
+}
+
 /// Decompose `index` and encrypt each query bit at each gadget level into an
 /// LWE, assembling a [`CompressedQuery`] of `L_QUERY · total_bits` ciphertexts.
 ///
-/// The gadget vector `g[i] = ⌈q1 / Bⁱ⁺¹⌉` (base `query_base`) scales each bit so
-/// the server's cascade + `rlwe_to_rgsw` reconstruct `RGSW_{S1}(b)`; `q1` is
-/// read from `sk1` so it always matches the key's modulus.
+/// The gadget vector `g[i] = ⌈q1 / Bⁱ⁺¹⌉` scales each bit so the server's
+/// cascade + `rlwe_to_rgsw` reconstruct `RGSW_{S1}(b)`. **DMux** bits use base
+/// `dmux_base` (`gadget_base_1`); **CMux** and **CRot** bits use `cmux_base`
+/// (`gadget_base_2`) — these differ at paper params (55879 vs 81). The gadget
+/// base must match the base the server applies to that RGSW's external product
+/// (DMux @ q1 with b1; CMux/CRot @ q2 with b2, the q1→q2 mod-switch preserving
+/// the base). `q1` is read from `sk1`.
 ///
 /// `paper:via_c/query_comp.py:180-260`
 #[allow(clippy::too_many_arguments)]
@@ -57,7 +82,8 @@ pub(crate) fn build_compressed_query<const N1: usize, R1, const L_QUERY: usize>(
     num_rows: usize,
     num_cols: usize,
     d: usize,
-    query_base: u64,
+    dmux_base: u64,
+    cmux_base: u64,
     error_dist: Distribution,
     prg: &mut Shake256Prg,
 ) -> CompressedQuery<N1, 1, R1::Projected<1>>
@@ -66,23 +92,19 @@ where
 {
     let (alpha, beta, gamma) = decompose_index(index, num_rows, num_cols);
 
-    // Bit groups: DMux MSB-first, CMux + CRot LSB-first.
-    let mut bits = dmux_bits(alpha, ceil_log2(num_rows));
-    bits.extend(cmux_bits(beta, ceil_log2(num_cols)));
-    bits.extend(crot_bits(gamma, ceil_log2(d)));
-
-    // Gadget vector at q1 (read from the key, never re-supplied).
     let q1_mod = RingPoly::modulus(sk1.poly());
-    let g = gadget_vector_values::<N1, R1, L_QUERY>(q1_mod, query_base);
     let q1_val = <R1 as RingPoly<N1>>::modulus_value(q1_mod);
+    let g_dmux = gadget_vector_values::<N1, R1, L_QUERY>(q1_mod, dmux_base);
+    let g_cmux = gadget_vector_values::<N1, R1, L_QUERY>(q1_mod, cmux_base);
 
-    let mut cts: Vec<MLWECiphertext<N1, 1, R1::Projected<1>>> =
-        Vec::with_capacity(bits.len() * L_QUERY);
-    for &b in &bits {
-        for &gi in g.iter() {
-            let msg = if b == 0 { 0u128 } else { gi % q1_val };
-            cts.push(encrypt_lwe_raw(sk1, msg, error_dist, prg));
-        }
-    }
+    let total = (ceil_log2(num_rows) + ceil_log2(num_cols) + ceil_log2(d)) * L_QUERY;
+    let mut cts: Vec<MLWECiphertext<N1, 1, R1::Projected<1>>> = Vec::with_capacity(total);
+
+    // Order is [DMux | CMux | CRot] (query_decomp slices them in that order).
+    // DMux MSB-first @ b1; CMux + CRot LSB-first @ b2.
+    push_bit_group(&dmux_bits(alpha, ceil_log2(num_rows)), &g_dmux, sk1, q1_val, error_dist, prg, &mut cts);
+    push_bit_group(&cmux_bits(beta, ceil_log2(num_cols)), &g_cmux, sk1, q1_val, error_dist, prg, &mut cts);
+    push_bit_group(&crot_bits(gamma, ceil_log2(d)), &g_cmux, sk1, q1_val, error_dist, prg, &mut cts);
+
     CompressedQuery::new(cts)
 }
