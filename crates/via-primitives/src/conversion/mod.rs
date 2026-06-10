@@ -88,5 +88,8 @@ pub use cascade::{
     LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
 };
 pub use extract::{ExtrDims, extr};
+// §7 — VIA-B repacking primitives (Part 1/2). Same gate as the `repack` module.
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub use repack::{embed_d, mlwes_insert, mlwes_to_mlwe};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
 // not re-exported here (the orchestrator is the public entry point).
