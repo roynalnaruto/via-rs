@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VIA — Implementation details</title>
+<link rel="stylesheet" href="style.css" />
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad:true, theme:"neutral", securityLevel:"loose" });
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<header class="site"><div class="site-inner">
+  <a class="brand" href="index.html">VIA &middot; Documentation</a>
+  <nav>
+    <a href="intro.html">Intro to VIA</a>
+    <a href="implementation.html" class="on">Implementation details</a>
+    <a href="https://github.com/0xalizk/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1 class="page-title">Implementation details &mdash; analysis, architecture &amp; audit</h1>
+
+
+  <p class="legend">
+    <span><span class="tag tag-paper" title="Stated in the paper. Hover a paper tag for its section/page; full citation in the footnotes.">paper</span> stated in the paper</span>
+    <span><span class="tag tag-code" title="Observed in via-rs; the green tag and file:line refs link to the exact source line.">code</span> observed in <code>via-rs</code></span>
+    <span><span class="tag tag-infer">inference</span> my reasoning</span>
+    <span><span class="tag tag-flag">unverified</span> could not confirm</span>
+  </p>
+
+  <h3>Executive summary</h3>
+  <p>VIA is a lattice (RLWE/MLWE) single-server PIR family whose headline trick is to <em>eliminate the offline/preprocessing phase</em> while keeping online communication at \(\tilde O(\log N)\). It does this by replacing the usual "coefficient-expansion" query-expansion step with a <strong>DMux tree</strong> (logarithmic-depth homomorphic de-multiplexers) and, in the VIA-C variant, a new <strong>LWE&rarr;RLWE conversion</strong> that compresses the whole query into a handful of \(\mathbb Z_{q_1}\) elements.<sup><a href="#fn1" id="ref1">1</a></sup></p>
+
+  <p>The <code>via-rs</code> repository is a clean, <code>no_std</code>, layered Rust <em>port of a Python reference</em>.<sup><a href="#fn2" id="ref2">2</a></sup> Its primitive stack (algebra &rarr; sampling &rarr; encryption &rarr; switching &rarr; gates &rarr; conversion) maps faithfully to the paper's §2&ndash;§5, and a real <code>Query&rarr;Answer&rarr;Recover</code> round-trip passes at both toy and (release-only) paper-scale parameters &mdash; verified here, 693/693 tests green.<sup><a href="#fn3" id="ref3">3</a></sup> <strong>Only VIA-C is implemented</strong>; plain VIA and the batch variant VIA-B are absent (not even stubbed).<sup><a href="#fn4" id="ref4">4</a></sup></p>
+
+  <p>The audit confirms the parameter and noise-budget concerns that external reviewers (Yue et al.) raised in the <em>VIA Security</em> review thread.<sup><a href="#fn5" id="ref5">5</a></sup> In short: the shipped "realistic" parameters use the paper's <em>draft</em> gadget bases (not the authors' later erratum), the security level is a hard-coded unbacked <code>128</code> inconsistent with both the paper's claimed 110 and the reviewers' measured 72&ndash;88 bits, there is <strong>no correctness test under the paper's actual noise distributions and database dimensions</strong>, and the "realistic" Gaussian key distribution declared in the presets is <em>inert</em> &mdash; every test actually runs ternary keys. On the credit side, two suspected issues are <em>refuted</em>: the VIA-C plaintext modulus is correctly \(p=16\), and the secret-dependent decode step is constant-time.</p>
+
+  <!-- ====================================================================== -->
+  <h3>The scheme — variants &amp; construction</h3>
+  <table>
+    <thead><tr><th>Variant</th><th>Offline comm.</th><th>Online comm.</th><th>Key idea</th><th>In <code>via-rs</code>?</th></tr></thead>
+    <tbody>
+      <tr><td><strong>VIA</strong></td><td>none</td><td>\(\tilde O(1)\)</td><td>DMux tree replaces coefficient expansion; fresh control bits + ring-switch <em>before</em> CMux</td><td><span class="tag tag-flag">no</span> not implemented</td></tr>
+      <tr><td><strong>VIA-C</strong></td><td>allowed (public params)</td><td>\(O(\log N)\)</td><td>VIA + LWE&rarr;RLWE / RLWE&rarr;RGSW query compression; ring-switch <em>inside</em> response compression</td><td><span class="tag tag-code">yes</span> fully built</td></tr>
+      <tr><td><strong>VIA-B</strong></td><td>allowed</td><td>batched</td><td>VIA-C + homomorphic repacking (MLWEs&rarr;RLWE) for many small records</td><td><span class="tag tag-flag">no</span> not implemented</td></tr>
+    </tbody>
+  </table>
+  <p class="key">Sources: paper Figures 4 (VIA), 8 (VIA-C), 9 (VIA-B).<sup><a href="#fn1" id="ref1c">1</a></sup> Implementation scope confirmed by grep: the pipeline is monomorphised against VIA-C presets and no Figure-4 / repacking code paths exist.<sup><a href="#fn4" id="ref4b">4</a></sup></p>
+
+  <h4>Database layout &amp; query decomposition</h4>
+  <p><span class="tag tag-paper" title="Liu et al. (2025), §3.1 Database structure, p.8">paper</span> The database \(X\) is encoded as an \(I\times J\) grid of \(R_{n_1,p}\) polynomials, each cell packing \(d = n_1/n_2\) records.<sup><a href="#fn9" id="ref9">9</a></sup> <a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/decompose.rs#L29-L61" target="_blank" rel="noopener" title="crates/via-client/src/decompose.rs:29-61">code</a> The client splits an index as \(\texttt{idx} = \gamma\,(IJ) + \alpha J + \beta\) into \((\alpha,\beta,\gamma)\) = (row, column, slot); \(\alpha\) drives DMux (MSB-first), \(\beta\) drives CMux (LSB-first), \(\gamma\) drives CRot.<sup><a href="#fn10" id="ref10">10</a></sup></p>
+
+  <!-- ====================================================================== -->
+  <h3>Architecture — as built</h3>
+
+  <h4>Crate &amp; layer dependency graph</h4>
+  <pre class="mermaid">
+graph TD
+  subgraph PRIM["via-primitives (no_std)"]
+    L0["Layer 0 algebra: zq, rns CRT, ring NTT"]
+    L1["Layer 1 sampling: SHAKE-256 PRG, uniform, ternary, Gaussian"]
+    L2["Layer 2 encryption: SecretKey, RLWE, RLev, RGSW, MLWE, gadget, keyswitch"]
+    L3["Layer 3 switching: mod-switch, ring-switch, rekey"]
+    L4["Layer 4 gates: CMux, DMux, trees, CRot, RLWE-to-RGSW"]
+    L5["Layer 5 conversion: LWE-to-RLWE cascade, MLWE embed, Extr_d"]
+    L0 --> L1 --> L2 --> L3 --> L4 --> L5
+    L2 --> L4
+  end
+  subgraph PROTO["via-protocol"]
+    P1["PIRParams and presets TOY / REALISTIC"]
+    P2["wire: Query, Answer, keys (serialization partial)"]
+  end
+  CL["via-client: setup, query idx, recover"]
+  SV["via-server: setup_db, query_decomp, first_dim, answer, resp_comp"]
+  INT["via-integration: e2e tests, KATs, benches"]
+  PRIM --> PROTO
+  PROTO --> CL
+  PROTO --> SV
+  PRIM --> CL
+  PRIM --> SV
+  CL --> INT
+  SV --> INT
+  </pre>
+
+  <h4>VIA-C end-to-end sequence</h4>
+  <pre class="mermaid">
+sequenceDiagram
+  participant C as Client
+  participant S as Server DB I x J
+  Note over C: setup yields keys s, S1, S2 and public params pp_qck, pp_rck
+  C->>C: split idx into alpha row, beta col, gamma slot, then encrypt bits as LWE at q1
+  C->>S: query = L log N LWE ciphertexts
+  Note over S: Answer pipeline, Figure 8
+  S->>S: 1. QueryDecomp LWE to RLWE to RGSW yields C_ctrl, C_sel, C_rot
+  S->>S: 2. DMux tree on C_ctrl yields one-hot rows at q1
+  S->>S: 3. ModSwitch q1 to q2
+  S->>S: 4. First dimension sum over i of c_i times db at i,j at q2
+  S->>S: 5. CMux tree on C_sel selects column
+  S->>S: 6. CRot on C_rot rotates to slot gamma
+  S->>S: 7. RespComp ModSwitch q2 to q3, RingSwitch n1 to n2, scale to q4
+  S->>C: answer = mask at q3, body at q4
+  C->>C: Recover m = round of p times B' minus round of q4 A' S2 / q3, all over q4, mod p
+  </pre>
+
+  <h4>Answer noise/modulus journey</h4>
+  <pre class="mermaid">
+flowchart TD
+  A["LWE at q1 (compressed query bits)"]
+  B["RGSW gate keys at q1: C_ctrl, C_sel, C_rot"]
+  C["one-hot rows at q1 (noise + theta_DMux times log I)"]
+  D["rows at q2"]
+  E["column sums at q2 (noise times I n1 p^2 / 4, dominant term)"]
+  F["selected column at q2 (noise + theta_CMux times log J)"]
+  G["rotated to slot at q2"]
+  H["answer, small ring n2 at q4 (decodes iff theta_ans under Delta/2 = 128)"]
+  A -->|"LWE-to-RLWE-to-RGSW decompress"| B
+  B -->|"DMux tree x log I"| C
+  C -->|"ModSwitch q1 to q2"| D
+  D -->|"FirstDim sum of c times db, x I"| E
+  E -->|"CMux tree x log J"| F
+  F -->|"CRot"| G
+  G -->|"RespComp: q2 to q3, RingSwitch n1 to n2, q3 to q4"| H
+  style E fill:#fdecea,stroke:#c0392b
+  style H fill:#eafaf1,stroke:#1f9d6b
+  </pre>
+  <p class="key">Modulus chain \(q_1{>}q_2{>}q_3{>}q_4{>}p\); step labels follow Appendix C's variance recursion.<sup><a href="#fn11" id="ref11">11</a></sup> The <em>first-dimension</em> \(\times I\,n_1\,p^2/4\) term (red) and the per-level \(\log I,\log J\) additions are where the budget is spent; the answer (green) decodes only if the accumulated variance stays under \(\Delta/2\).</p>
+
+  <h4>Primitive &rarr; paper map</h4>
+  <table>
+    <thead><tr><th>Primitive</th><th>Where (code)</th><th>Paper §</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Ring \(R_{n,q}\), NTT, RNS \(q_1\)</td><td><code>algebra/{zq,rns,ring}</code></td><td>§2, §0</td><td>2-prime RNS for \(q_1\approx2^{75}\); const &amp; runtime modulus impls</td></tr>
+      <tr><td>RLWE / RLev / RGSW / MLWE</td><td><code>encryption/{rlwe,rlev,rgsw,mlwe}.rs</code></td><td>§2.1&ndash;§2.3</td><td>RLev = \(\ell\) RLWE at gadget powers; RGSW = pair of RLev</td></tr>
+      <tr><td>Gadget decomposition (approximate)</td><td><code>encryption/gadget.rs</code></td><td>§2.3 / [40]</td><td>signed-balanced digits; reconstruction error absorbed into noise<sup><a href="#fn7" id="ref7b">7</a></sup></td></tr>
+      <tr><td>CMux / DMux + trees</td><td><code>gates/mux.rs</code></td><td>§3.1, Lemma C.1/C.2</td><td>external-product based; <code>cmux_tree</code> / <code>dmux_tree</code> allocation-free</td></tr>
+      <tr><td>CRot (controlled rotation)</td><td><code>gates/rotate.rs</code></td><td>§4.2</td><td>RGSW-controlled \(X^{-\gamma}\) rotation</td></tr>
+      <tr><td>RLWE&rarr;RGSW conversion</td><td><code>gates/convert.rs</code></td><td>§4.2 / [45]</td><td>gadget product with RLev of \(S^2\)</td></tr>
+      <tr><td>LWE&rarr;RLWE conversion cascade</td><td><code>conversion/{conv,cascade,extract}.rs</code></td><td>§4.1, Lemma 4.1/4.2</td><td>iterated MLWE-to-MLWE; \(O(n\log n)\) noise</td></tr>
+      <tr><td>Mod-switch / ring-switch / rekey</td><td><code>switching/*</code></td><td>§2.4, §3.3</td><td>ring-switch is a homomorphic projection \(n_1\!\to\!n_2\)</td></tr>
+      <tr><td>Sampling (PRG, ternary, Gaussian)</td><td><code>sampling/*</code></td><td>§1.1&ndash;§1.6</td><td>SHAKE-256 counter PRG; Box-Muller Gaussian (only float path)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ====================================================================== -->
+  <h3>Audit findings</h3>
+  <p class="key">Severity: <span class="sev sev-critical" style="color:#fff;background:var(--crit);padding:1px 6px;border-radius:3px">critical</span> breaks security/correctness · <span style="color:#fff;background:var(--high);padding:1px 6px;border-radius:3px">high</span> serious flaw · <span style="color:#fff;background:var(--med);padding:1px 6px;border-radius:3px">medium</span> hazard/coverage gap · <span style="color:#fff;background:var(--low);padding:1px 6px;border-radius:3px">low</span>. Each states confidence. The crypto-core scope only; no HTTP/auth layer exists to review.</p>
+
+  <div class="finding sev-high">
+    <div class="f-head"><span class="sev">high</span><span class="f-title">A1 — Shipped gadget bases are the paper's <em>draft</em> Table 6 values, not the corrected erratum</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L150" target="_blank" rel="noopener">presets.rs:150,152,154</a> · paper Table 6, p.22</span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L150" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:150,152,154">code</a> <code>REALISTIC_PARAMS</code> uses DMux base <code>55879</code>, CMux base <code>81</code>, ring-switch base <code>8</code>, conversion length <code>18</code> &mdash; identical to the paper's printed Table 6.<sup><a href="#fn12" id="ref12">12</a></sup> But the authors' May-11 erratum states those were "inadvertently left at draft values" and the <em>correct</em> VIA-C bases are DMux <code>18073</code>, CMux/rot <code>307</code>, rs <code>4</code>, conv <code>11</code> &mdash; only with which they compute \(\log_2 P_{\text{fail}}\approx-43.4\).<sup><a href="#fn28" id="ref28">28</a></sup> The decomposition <em>lengths</em> \(\ell\) match (2,2,8,18), so performance is unaffected, but the noise budget is governed by the bases. <span class="tag tag-infer">inference</span> The code therefore ships a parameter set whose correctness the authors do <em>not</em> claim meets the \(2^{-40}\) target.</p>
+    <p class="conf">Confidence: high — bases read directly from code and cross-checked against both the printed table and the erratum. <em>Fix:</em> adopt the erratum bases (and re-run a noise estimate); add a comment distinguishing "Table 6 as printed" from "Table 6 corrected."</p>
+  </div>
+
+  <div class="finding sev-high">
+    <div class="f-head"><span class="sev">high</span><span class="f-title">A2 — Hard-coded <code>security_param = 128</code> is unbacked and inconsistent with the paper (110) and reviewers (72&ndash;88)</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L164" target="_blank" rel="noopener">presets.rs:164</a> · <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L116" target="_blank" rel="noopener">params.rs:116</a></span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L116" target="_blank" rel="noopener" title="crates/via-protocol/src/params.rs:116">code</a> The field is stored as a plain <code>u32</code> and read nowhere except for printing/asserts — there is <strong>no lattice-hardness estimator in the repo</strong>.<sup><a href="#fn13" id="ref13">13</a></sup> <span class="tag tag-paper" title="Liu et al. (2025), §5.1, p.16">paper</span> §5.1 claims 110 bits via the lattice estimator.<sup><a href="#fn14" id="ref14">14</a></sup> <span class="tag tag-flag">unverified</span> External reviewers ran the implementation parameters through the OpenFHE estimator and obtained ~88 (big ring) / ~72 (small ring).<sup><a href="#fn5" id="ref5c">5</a></sup> The code asserting a <em>higher</em> number (128) than the paper's own claim, with no derivation, is a config hazard.</p>
+    <p class="conf">Confidence: high that the number is unbacked in-repo; the 72&ndash;88 figure I report on the reviewers' authority (not re-run here — no toolchain). <em>Fix:</em> wire a CI check against the lattice estimator; treat <code>security_param</code> as derived, not asserted.</p>
+  </div>
+
+  <div class="finding sev-high">
+    <div class="f-head"><span class="sev">high</span><span class="f-title">A3 — No correctness test under the paper's noise distributions or database dimensions; the \(2^{-40}\) claim is unverified in code</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L42-L43" target="_blank" rel="noopener">client_server_e2e_paper.rs:42-43,69-71,146</a></span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L42-L43" target="_blank" rel="noopener" title="client_server_e2e_paper.rs:42-43,69-71">code</a> A paper-scale round-trip test passes (I ran it: 2 passed, 35.7s release) and asserts the right record &mdash; but it is <code>#[ignore]</code>d (off by default), uses <strong>ternary</strong> keys/error (not the paper's discrete-Gaussian \(\sigma_{1,S}{=}32,\ \sigma_{1,E}{=}1024,\ \sigma{=}26\)), and runs a <strong>2×2 database</strong> (\(\log I=\log J=1\)) versus the paper's \(I=2^8\!-\!2^{11},\,J=2^{12}\!-\!2^{14}\).<sup><a href="#fn15" id="ref15">15</a></sup> Since noise grows with \(\log I,\log J\) and the first-dimension \(I\,n_1\) accumulation, a 2×2 ternary run exercises essentially none of the budget. <a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs" target="_blank" rel="noopener" title="crates/via-integration/tests/client_server_e2e_paper.rs (+ benches)">code</a> There is also no Appendix-C noise recursion, no \(P_{\text{fail}}\) computation, and all benches are toy-scale.<sup><a href="#fn16" id="ref16">16</a></sup></p>
+    <p class="conf">Confidence: high. <em>Fix:</em> add a paper-noise, paper-dimension correctness test (run by default at least at one DB size) and an analytic noise-budget unit test mirroring Appendix C.</p>
+  </div>
+
+  <div class="finding sev-medium">
+    <div class="f-head"><span class="sev">medium</span><span class="f-title">A4 — "Realistic" Gaussian key distribution is inert; sampling silently uses ternary keys regardless of the preset</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L140-L146" target="_blank" rel="noopener">params.rs:140-146</a> · <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/client.rs#L100-L101" target="_blank" rel="noopener">client.rs:100-101,138-139</a></span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L140-L146" target="_blank" rel="noopener" title="crates/via-protocol/src/params.rs:140-146">code</a> <code>REALISTIC_PARAMS</code> declares <code>KeyDist::Gaussian</code> with <code>key_sigma_* = Some(1.0)</code> (placeholder, not the paper σ's) and a stray <code>26</code> that lands in the unused <code>key_bound_2</code> slot.<sup><a href="#fn17" id="ref17">17</a></sup> But <code>key_dist_*</code>/<code>key_sigma_*</code>/<code>error_sigma</code> are never read to build a distribution — <code>Client::setup</code> takes the <code>Distribution</code> as a <em>separate</em> argument, and every call site passes <code>Ternary</code>.<sup><a href="#fn18" id="ref18">18</a></sup> So the preset's security/noise story is decorative. This is the implementation face of reviewer issue #2: the paper's TFHE-derived CMux/DMux noise lemmas (C.1/C.2) assume a binary key and omit the \(\mathbb E[s_i^2]\) factor; the code neither uses the paper's large-σ key nor models that factor.<sup><a href="#fn19" id="ref19">19</a></sup></p>
+    <p class="conf">Confidence: high on inertness (grep-verified); the proof-soundness link to issue #2 is the reviewers' analysis, reported as such. <em>Fix:</em> drive sampling from <code>PIRParams</code> (single source of truth) and populate real σ's, or delete the dead fields.</p>
+  </div>
+
+  <div class="finding sev-medium">
+    <div class="f-head"><span class="sev">medium</span><span class="f-title">A5 — Decode threshold divergence: code uses \(q_4/p\) (Yue-correct); the paper's Appendix C budget is written against \((q_3-q_4)/p\)</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rlwe.rs#L188-L221" target="_blank" rel="noopener">rlwe.rs:188-221,297-308</a> · paper p.27</span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rlwe.rs#L188-L221" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/rlwe.rs:188-221,297-308">code</a> <code>decrypt_asymmetric</code> rescales \(A'\!\cdot\!S\) from \(q_3\) to \(q_4\) and decodes at modulus \(q_4\), giving an effective margin \(\Delta/2 = (q_4/p)/2 = 256/2 = 128\).<sup><a href="#fn20" id="ref20">20</a></sup> <span class="tag tag-paper" title="Liu et al. (2025), Appendix C, p.27">paper</span> Appendix C states the correctness condition \(\lVert E_{\text{final}}\rVert_\infty \le \lfloor(q_3-q_4)/p\rceil/2-1 \approx 2.6\times10^5\).<sup><a href="#fn11" id="ref11b">11</a></sup> <span class="tag tag-flag">unverified</span> Reviewer Yue Chen argues the threshold must be \(q_4\)-based (as the code does), making the paper's stated budget ~2000× too generous;<sup><a href="#fn29" id="ref29b">29</a></sup> the code is the conservative/likely-correct one, but it means <strong>the paper's proof does not describe the code's actual margin</strong>, and whether the small-ring noise really stays below 128 at paper σ is untested (see A3).</p>
+    <p class="conf">Confidence: high that code and paper text disagree; the "Yue is right" judgment is reported on his authority. <em>Fix:</em> reconcile paper erratum with the code's decode and add a noise-vs-128 assertion.</p>
+  </div>
+
+  <div class="finding sev-low">
+    <div class="f-head"><span class="sev">low</span><span class="f-title">A6 — VIA (non-C) \(q_1\) is two distinct primes in code vs a prime-squared in the paper</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/rns/basis.rs#L309" target="_blank" rel="noopener">rns/basis.rs</a> (ViaQ1Rns) · paper App. B, p.22</span></div>
+    <p><span class="tag tag-infer">inference</span> Paper writes VIA \(q_1 = 268369921^2\); code uses two distinct NTT-friendly primes whose product is also \(\approx 2^{57}\). Same magnitude; affects only the unimplemented VIA variant. VIA-C's \(q_1\) primes match the paper exactly.<sup><a href="#fn21" id="ref21">21</a></sup></p>
+    <p class="conf">Confidence: high (read at source). Cosmetic unless VIA is implemented.</p>
+  </div>
+
+  <div class="finding sev-medium">
+    <div class="f-head"><span class="sev">medium</span><span class="f-title">A7 — Ciphertext wire serialization is unimplemented; communication-size claims cannot be measured from the code</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/wire/format.rs#L99-L101" target="_blank" rel="noopener">wire/format.rs:99-101,167-172</a></span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/wire/format.rs#L99-L101" target="_blank" rel="noopener" title="crates/via-protocol/src/wire/format.rs:99-101,167-172">code</a> Only a <code>Vec&lt;u64&gt;</code> placeholder codec exists; the <code>WireFormat</code> impls for <code>CompressedQuery</code>/<code>CompressedAnswer</code> are absent and <code>PrgCompressed::serialize</code> is <code>todo!()</code>.<sup><a href="#fn22" id="ref22">22</a></sup> The e2e tests pass objects in-memory. VIA's headline metric is communication size, so this is a meaningful coverage gap for the value proposition.</p>
+    <p class="conf">Confidence: high. <em>Fix:</em> implement and size-test the wire format; gate on byte counts vs Table 4.</p>
+  </div>
+
+  <div class="finding sev-good">
+    <div class="f-head"><span class="sev" style="background:var(--code)">refuted</span><span class="f-title">A8 — Two suspected issues do <em>not</em> hold in this port</span>
+      <span class="loc"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L454" target="_blank" rel="noopener">modulus.rs:454,467</a> · <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rlwe.rs#L198-L200" target="_blank" rel="noopener">rlwe.rs:198-200</a></span></div>
+    <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L454" target="_blank" rel="noopener" title="crates/via-primitives/src/algebra/zq/modulus.rs:454,467">code</a> (a) <strong>Plaintext modulus is correct:</strong> <code>ViaCP = 16</code> everywhere (<code>ViaP = 256</code> is the separate, correct VIA value); no leftover <code>MODULUS_PC = 256</code> exists — the Python bug the authors noted is not present here.<sup><a href="#fn23" id="ref23">23</a></sup> (b) <strong>Constant-time decode:</strong> the secret-key centring on the decode path uses the constant-time <code>to_centered_coeffs_ct</code>; the non-CT helper is confined to public/revealed values.<sup><a href="#fn24" id="ref24">24</a></sup></p>
+    <p class="conf">Confidence: high (read at source).</p>
+  </div>
+
+  <h3>Build &amp; test status</h3>
+  <p><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/tree/957528620c1770dccb6fd642f7759d2dd3010050" target="_blank" rel="noopener" title="via-rs @ 9575286 — cargo test --workspace">code</a> Built and run on Rust stable 1.96.0. <code>cargo test --workspace</code> &mdash; <strong>693 passed, 0 failed, 4 ignored</strong>.<sup><a href="#fn25" id="ref25">25</a></sup></p>
+  <ul>
+    <li><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/tests/e2e_toy.rs#L170-L209" target="_blank" rel="noopener" title="crates/via-server/tests/e2e_toy.rs:170-209">code</a> Toy-parameter <code>Query→Answer→Recover</code> round-trips pass and assert <code>recovered == record[i]</code> across all indices (<code>e2e_toy.rs</code>, <code>client_server_e2e.rs</code>).<sup><a href="#fn3" id="ref3b">3</a></sup></li>
+    <li><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/layer6_kats.rs" target="_blank" rel="noopener" title="crates/via-integration/tests/layer6_kats.rs">code</a> Cross-language byte-parity KATs (<code>layer3/4/5/6_kats</code>) pin primitive outputs against Python-generated constants &mdash; all pass.<sup><a href="#fn26" id="ref26">26</a></sup></li>
+    <li><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L146" target="_blank" rel="noopener" title="crates/via-integration/tests/client_server_e2e_paper.rs:146">code</a> The ignored tests are the heavy paper-scale (n2048 RNS) cases; <code>cargo test --release -p via-integration --test client_server_e2e_paper -- --ignored</code> → <strong>2 passed in 35.7s</strong> (<code>client_server_e2e_paper_scale_index_15</code> recovers the right record at n1=2048/n2=512, q1≈2^75).<sup><a href="#fn15" id="ref15b">15</a></sup></li>
+    <li><a class="tag tag-code" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/fuzz/Cargo.toml" target="_blank" rel="noopener" title="fuzz/Cargo.toml (9 fuzz targets)">code</a> A <code>cargo-fuzz</code> harness covers 9 areas (zq, rns, sampling, switching, encryption, gates, conversion, ring, protocol).<sup><a href="#fn27" id="ref27">27</a></sup></li>
+    <li><span class="tag tag-infer">inference</span> The green paper-scale round-trip confirms the pipeline <em>computes</em> correctly at paper dimensions, but it runs ternary keys on a 2×2 DB, so it does <strong>not</strong> witness the \(2^{-40}\) noise-budget claim at paper σ/dimensions (A3).</li>
+  </ul>
+
+  <h3>Open questions &amp; uncertainties</h3>
+  <ul>
+    <li><strong>Does the code actually achieve \(2^{-40}\) correctness?</strong> Unknown — no realistic-noise test and no in-code budget. With the draft bases (A1) and the \(q_4\)-based threshold (A5), the paper's own analysis does not certify the shipped parameters.</li>
+    <li><strong>Real security level?</strong> The repo asserts 128 with no derivation; the reviewers' 72&ndash;88 figure was not re-run here (no toolchain). A lattice-estimator pass on the exact code moduli/σ is the missing artifact.</li>
+    <li><strong>Three-way paper↔Python↔Rust drift:</strong> the Rust cites a Python reference (<code>client.py</code>, <code>server.py</code>, <code>resp_comp.py</code>) that is <em>not in this checkout</em>, so only paper↔Rust drift is checkable here.<sup><a href="#fn2" id="ref2b">2</a></sup></li>
+    <li><strong>Reviewer proof issues #2/#3</strong> (\(\mathbb E[s_i^2]\) term in CMux/DMux noise; \(S^2\) message in RLWE→RGSW) are <em>paper-proof</em> soundness questions; the code sidesteps them only because it runs ternary keys and models no noise — they would bite if Gaussian keys were wired (A4).</li>
+    <li><strong>VIA &amp; VIA-B</strong> are documented as targets but not implemented; the "VIA delegates here" comments are aspirational.<sup><a href="#fn4" id="ref4c">4</a></sup></li>
+  </ul>
+
+  <ol class="footnotes">
+    <li id="fn1"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) §1 Introduction &amp; §3.1, p.1,8 — "VIA substitutes coefficient expansion techniques with DMux … introducing only logarithmic noise variance"; Figures 4/8/9 give the three constructions. <a href="#ref1">↩</a> <a href="#ref1b">↩</a> <a href="#ref1c">↩</a></li>
+    <li id="fn2"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L13-L17" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:13-17">crates/via-protocol/src/presets.rs:13-17</a> and many provenance comments (e.g. <code>client.py:117</code>, <code>server.py:196</code>, <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/src/resp_comp.rs#L1-L15" target="_blank" rel="noopener"><code>resp_comp.rs:1-15</code></a>) reference a Python reference; <code>find … *.py</code> over the tree returns only a CI script — the Python source is not in this checkout. <a href="#ref2">↩</a> <a href="#ref2b">↩</a></li>
+    <li id="fn3"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/tests/e2e_toy.rs#L170-L209" target="_blank" rel="noopener" title="crates/via-server/tests/e2e_toy.rs:170-209">crates/via-server/tests/e2e_toy.rs:170-209</a> and <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e.rs#L143-L173" target="_blank" rel="noopener" title="crates/via-integration/tests/client_server_e2e.rs:143-173">crates/via-integration/tests/client_server_e2e.rs:143-173</a> — full-index <code>assert_eq!(recover(query(i)), record[i])</code> at toy params. <a href="#ref3">↩</a> <a href="#ref3b">↩</a></li>
+    <li id="fn4">grep over crates/{client,server,protocol}: pipeline monomorphised against <code>ViaCPublicParams</code>; no Figure-4 (ring-switch-before-CMux) path, no <code>repack</code>/<code>via_b</code>/MLWEs→RLWE. "VIA-B (Layer 7) will wrap it" — <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/src/answer.rs#L6" target="_blank" rel="noopener">answer.rs:6,282</a>. <a href="#ref4">↩</a> <a href="#ref4b">↩</a> <a href="#ref4c">↩</a></li>
+    <li id="fn5"><em><a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg#May-7-Issue-Report-by-TuranYueKeewoo" target="_blank" rel="noopener">VIA Security</a></em> review note (HackMD, evolving) — Yue et al. (Turan, Yue, Keewoo), "Issue Report", May 7: "for the big and small ring according to the paper's parameters, we got 110 bits of security, but for the implementation we achieved approximately 88 and 72 bits of security." <a href="#ref5">↩</a> <a href="#ref5c">↩</a></li>
+    <li id="fn6"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) §4.2, p.12 — "VIA-C queries necessitate merely \(\ell\log N\) elements in \(\mathbb Z_{q_1}\)." <a href="#ref6">↩</a></li>
+    <li id="fn7"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/gadget.rs#L1-L15" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/gadget.rs:1-15">crates/via-primitives/src/encryption/gadget.rs:1-15</a> — "signed-balanced digits in \((-B/2,B/2]\) … the '≈' hides a reconstruction error bounded by \(\mathrm{round}(q/B^L)/2\)." <a href="#ref7">↩</a> <a href="#ref7b">↩</a></li>
+    <li id="fn8"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) §4.1, p.10-11 &amp; Lemma 4.2 — LWE→RLWE "incurs \(O(n\log n)\) noise variance", vs \(O(n^3)\) for [28]. <a href="#ref8">↩</a></li>
+    <li id="fn9"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) §3.1 (Database structure), p.8 — \(db[i,j]=\iota_{n_2\to n_1}((X_{kIJ+iJ+j})_k)\), grid \(I\times J\). <a href="#ref9">↩</a></li>
+    <li id="fn10"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/decompose.rs#L29-L61" target="_blank" rel="noopener" title="crates/via-client/src/decompose.rs:29-61">crates/via-client/src/decompose.rs:29-61</a> — <code>index = γ·(I·J)+α·J+β</code>; DMux bits MSB-first, CMux/CRot bits LSB-first. <a href="#ref10">↩</a></li>
+    <li id="fn11"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) Appendix C.2, p.25-27 — the per-step variance recursion (θctrl→θdmux→θms→θfirst→θcmux→θcrot→θrep→θans) and condition \(\lVert E_{\text{final}}\rVert_\infty\le\lfloor(q_3-q_4)/p\rceil/2-1\). <a href="#ref11">↩</a> <a href="#ref11b">↩</a></li>
+    <li id="fn12"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L150" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:150">crates/via-protocol/src/presets.rs:150</a>,152,154 (bases 55879/81/8) &amp; :97 (conv length 18); identical to paper Table 6 (p.22) as printed. <a href="#ref12">↩</a></li>
+    <li id="fn13"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L116" target="_blank" rel="noopener" title="crates/via-protocol/src/params.rs:116">crates/via-protocol/src/params.rs:116</a> (<code>security_param: u32</code>); grep finds no lattice/estimator code (only criterion <code>estimates.json</code> timing artifacts). <a href="#ref13">↩</a></li>
+    <li id="fn14"><a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) §5.1, p.16 — "110 bits of classical security … using the lattice estimator [46]." <a href="#ref14">↩</a></li>
+    <li id="fn15"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L42-L43" target="_blank" rel="noopener" title="crates/via-integration/tests/client_server_e2e_paper.rs:42-43">crates/via-integration/tests/client_server_e2e_paper.rs:42-43</a> (NUM_ROWS=2,NUM_COLS=2), :69-71 (Distribution::Ternary), :146 (<code>#[ignore]</code>). Both ignored tests pass in release (verified, 35.7s). <a href="#ref15">↩</a> <a href="#ref15b">↩</a></li>
+    <li id="fn16">No Appendix-C noise recursion in code; criterion bench dirs are all <code>toy_*</code> (pipeline_toy default, pipeline_paper opt-in timing only). <a href="#ref16">↩</a></li>
+    <li id="fn17"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/params.rs#L140-L146" target="_blank" rel="noopener" title="crates/via-protocol/src/params.rs:140-146">crates/via-protocol/src/params.rs:140-146</a> (arg order: …key_dist_2, <strong>key_bound_2</strong>, key_sigma_1, key_sigma_2, error_sigma, security_param); <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L158-L164" target="_blank" rel="noopener">presets.rs:158-164</a> supplies Gaussian,Gaussian,26,Some(1.0),Some(1.0),Some(1.0),128. <a href="#ref17">↩</a></li>
+    <li id="fn18">grep: <code>key_sigma_*</code>/<code>error_sigma</code>/<code>key_dist_*</code>/<code>key_bound_2</code> read only inside <code>PIRParams::new</code> asserts; <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/client.rs#L100-L101" target="_blank" rel="noopener" title="crates/via-client/src/client.rs:100-101">crates/via-client/src/client.rs:100-101</a>,138-139 takes <code>key_dist_1/2: Distribution</code> as separate args; all test call sites pass <code>Distribution::Ternary</code>. <a href="#ref18">↩</a></li>
+    <li id="fn19"><em><a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg#2-CMuxDMux-problem" target="_blank" rel="noopener">VIA Security</a></em> review note (HackMD, evolving) — Yue Chen, "Observations", May 31, §(2) CMux/DMux problem: TFHE assumes a binary key, whereas VIA samples Gaussian \(\sigma=4960\); the term \(nq^2/(12B^{2\ell})\) "should now be updated to \(n\mathbb E[s_i^2]q^2/(12B^{2\ell})\)." Cross-ref <a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu et al. (2025)</a> (local: via-paper.pdf) Lemma C.1/C.2, p.25. <a href="#ref19">↩</a></li>
+    <li id="fn20"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rlwe.rs#L211-L220" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/rlwe.rs:211-220">crates/via-primitives/src/encryption/rlwe.rs:211-220</a> (rescale <code>(*v*q4+q3_half)/q3</code>, then <code>decode</code> at q4) and :297-308 (<code>decode</code> uses <code>q = modulus_value(scaled)</code> = q4). Δ = q4/p = 4096/16 = 256. <a href="#ref20">↩</a></li>
+    <li id="fn21"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/rns/basis.rs#L309" target="_blank" rel="noopener" title="crates/via-primitives/src/algebra/rns/basis.rs:309">crates/via-primitives/src/algebra/rns/basis.rs:309</a> — <code>ViaQ1Rns = ConstRnsBasis&lt;268369921, 536608769&gt;</code> (two distinct primes, product ≈ 2^57), vs paper App. B "VIA \(q_1 = 268369921^2\)"; :315 <code>ViaCQ1Rns = &lt;137438822401, 274810798081&gt;</code> matches paper VIA-C exactly. Verified at source. <a href="#ref21">↩</a></li>
+    <li id="fn22"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/wire/format.rs#L99-L101" target="_blank" rel="noopener" title="crates/via-protocol/src/wire/format.rs:99-101">crates/via-protocol/src/wire/format.rs:99-101</a> (only <code>Vec&lt;u64&gt;</code> placeholder), :167-172 (<code>PrgCompressed::serialize</code> is <code>todo!()</code>). <a href="#ref22">↩</a></li>
+    <li id="fn23"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L454" target="_blank" rel="noopener" title="crates/via-primitives/src/algebra/zq/modulus.rs:454">crates/via-primitives/src/algebra/zq/modulus.rs:454</a> (<code>ViaP = PowerOfTwoModulus&lt;8&gt;</code> = 256, the VIA value), :467 (<code>ViaCP = PowerOfTwoModulus&lt;4&gt;</code> = 16); <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L148" target="_blank" rel="noopener">presets.rs:148</a> (p=16); grep finds no <code>MODULUS_PC</code>. <a href="#ref23">↩</a></li>
+    <li id="fn24"><a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rlwe.rs#L198-L200" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/rlwe.rs:198-200">crates/via-primitives/src/encryption/rlwe.rs:198-200</a> — secret centring via <code>to_centered_coeffs_ct</code> (the constant-time companion to the non-CT <code>to_centered_i64</code> flagged at <a class="srcref" href="https://github.com/0xalizk/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L158-L166" target="_blank" rel="noopener">modulus.rs:158-166</a>). <a href="#ref24">↩</a></li>
+    <li id="fn25">Executed in this environment after installing rustup/stable (1.96.0): <code>cargo test --workspace</code> → 693 passed / 0 failed / 4 ignored across the workspace crates' unit, integration, and doctest targets. <a href="#ref25">↩</a></li>
+    <li id="fn26">crates/via-primitives/tests/{layer3,layer4,layer5}_kats.rs and crates/via-integration/tests/layer6_kats.rs — byte-equality vs embedded Python-generated constants. <a href="#ref26">↩</a></li>
+    <li id="fn27">via-rs/fuzz/fuzz_targets/{zq,rns,sampling,switching,encryption,gates,conversion,ring,protocol} and fuzz/Cargo.toml target list. <a href="#ref27">↩</a></li>
+    <li id="fn28"><em><a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg#2-Corrected-Gadget-Parameters" target="_blank" rel="noopener">VIA Security</a></em> review note (HackMD, evolving) — VIA authors, "Response from the authors", May 11, §2 Corrected Gadget Parameters: VIA-C bases conv(\(\ell{=}18,B{=}11\)), dmux(\(2,18073\)), cmux/rot(\(2,307\)), rs(\(8,4\)), giving \(\log_2 P_{\text{fail}}\approx-43.4\); "the gadget base values listed in Table 6 … were inadvertently left at draft values." <a href="#ref28">↩</a></li>
+    <li id="fn29"><em><a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg#1-Decryption-error" target="_blank" rel="noopener">VIA Security</a></em> review note (HackMD, evolving) — Yue Chen, "Observations", May 31, §(1) Decryption error: the threshold "should only be correct when the infinite norm of the final error is \(\le (q_4/p)/2-1\), or just \(<\Delta/2\)," citing SpiralPIR Thm 2.11 and SimplePIR Thm C.1. <a href="#ref29">↩</a></li>
+  </ol>
+
+
+</div>
+</body>
+</html>

@@ -14,12 +14,12 @@ PIR lets a client fetch the `i`-th record of a server-held database while
 keeping the index `i` hidden from the server — single-server, with no
 non-collusion assumption. VIA's distinctive moves are a logarithmic-depth
 **DMux tree** for query expansion and (in VIA-C) a low-noise **LWE→RLWE
-conversion** for query compression. See the [docs](https://0xalizk.github.io/via-rs/#intro)
+conversion** for query compression. See the [intro](https://0xalizk.github.io/via-rs/intro.html)
 for how and why it works.
 
 **Status:** the **VIA-C** variant is implemented end-to-end; plain VIA and the
 batch variant VIA-B are not yet implemented. The crypto core is the focus (no
-HTTP/transport layer). See the [implementation analysis](https://0xalizk.github.io/via-rs/#impl)
+HTTP/transport layer). See the [implementation analysis](https://0xalizk.github.io/via-rs/implementation.html)
 for what is and isn't covered, and known parameter/correctness caveats.
 
 ## Codebase layout
