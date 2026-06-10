@@ -18,16 +18,12 @@
 //! [`super::gen_conv_step_key`] outputs — which is what lets VIA-B borrow the
 //! query-compression cascade keys for repacking (no new offline payload).
 
+use alloc::vec::Vec;
+
 use crate::algebra::ring::RingPoly;
 use crate::algebra::ring::element::Poly;
-use crate::algebra::ring::form::Coefficient;
-use crate::algebra::zq::modulus::Modulus;
 use crate::encryption::MLWECiphertext;
-use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
-use crate::sampling::distribution::Distribution;
-use crate::sampling::prg::Shake256Prg;
-
-use super::{extr, gen_conv_step_key, mlwe_to_rlwe};
+use crate::encryption::types::{RLWECiphertext, RLevCiphertext};
 
 /// §3.1 (VIA-B) — MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
 /// `(RANK, N_LARGE)`-MLWE (`N_LARGE = N·d`) encrypting
@@ -160,98 +156,229 @@ pub fn mlwes_to_mlwe<
     MLWECiphertext::new(result_masks, result_body)
 }
 
-// ---------------------------------------------------------------------------
-// Toy preset (n1=8, K=4, T=2): the depth-2 reference repack.
-//
-// Hand-written reference instantiation that validates the full `Repack`
-// vertical slice (Extr → pad → recursive `mlwes_to_mlwe` → unwrap) + the
-// dedicated-key oracle, before the `repack_cascade!` macro generalises it to
-// the e2e-toy (n1=64) and paper (n1=2048) presets. Its key fields `keys_4`,
-// `keys_8` have the SAME types as a suffix of `LweToRlweKeyN8`'s fields — which
-// is what lets Part 2 borrow them zero-copy.
-// ---------------------------------------------------------------------------
-
-/// Per-level step-key schedule for the toy `(n1,K,T)=(8,4,2)` repack. The repack
-/// engine consumes each level's keys by reference; both the owned oracle
-/// [`RepackKeysN8T2`] and (in Part 2) the borrowing cascade-suffix view
-/// implement this, so [`repack_n8_t2`] is identical for generated and borrowed
-/// keys (the §3.5 key reuse).
-pub trait RepackScheduleN8T2<M: Modulus, const L: usize> {
-    /// Level-0 step keys (degree 4): the cascade's `keys_4` shape.
-    fn level0(&self) -> &[RLevCiphertext<4, Poly<4, M, Coefficient>, L>; 4];
-    /// Level-1 step keys (degree 8): the cascade's `keys_8` shape.
-    fn level1(&self) -> &[RLevCiphertext<8, Poly<8, M, Coefficient>, L>; 2];
-}
-
-/// Owned dedicated-key oracle schedule for the toy repack — the named-field key
-/// struct (degrees 4, 8) mirroring a suffix of [`super::LweToRlweKeyN8`].
-pub struct RepackKeysN8T2<M: Modulus, const L: usize> {
-    /// Level-0 step keys (= cascade `keys_4`).
-    pub keys_4: [RLevCiphertext<4, Poly<4, M, Coefficient>, L>; 4],
-    /// Level-1 step keys (= cascade `keys_8`).
-    pub keys_8: [RLevCiphertext<8, Poly<8, M, Coefficient>, L>; 2],
-}
-
-impl<M: Modulus, const L: usize> RepackScheduleN8T2<M, L> for RepackKeysN8T2<M, L> {
-    fn level0(&self) -> &[RLevCiphertext<4, Poly<4, M, Coefficient>, L>; 4] {
-        &self.keys_4
-    }
-    fn level1(&self) -> &[RLevCiphertext<8, Poly<8, M, Coefficient>, L>; 2] {
-        &self.keys_8
-    }
-}
-
-/// Generate the toy repack's dedicated-key oracle from the degree-8 secret key.
-///
-/// Each level's keys are exactly the cascade's own [`gen_conv_step_key`] outputs
-/// for the matching `(N_IN, N_OUT, RANK_IN)` step — `keys_4 = ::<8,2,4,4>` and
-/// `keys_8 = ::<8,4,8,2>` — so the borrowed cascade suffix (Part 2) is
-/// byte-identical to this oracle (the §3.5 key reuse, validated by the Part-2
-/// exact-equality test).
-///
-/// # PRG consumption order
-///
-/// `keys_4` (4 step keys) then `keys_8` (2 step keys), each in
-/// [`gen_conv_step_key`]'s `key_idx`-ascending order.
-pub fn gen_repack_keys_n8_t2<M: Modulus, const L: usize>(
-    sk: &SecretKey<8, Poly<8, M, Coefficient>>,
+/// One recursion level of `mlwes_to_rlwe`: pair up `inputs` (length a power of
+/// two) and convert each pair via [`mlwes_to_mlwe`] at this level's shape,
+/// halving the count and doubling the degree. The level helper the
+/// [`repack_cascade!`] macro threads through.
+#[allow(non_camel_case_types)]
+pub(crate) fn pair_convert<
+    const RANK_IN: usize,
+    const N_IN: usize,
+    const RANK_OUT: usize,
+    const N_OUT: usize,
+    R_IN: RingPoly<N_IN, Embedded<N_OUT> = R_OUT, Modulus = <R_OUT as RingPoly<N_OUT>>::Modulus>,
+    R_OUT: RingPoly<N_OUT>,
+    const L: usize,
+>(
+    inputs: Vec<MLWECiphertext<RANK_IN, N_IN, R_IN>>,
+    step_keys: &[RLevCiphertext<N_OUT, R_OUT, L>; RANK_IN],
     base: u64,
-    error_dist: Distribution,
-    prg: &mut Shake256Prg,
-) -> RepackKeysN8T2<M, L> {
-    let keys_4 =
-        gen_conv_step_key::<8, 2, 4, 4, Poly<8, M, Coefficient>, L>(sk, base, error_dist, prg);
-    let keys_8 =
-        gen_conv_step_key::<8, 4, 8, 2, Poly<8, M, Coefficient>, L>(sk, base, error_dist, prg);
-    RepackKeysN8T2 { keys_4, keys_8 }
+) -> Vec<MLWECiphertext<RANK_OUT, N_OUT, R_OUT>> {
+    inputs
+        .chunks(2)
+        .map(|pair| {
+            mlwes_to_mlwe::<RANK_IN, N_IN, RANK_OUT, N_OUT, R_IN, R_OUT, L>(pair, step_keys, base)
+        })
+        .collect()
 }
 
-/// `Repack_4` at the toy `(n1,K,T)=(8,4,2)`: pack the designated coefficients of
-/// `T=2` RLWEs over `R_{8,q}` into one RLWE over `R_{8,q}` (paper §3.4).
+/// Bit-reverse the low `bits` bits of `i`.
 ///
-/// `Extr_2` each input → `(4,2)`-MLWE, pad with `D−T = 2` zero `(4,2)`-MLWE
-/// (`D = T·n1/K = 4`), then `log2 D = 2` levels of [`mlwes_to_mlwe`] over the
-/// schedule's per-level keys, finally unwrapping the `(1,8)`-MLWE. The output
-/// encrypts `ι_0^{4→8} ι^{2→4}(π_0^{8→2}(M_0), π_0^{8→2}(M_1))`.
-pub fn repack_n8_t2<M: Modulus, const L: usize, S: RepackScheduleN8T2<M, L>>(
-    inputs: &[RLWECiphertext<8, Poly<8, M, Coefficient>>; 2],
-    keys: &S,
-    base: u64,
-) -> RLWECiphertext<8, Poly<8, M, Coefficient>> {
-    // 1. Extr_{K/T=2} each input → (D=4, G=2)-MLWE over the degree-2 projected ring.
-    let e0 = extr::<8, 2, 4, Poly<8, M, Coefficient>>(&inputs[0]);
-    let e1 = extr::<8, 2, 4, Poly<8, M, Coefficient>>(&inputs[1]);
-    // 2. Pad with D−T = 2 zero (4,2)-MLWE.
-    let qm = RingPoly::modulus(&inputs[0].body);
-    let z2 = <Poly<2, M, Coefficient> as RingPoly<2>>::zero(qm);
-    let zero_mlwe = MLWECiphertext::<4, 2, Poly<2, M, Coefficient>>::new([z2; 4], z2);
-    // 3. Level 0: pair (e0,e1) and (zero,zero) → 2 many (2,4)-MLWE.
-    let l0a = mlwes_to_mlwe::<4, 2, 2, 4, _, _, L>(&[e0, e1], keys.level0(), base);
-    let l0b = mlwes_to_mlwe::<4, 2, 2, 4, _, _, L>(&[zero_mlwe, zero_mlwe], keys.level0(), base);
-    // 4. Level 1: pair (l0a,l0b) → one (1,8)-MLWE.
-    let l1 = mlwes_to_mlwe::<2, 4, 1, 8, _, _, L>(&[l0a, l0b], keys.level1(), base);
-    // 5. Unwrap the rank-1 MLWE → RLWE.
-    mlwe_to_rlwe(&l1)
+/// The adjacent-pairing binary-tree recursion in [`mlwes_to_rlwe`] (built by the
+/// [`repack_cascade!`] macro) interleaves input `i` into output slot
+/// `bit_reverse(i)`; reordering the `T` inputs by this map first makes the
+/// output emerge in the paper's natural order `ι^{k/d→k}(M_0,…,M_{T-1})`
+/// (`M_t` at slot `t`). For `T = 2` it is the identity.
+pub(crate) fn bit_reverse_index(i: usize, bits: u32) -> usize {
+    let mut r = 0usize;
+    let mut x = i;
+    for _ in 0..bits {
+        r = (r << 1) | (x & 1);
+        x >>= 1;
+    }
+    r
+}
+
+/// Generate a complete repack preset — the schedule trait, the owned
+/// dedicated-key oracle struct, the trait impl, the oracle generator, and the
+/// `Repack` function — for a fixed `(n1, K, T)`, mirroring the
+/// [`lwe_to_rlwe_cascade!`](crate::lwe_to_rlwe_cascade) pattern.
+///
+/// `steps` is the contiguous SUFFIX of the cascade's step list the repack
+/// reuses, each `(field, RANK_IN, N_IN, RANK_OUT, N_OUT)`; the generated key
+/// fields are degree-`N_OUT` RLev arrays whose types match a suffix of the
+/// matching `LweToRlweKey*` — so Part 2 borrows them zero-copy. `extr_degree`
+/// is `G = K/T` (the `Extr` output degree) and `input_count` is `D = T·n1/K`
+/// (the padded MLWE count = `2^depth`).
+macro_rules! repack_cascade {
+    (
+        n1 = $n1:literal,
+        t = $t:literal,
+        ring = $ring:ident,
+        mod_param = $modp:ident,
+        mod_bound = $modbound:path,
+        levels = $lev:ident,
+        extr_degree = $g:literal,
+        input_count = $d:literal,
+        schedule = $sched:ident,
+        key = $key:ident,
+        gen = $gen:ident,
+        repack = $repack:ident,
+        steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
+    ) => {
+        #[doc = concat!(
+            "Per-level step-key schedule for the `n1=", stringify!($n1), ", T=",
+            stringify!($t), "` repack. Both the owned oracle [`", stringify!($key),
+            "`] and (Part 2) the borrowing cascade-suffix view implement it, so [`",
+            stringify!($repack), "`] is identical for generated and borrowed keys (§3.5)."
+        )]
+        pub trait $sched<$modp: $modbound, const $lev: usize> {
+            $(
+                #[doc = concat!("Step keys at degree ", stringify!($nout), ".")]
+                fn $field(&self) -> &[$crate::encryption::types::RLevCiphertext<
+                    $nout, $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>, $lev>; $rin];
+            )+
+        }
+
+        #[doc = concat!(
+            "Owned dedicated-key oracle schedule for the `n1=", stringify!($n1),
+            ", T=", stringify!($t), "` repack — named-field key struct mirroring a ",
+            "suffix of the matching cascade key."
+        )]
+        pub struct $key<$modp: $modbound, const $lev: usize> {
+            $(
+                #[doc = concat!("Step keys at degree ", stringify!($nout), ".")]
+                pub $field: [$crate::encryption::types::RLevCiphertext<
+                    $nout, $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>, $lev>; $rin],
+            )+
+        }
+
+        impl<$modp: $modbound, const $lev: usize> $sched<$modp, $lev> for $key<$modp, $lev> {
+            $(
+                fn $field(&self) -> &[$crate::encryption::types::RLevCiphertext<
+                    $nout, $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>, $lev>; $rin] {
+                    &self.$field
+                }
+            )+
+        }
+
+        #[doc = concat!(
+            "Generate the `n1=", stringify!($n1), ", T=", stringify!($t),
+            "` dedicated-key oracle from the degree-", stringify!($n1),
+            " secret key. Each field is the cascade's own `gen_conv_step_key` for ",
+            "the matching step, so the borrowed cascade suffix (Part 2) is byte-identical."
+        )]
+        pub fn $gen<$modp: $modbound, const $lev: usize>(
+            sk: &$crate::encryption::types::SecretKey<
+                $n1, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>>,
+            base: u64,
+            error_dist: $crate::sampling::distribution::Distribution,
+            prg: &mut $crate::sampling::prg::Shake256Prg,
+        ) -> $key<$modp, $lev> {
+            $key {
+                $(
+                    $field: $crate::conversion::gen_conv_step_key::<
+                        $n1, $nin, $nout, $rin,
+                        $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>, $lev,
+                    >(sk, base, error_dist, prg),
+                )+
+            }
+        }
+
+        #[doc = concat!(
+            "`Repack` at `n1=", stringify!($n1), ", K`, `T=", stringify!($t),
+            "`: pack the designated coefficients of `T` RLWEs over `R_{", stringify!($n1),
+            ",q}` into one RLWE over the same ring (paper §3.4) — `Extr` each, pad to ",
+            stringify!($d), " with zeros, then ", stringify!($d),
+            "-leaf binary-tree `mlwes_to_mlwe` over the schedule, and unwrap."
+        )]
+        pub fn $repack<$modp: $modbound, const $lev: usize, S: $sched<$modp, $lev>>(
+            inputs: &[$crate::encryption::types::RLWECiphertext<
+                $n1, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>>; $t],
+            keys: &S,
+            base: u64,
+        ) -> $crate::encryption::types::RLWECiphertext<
+            $n1, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>> {
+            // Extr_{K/T=G} each input → (D, G)-MLWE; pad to D with zeros.
+            let mut v = Vec::with_capacity($d);
+            for i in 0..$t {
+                v.push($crate::conversion::extr::<
+                    $n1, $g, $d, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>,
+                >(&inputs[i]));
+            }
+            // Reorder the T reals by bit-reversal so the binary-tree recursion's
+            // interleave emerges in the paper's natural slot order (M_t @ slot t).
+            let lt = ($t as usize).trailing_zeros();
+            for i in 0..$t {
+                let j = $crate::conversion::repack::bit_reverse_index(i, lt);
+                if i < j {
+                    v.swap(i, j);
+                }
+            }
+            let qm = $crate::algebra::ring::RingPoly::modulus(&inputs[0].body);
+            let zg = <$ring<$g, $modp, $crate::algebra::ring::form::Coefficient>
+                as $crate::algebra::ring::RingPoly<$g>>::zero(qm);
+            let zero = $crate::encryption::MLWECiphertext::<
+                $d, $g, $ring<$g, $modp, $crate::algebra::ring::form::Coefficient>>::new([zg; $d], zg);
+            for _ in 0..($d - $t) {
+                v.push(zero);
+            }
+            // One shadowing `pair_convert` per recursion level (degrees double, count halves).
+            $(
+                let v = $crate::conversion::repack::pair_convert::<$rin, $nin, $rout, $nout, _, _, $lev>(
+                    v, $sched::$field(keys), base,
+                );
+            )+
+            $crate::conversion::mlwe_to_rlwe(&v.into_iter().next().unwrap())
+        }
+    };
+}
+
+// Toy preset (n1=8, K=4, T=2; depth 2): the reference instantiation, validated
+// by `repack_n8_t2_reconstructs`. Its key fields (`keys_4`, `keys_8`) are the
+// same types as a suffix of `LweToRlweKeyN8`'s fields — Part 2 borrows them.
+repack_cascade! {
+    n1 = 8,
+    t = 2,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    extr_degree = 2, // G = K/T = 4/2
+    input_count = 4, // D = T·n1/K = 2·8/4
+    schedule = RepackScheduleN8T2,
+    key = RepackKeysN8T2,
+    gen = gen_repack_keys_n8_t2,
+    repack = repack_n8_t2,
+    steps = [
+        (keys_4, 4, 2, 2, 4),
+        (keys_8, 2, 4, 1, 8),
+    ],
+}
+
+// e2e-toy preset (n1=64, K=16, T=8; depth 5): the `ViaBToyParams<64,16,2,8>`
+// repack. G = K/T = 2, D = T·n1/K = 32; reuses the `LweToRlweKeyN64` suffix
+// `keys_4..keys_64`. Validated by `repack_n64_t8_reconstructs`.
+repack_cascade! {
+    n1 = 64,
+    t = 8,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    extr_degree = 2,  // G = K/T = 16/8
+    input_count = 32, // D = T·n1/K = 8·64/16
+    schedule = RepackScheduleN64T8,
+    key = RepackKeysN64T8,
+    gen = gen_repack_keys_n64_t8,
+    repack = repack_n64_t8,
+    steps = [
+        (keys_4, 32, 2, 16, 4),
+        (keys_8, 16, 4, 8, 8),
+        (keys_16, 8, 8, 4, 16),
+        (keys_32, 4, 16, 2, 32),
+        (keys_64, 2, 32, 1, 64),
+    ],
 }
 
 #[cfg(test)]
@@ -424,5 +551,50 @@ mod tests {
         assert_eq!(recovered.coeff(6).to_u64(), 7, "M1_4 @ slot 6");
         assert_eq!(recovered.coeff(1).to_u64(), 0, "odd slot 1 zero");
         assert_eq!(recovered.coeff(3).to_u64(), 0, "odd slot 3 zero");
+    }
+
+    /// e2e-toy depth-5 repack `(n1,K,T)=(64,16,8)`: pack `T=8` RLWEs whose only
+    /// live coefficient is `M_t[0] = t+1`. The output interleave
+    /// `ι_0^{16→64} ι^{2→16}(π_0^{64→2}(M_t))` places `M_t[0]` at coefficient
+    /// `4t`. Validates the macro at depth 5 (5 levels of `mlwes_to_mlwe`).
+    #[test]
+    fn repack_n64_t8_reconstructs() {
+        type R64 = Poly<64, ConstModulus<65537>, Coefficient>;
+        type P64p = Poly<64, ConstModulus<16>, Coefficient>;
+        let q = ConstModulus::<65537>;
+        let p = ConstModulus::<16>;
+        const L: usize = 8;
+        const BASE: u64 = 8;
+        let mut prg = Shake256Prg::new(b"repack-n64-t8-reconstruct");
+        let sk = SecretKey::<64, R64>::keygen(q, Distribution::Ternary, &mut prg);
+        // 8 messages: M_t has coeff 0 = t+1, all else 0.
+        let cs: [_; 8] = core::array::from_fn(|t| {
+            let mut coeffs = [0u64; 64];
+            coeffs[0] = (t + 1) as u64;
+            let m = encode::<64, R64, P64p>(&P64p::new(p, coeffs), q);
+            sk.encrypt(&m, Distribution::Ternary, &mut prg)
+        });
+        let keys = gen_repack_keys_n64_t8::<ConstModulus<65537>, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut prg,
+        );
+        let out = repack_n64_t8(&cs, &keys, BASE);
+        let mut acc = out.body;
+        acc -= out.mask * *sk.poly();
+        let recovered: P64p = decode::<64, R64, P64p>(&acc, p);
+        for t in 0..8 {
+            assert_eq!(
+                recovered.coeff(4 * t).to_u64(),
+                (t + 1) as u64,
+                "M{t}[0] @ slot {}",
+                4 * t
+            );
+        }
+        // Non-designated coefficients are zero (spot check).
+        assert_eq!(recovered.coeff(1).to_u64(), 0);
+        assert_eq!(recovered.coeff(2).to_u64(), 0);
+        assert_eq!(recovered.coeff(32).to_u64(), 0); // M_t[32] = 0
     }
 }

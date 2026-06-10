@@ -89,7 +89,13 @@ pub use cascade::{
 };
 pub use extract::{ExtrDims, extr};
 // §7 — VIA-B repacking primitives (Part 1/2). Same gate as the `repack` module.
+// The leaf primitives + the per-preset repack families (schedule trait, owned
+// dedicated-key oracle struct, oracle generator, `Repack` fn) the macro emits.
 #[cfg(all(feature = "via-b", feature = "alloc"))]
-pub use repack::{embed_d, mlwes_insert, mlwes_to_mlwe};
+pub use repack::{
+    RepackKeysN8T2, RepackKeysN64T8, RepackScheduleN8T2, RepackScheduleN64T8, embed_d,
+    gen_repack_keys_n8_t2, gen_repack_keys_n64_t8, mlwes_insert, mlwes_to_mlwe, repack_n8_t2,
+    repack_n64_t8,
+};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
 // not re-exported here (the orchestrator is the public entry point).
