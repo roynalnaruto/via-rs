@@ -25,7 +25,7 @@ use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams};
-use via_server::Server;
+use via_server::ViaCServer;
 
 const N1: usize = 8;
 const N2: usize = 4;
@@ -51,7 +51,7 @@ type R8 = Poly<N1, DynModulus, Coefficient>;
 type R4 = Poly<N2, DynModulus, Coefficient>;
 type K = LweToRlweKeyN8<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>;
-type ToyServer = Server<K, N1, N2, R8, R8, R4, R4, R8, L_QUERY, L_CK, L_RSK, D>;
+type ToyServer = ViaCServer<K, N1, N2, R8, R8, R4, R4, R8, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct record per flat index (so selection is genuinely tested).
 fn record(m: usize, p: DynModulus) -> R4 {

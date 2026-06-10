@@ -45,6 +45,198 @@ use crate::first_dim::first_dim;
 use crate::query_decomp::query_decomp;
 use crate::resp_comp::resp_comp;
 
+/// Steps 1–6 of the VIA-C answer pipeline (QueryDecomp → DMux → ModSwitch →
+/// FirstDim → CMux → CRot), extracted as the **variant-common** prefix returning
+/// the CRot output `rotated: RLWECiphertext<N1, R2>` @ q2.
+///
+/// [`answer_one_query`] appends step 7 ([`resp_comp`]) to recover the VIA-C
+/// answer; VIA-B's batch answer (Layer 7) instead calls this `T` times — once per
+/// batched query — collects the `T` `rotated`s, **repacks** them into one
+/// ciphertext, and then runs RespComp exactly once. The seam is precisely here.
+///
+/// # `N_REC` — record-degree generalization
+///
+/// `num_crot = log₂(N1 / N_REC)`. At `N_REC = N2` (VIA-C) this is exactly
+/// `log₂(N1/N2) = log₂ d`, so the extraction is a behavioural no-op on VIA-C.
+/// VIA-B passes the finer `N_REC = N3 ≤ N2`, requesting `log₂(N1/N3)` CRot bits
+/// (more rotation resolution for the smaller records).
+///
+/// # Arguments
+///
+/// As [`answer_one_query`] minus the RespComp-only `q3_mod`/`q4_mod`: `query`,
+/// `pp`, `encoded_db`, `q1_mod`, `q2_mod`, `cascade`. (`R3L`/`R4` likewise drop —
+/// they belong to step 7.)
+///
+/// # Errors
+///
+/// Same guards as [`answer_one_query`]: [`ViaError::DimMismatch`]
+/// (non-power-of-two dims / row-count mismatch) and
+/// [`ViaError::QueryLengthMismatch`] (the LWE count must be
+/// `(log₂I + log₂J + log₂(N1/N_REC)) · L_QUERY`).
+///
+/// `paper:via_c/server.py:103-230` (steps 1–6)
+#[allow(
+    non_camel_case_types,
+    clippy::too_many_arguments,
+    clippy::type_complexity
+)]
+pub fn answer_through_crot<
+    const N1: usize,
+    const N2: usize,
+    const N_REC: usize,
+    R1: RingPoly<N1>,
+    R2: RingPoly<N1>,
+    R3: RingPoly<N2>,
+    Rp: RingPoly<N1>,
+    K: Zeroize,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+    CascadeFn,
+>(
+    query: &CompressedQuery<N1, 1, R1::Projected<1>>,
+    pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
+    encoded_db: &[Vec<Rp>],
+    q1_mod: R1::Modulus,
+    q2_mod: R2::Modulus,
+    cascade: CascadeFn,
+) -> Result<RLWECiphertext<N1, R2>, ViaError>
+where
+    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+{
+    const {
+        assert!(N1 >= N_REC, "answer_through_crot: N1 must be >= N_REC");
+        assert!(
+            N1.is_multiple_of(N_REC),
+            "answer_through_crot: N1 must be divisible by N_REC"
+        );
+    }
+
+    // Parent span; steps 1–6 nest under it (held for the whole call, dropped on
+    // every return path including the early error guards).
+    let _span = tracing::debug_span!(
+        "answer_through_crot",
+        num_rows = pp.num_rows,
+        num_cols = pp.num_cols
+    )
+    .entered();
+
+    let params = &pp.params;
+    let num_rows = pp.num_rows;
+    let num_cols = pp.num_cols;
+
+    // --- Shape guards -----------------------------------------------------
+    if !num_rows.is_power_of_two() || !num_cols.is_power_of_two() {
+        return Err(ViaError::DimMismatch(
+            "num_rows and num_cols must be powers of two",
+        ));
+    }
+    let num_dmux = num_rows.trailing_zeros() as usize; // log₂ I
+    let num_cmux = num_cols.trailing_zeros() as usize; // log₂ J
+    // R1: num_crot = log₂(N1/N_REC); collapses to log₂(N1/N2) = log₂ d at N_REC=N2.
+    let d3 = N1 / N_REC;
+    let num_crot = if d3 > 1 {
+        d3.trailing_zeros() as usize
+    } else {
+        0
+    };
+    if encoded_db.len() != num_rows {
+        return Err(ViaError::DimMismatch(
+            "encoded_db row count must equal num_rows",
+        ));
+    }
+    let expected_lwes = (num_dmux + num_cmux + num_crot) * L_QUERY;
+    if query.ciphertexts.len() != expected_lwes {
+        return Err(ViaError::QueryLengthMismatch {
+            expected: expected_lwes,
+            got: query.ciphertexts.len(),
+        });
+    }
+
+    // Cascade + conversion-key gadget base (Override 7): the cascade rides the
+    // conversion-key gadget, so both legs of `query_decomp` use `pp.ck_base`.
+    let ck_base = pp.ck_base;
+    let b1 = params.gadget_base_1; // DMux @ q1
+    let b2 = params.gadget_base_2; // CMux / CRot @ q2
+
+    // --- Step 1: QueryDecomp — LWEs → 3 RGSW groups @ q1 ------------------
+    let dq = tracing::debug_span!("step1_query_decomp").in_scope(|| {
+        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
+            &query.ciphertexts,
+            &pp.query_comp_key,
+            num_dmux,
+            num_cmux,
+            num_crot,
+            ck_base,
+            ck_base,
+            cascade,
+        )
+    });
+
+    // --- Step 2: DMux @ q1 — trivial RLWE(Δ·1) demuxed to I slots ---------
+    let dmux_out = tracing::debug_span!("step2_dmux").in_scope(|| {
+        let mut delta_coeffs = [0u128; N1];
+        delta_coeffs[0] = params.delta();
+        let delta_poly = R1::from_u128_coeffs(q1_mod, &delta_coeffs);
+        let trivial = RLWECiphertext::trivial(q1_mod, &delta_poly);
+
+        let zero_q1 = RLWECiphertext::new(R1::zero(q1_mod), R1::zero(q1_mod));
+        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; num_rows];
+        dmux_tree(&dq.dmux_bits, trivial, &mut out, b1, b1);
+        out
+    });
+
+    // --- Step 3: ModSwitch q1 → q2, ×I -----------------------------------
+    let switched = tracing::debug_span!("step3_mod_switch").in_scope(|| {
+        dmux_out
+            .iter()
+            .map(|ct| mod_switch_sym::<N1, R1, R2>(ct, q2_mod))
+            .collect::<Vec<RLWECiphertext<N1, R2>>>()
+    });
+
+    // --- Step 4: FirstDim — Σ_i c_i · db[i][j] → J columns @ q2 -----------
+    let mut fd_results = tracing::debug_span!("step4_first_dim").in_scope(|| {
+        // Lift the p-encoded DB to q2 (coefficient reinterpretation: values in
+        // [0,p) ⊂ [0,q2), no rescale).
+        let db_q2: Vec<Vec<R2>> = encoded_db
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| {
+                        let mut c = [0u128; N1];
+                        cell.to_u128_coeffs(&mut c);
+                        R2::from_u128_coeffs(q2_mod, &c)
+                    })
+                    .collect()
+            })
+            .collect();
+        first_dim::<N1, R2>(&switched, &db_q2, q2_mod)
+    });
+
+    // --- Step 5: CMux @ q2 (LSB-first) — select 1 column -----------------
+    let selected = tracing::debug_span!("step5_cmux").in_scope(|| {
+        let cmux_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
+            .cmux_bits
+            .iter()
+            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
+            .collect();
+        cmux_tree(&cmux_q2, &mut fd_results, b2, b2)
+    });
+
+    // --- Step 6: CRot @ q2 (SlotExtract, LSB-first) — rotate target slot → 0
+    let rotated = tracing::debug_span!("step6_crot").in_scope(|| {
+        let crot_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
+            .crot_bits
+            .iter()
+            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
+            .collect();
+        crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
+    });
+
+    Ok(rotated)
+}
+
 /// Run the 7-step VIA-C answer pipeline for one compressed query.
 ///
 /// Returns the paper-asymmetric compressed answer
@@ -133,8 +325,9 @@ pub fn answer_one_query<
 where
     CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
 {
-    // Parent span; the seven step spans nest under it (held for the whole call,
-    // dropped on every return path including the early error guards).
+    // Parent span; the prefix's step spans nest under `answer_through_crot` and
+    // step 7 nests directly here (held for the whole call, dropped on every
+    // return path including the prefix's early error guards).
     let _span = tracing::debug_span!(
         "answer_one_query",
         num_rows = pp.num_rows,
@@ -142,117 +335,11 @@ where
     )
     .entered();
 
-    let params = &pp.params;
-    let num_rows = pp.num_rows;
-    let num_cols = pp.num_cols;
-
-    // --- Shape guards -----------------------------------------------------
-    if !num_rows.is_power_of_two() || !num_cols.is_power_of_two() {
-        return Err(ViaError::DimMismatch(
-            "num_rows and num_cols must be powers of two",
-        ));
-    }
-    let num_dmux = num_rows.trailing_zeros() as usize; // log₂ I
-    let num_cmux = num_cols.trailing_zeros() as usize; // log₂ J
-    let d = N1 / N2;
-    let num_crot = if d > 1 {
-        d.trailing_zeros() as usize
-    } else {
-        0
-    }; // log₂ d
-    if encoded_db.len() != num_rows {
-        return Err(ViaError::DimMismatch(
-            "encoded_db row count must equal num_rows",
-        ));
-    }
-    let expected_lwes = (num_dmux + num_cmux + num_crot) * L_QUERY;
-    if query.ciphertexts.len() != expected_lwes {
-        return Err(ViaError::QueryLengthMismatch {
-            expected: expected_lwes,
-            got: query.ciphertexts.len(),
-        });
-    }
-
-    // Cascade + conversion-key gadget base (Override 7): the cascade rides the
-    // conversion-key gadget, so both legs of `query_decomp` use `pp.ck_base`.
-    let ck_base = pp.ck_base;
-    let b1 = params.gadget_base_1; // DMux @ q1
-    let b2 = params.gadget_base_2; // CMux / CRot @ q2
-    let b_rsk = params.gadget_base_rsk; // ring-switch @ q3
-
-    // --- Step 1: QueryDecomp — LWEs → 3 RGSW groups @ q1 ------------------
-    let dq = tracing::debug_span!("step1_query_decomp").in_scope(|| {
-        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
-            &query.ciphertexts,
-            &pp.query_comp_key,
-            num_dmux,
-            num_cmux,
-            num_crot,
-            ck_base,
-            ck_base,
-            cascade,
-        )
-    });
-
-    // --- Step 2: DMux @ q1 — trivial RLWE(Δ·1) demuxed to I slots ---------
-    let dmux_out = tracing::debug_span!("step2_dmux").in_scope(|| {
-        let mut delta_coeffs = [0u128; N1];
-        delta_coeffs[0] = params.delta();
-        let delta_poly = R1::from_u128_coeffs(q1_mod, &delta_coeffs);
-        let trivial = RLWECiphertext::trivial(q1_mod, &delta_poly);
-
-        let zero_q1 = RLWECiphertext::new(R1::zero(q1_mod), R1::zero(q1_mod));
-        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; num_rows];
-        dmux_tree(&dq.dmux_bits, trivial, &mut out, b1, b1);
-        out
-    });
-
-    // --- Step 3: ModSwitch q1 → q2, ×I -----------------------------------
-    let switched = tracing::debug_span!("step3_mod_switch").in_scope(|| {
-        dmux_out
-            .iter()
-            .map(|ct| mod_switch_sym::<N1, R1, R2>(ct, q2_mod))
-            .collect::<Vec<RLWECiphertext<N1, R2>>>()
-    });
-
-    // --- Step 4: FirstDim — Σ_i c_i · db[i][j] → J columns @ q2 -----------
-    let mut fd_results = tracing::debug_span!("step4_first_dim").in_scope(|| {
-        // Lift the p-encoded DB to q2 (coefficient reinterpretation: values in
-        // [0,p) ⊂ [0,q2), no rescale).
-        let db_q2: Vec<Vec<R2>> = encoded_db
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        let mut c = [0u128; N1];
-                        cell.to_u128_coeffs(&mut c);
-                        R2::from_u128_coeffs(q2_mod, &c)
-                    })
-                    .collect()
-            })
-            .collect();
-        first_dim::<N1, R2>(&switched, &db_q2, q2_mod)
-    });
-
-    // --- Step 5: CMux @ q2 (LSB-first) — select 1 column -----------------
-    let selected = tracing::debug_span!("step5_cmux").in_scope(|| {
-        let cmux_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
-            .cmux_bits
-            .iter()
-            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
-            .collect();
-        cmux_tree(&cmux_q2, &mut fd_results, b2, b2)
-    });
-
-    // --- Step 6: CRot @ q2 (SlotExtract, LSB-first) — rotate target slot → 0
-    let rotated = tracing::debug_span!("step6_crot").in_scope(|| {
-        let crot_q2: Vec<RGSWCiphertext<N1, R2, L_QUERY, L_QUERY>> = dq
-            .crot_bits
-            .iter()
-            .map(|rgsw| mod_switch_rgsw::<N1, R1, R2, L_QUERY, L_QUERY>(rgsw, q2_mod))
-            .collect();
-        crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
-    });
+    // Steps 1–6 via the variant-common prefix; N_REC = N2 keeps VIA-C semantics
+    // (num_crot = log₂(N1/N2) = log₂ d) exactly.
+    let rotated = answer_through_crot::<N1, N2, N2, R1, R2, R3, Rp, K, L_QUERY, L_CK, L_RSK, D, _>(
+        query, pp, encoded_db, q1_mod, q2_mod, cascade,
+    )?;
 
     // --- Step 7: RespComp — paper-asymmetric q2 → q3 → n2 → q4 ------------
     let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
@@ -261,7 +348,7 @@ where
             &pp.ring_switch_key,
             q3_mod,
             q4_mod,
-            b_rsk,
+            pp.params.gadget_base_rsk,
         )
     });
 
@@ -293,6 +380,9 @@ pub struct Server<
     K: Zeroize,
     const N1: usize,
     const N2: usize,
+    // Record degree: VIA-C packs `N_REC = N2`; VIA-B the finer `N_REC = N3 ≤ N2`
+    // (more records per cell, more CRot bits). Gates only `setup_db`'s packing.
+    const N_REC: usize,
     R1: RingPoly<N1>,
     R2: RingPoly<N1>,
     R3: RingPoly<N2>,
@@ -315,6 +405,7 @@ impl<
     K: Zeroize,
     const N1: usize,
     const N2: usize,
+    const N_REC: usize,
     R1: RingPoly<N1>,
     R2: RingPoly<N1>,
     R3: RingPoly<N2>,
@@ -324,14 +415,32 @@ impl<
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> Server<K, N1, N2, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>
+> Server<K, N1, N2, N_REC, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>
 {
+    /// Compile-time `N_REC` consistency: the record ring must be a non-trivial
+    /// power-of-two divisor of `N1` that fits within the query-compression ring.
+    ///
+    /// # Panics (compile-time)
+    ///
+    /// `N_REC < 1`, `N1 % N_REC != 0`, or `N_REC > N2`.
+    pub const _CHECK: () = {
+        assert!(N_REC >= 1, "Server: N_REC must be >= 1");
+        assert!(
+            N1.is_multiple_of(N_REC),
+            "Server: N1 must be divisible by N_REC"
+        );
+        assert!(
+            N_REC <= N2,
+            "Server: N_REC must be <= N2 (record ring fits within query-compression ring)"
+        );
+    };
+
     /// Build a server from raw `p`-encoded records and public parameters.
     ///
     /// Encodes the `I×J` database via [`setup_db`](crate::setup_db()) (packing
-    /// `d = N1/N2` records per cell at modulus `p`); the per-query lift `p → q2`
-    /// happens inside [`answer`](Server::answer). `RRec` is the record ring at
-    /// `(p, n2)`; `p_mod` is its modulus.
+    /// `d3 = N1/N_REC` records per cell at modulus `p`); the per-query lift
+    /// `p → q2` happens inside [`answer`](Server::answer). `RRec` is the record
+    /// ring at `(p, n_rec)`; `p_mod` is its modulus.
     #[allow(clippy::too_many_arguments)]
     pub fn setup<RRec>(
         records: &[RRec],
@@ -343,9 +452,10 @@ impl<
         p_mod: Rp::Modulus,
     ) -> Self
     where
-        RRec: RingPoly<N2, Modulus = Rp::Modulus, Embedded<N1> = Rp>,
+        RRec: RingPoly<N_REC, Modulus = Rp::Modulus, Embedded<N1> = Rp>,
     {
-        let encoded_db = crate::setup_db::setup_db::<N1, N2, Rp, RRec>(
+        let () = Self::_CHECK;
+        let encoded_db = crate::setup_db::setup_db::<N1, N_REC, Rp, RRec>(
             records,
             public_params.num_rows,
             public_params.num_cols,
@@ -388,6 +498,48 @@ impl<
         )
     }
 }
+
+/// VIA-C server (M1): [`Server`] with the record degree fixed to `N_REC = N2`
+/// (one record-ring per query-compression slot — the VIA-C packing). The clean
+/// name for the VIA-C instantiation, hiding the `N_REC` slot the variant never
+/// varies; `ViaCServer<K, N1, N2, …>` ≡ `Server<K, N1, N2, N2, …>`.
+#[allow(type_alias_bounds)]
+pub type ViaCServer<
+    K: Zeroize,
+    const N1: usize,
+    const N2: usize,
+    R1: RingPoly<N1>,
+    R2: RingPoly<N1>,
+    R3: RingPoly<N2>,
+    R4: RingPoly<N2>,
+    Rp: RingPoly<N1>,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> = Server<K, N1, N2, N2, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>;
+
+/// VIA-B server (M1): [`Server`] with the record degree exposed as the finer
+/// `N_REC = N3 ≤ N2` (the VIA-B record ring). Gated on `via-b`; VIA-B's batch
+/// answer (Layer 7, P4) packs `T` of these finer records per query.
+/// `ViaBServer<K, N1, N2, N3, …>` ≡ `Server<K, N1, N2, N3, …>`.
+#[cfg(feature = "via-b")]
+#[allow(type_alias_bounds)]
+pub type ViaBServer<
+    K: Zeroize,
+    const N1: usize,
+    const N2: usize,
+    const N3: usize,
+    R1: RingPoly<N1>,
+    R2: RingPoly<N1>,
+    R3: RingPoly<N2>,
+    R4: RingPoly<N2>,
+    Rp: RingPoly<N1>,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> = Server<K, N1, N2, N3, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>;
 
 #[cfg(test)]
 mod tests {
@@ -639,5 +791,62 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ViaError::DimMismatch(_)));
+    }
+
+    /// `answer_through_crot` at `N_REC = N2` (VIA-C) returns the CRot-output RLWE
+    /// directly — the prefix [`answer_one_query`] delegates to, and the entry
+    /// point P4's `answer_batch` will call once per batched query.
+    #[test]
+    fn answer_through_crot_nrec_n2_returns_rlwe() {
+        let mut prg = Shake256Prg::new(b"atc-nrec-n2");
+        let mut records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
+        records[0] = Poly::new(DynModulus::new(16), [1, 2, 3, 4]);
+        let (pp, db, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
+
+        let rotated =
+            answer_through_crot::<N1, N2, N2, R8, R8, R4, R8, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+                &query,
+                &pp,
+                &db,
+                q1,
+                q2,
+                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            )
+            .expect("answer_through_crot must return Ok(RLWECiphertext)");
+        // Returns an RLWE @ q2 over R8 (n1); shape only — value is the e2e gate's job.
+        let _: RLWECiphertext<N1, R8> = rotated;
+    }
+
+    /// `N_REC` generalization (R1): `answer_through_crot` with `N_REC = 2 < N2 = 4`
+    /// requests `num_crot = log₂(N1/N_REC) = log₂(8/2) = 2` CRot bits (vs VIA-C's
+    /// 1), so it expects `(1+1+2)·L_QUERY` LWEs. Feeding the VIA-C-sized
+    /// `3·L_QUERY` query surfaces `QueryLengthMismatch` — proving the bit count
+    /// tracks `N_REC`, not `N2`.
+    #[test]
+    fn answer_through_crot_nrec_smaller_requests_more_crot_bits() {
+        let mut prg = Shake256Prg::new(b"atc-nrec-smaller");
+        let records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
+        let (pp, db, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
+
+        let err =
+            answer_through_crot::<N1, N2, 2, R8, R8, R4, R8, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+                &query,
+                &pp,
+                &db,
+                q1,
+                q2,
+                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            ViaError::QueryLengthMismatch {
+                expected: (1 + 1 + 2) * L_QUERY,
+                got: 3 * L_QUERY,
+            },
+        );
     }
 }

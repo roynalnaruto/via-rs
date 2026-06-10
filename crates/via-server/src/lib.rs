@@ -16,7 +16,9 @@ pub mod query_decomp;
 pub mod resp_comp;
 pub mod setup_db;
 
-pub use answer::{Server, answer_one_query};
+#[cfg(feature = "via-b")]
+pub use answer::ViaBServer;
+pub use answer::{Server, ViaCServer, answer_one_query, answer_through_crot};
 pub use first_dim::first_dim;
 pub use query_decomp::query_decomp;
 pub use resp_comp::resp_comp;

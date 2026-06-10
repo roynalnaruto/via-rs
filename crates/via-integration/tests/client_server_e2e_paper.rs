@@ -29,7 +29,7 @@ use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams, PublicParams};
-use via_server::Server;
+use via_server::ViaCServer;
 
 const N1: usize = 2048;
 const N2: usize = 512;
@@ -53,7 +53,7 @@ type Rec = ViaCPolyP<N2>; // p @ n2 (records)
 type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
-type PaperServer = Server<K, N1, N2, R1, R2N1, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperServer = ViaCServer<K, N1, N2, R1, R2N1, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
 type PaperPp = PublicParams<K, N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// Client `setup` (the keygen-heavy phase) factored out for reuse by both the
