@@ -57,6 +57,11 @@ pub mod conv;
 pub mod cascade;
 // §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
 pub mod extract;
+// §7 — VIA-B homomorphic repacking (Layer 7 Part 1/2). `alloc`-gated: the
+// repack recursion holds a runtime `Vec` of MLWE ciphertexts + a
+// heterogeneous-degree key schedule. Empty until Part 1 lands.
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub mod repack;
 
 pub use conv::{
     ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element,

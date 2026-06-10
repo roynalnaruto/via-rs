@@ -20,6 +20,22 @@ build *FLAGS:
 test *FLAGS:
     cargo test {{FLAGS}}
 
+# Type-check under every variant feature set — guards against via-c regression
+# when via-b is introduced, and asserts the via-b surface compiles.
+check-variants:
+    cargo check --workspace --all-targets
+    cargo check --workspace --all-targets --features via-c
+    cargo check --workspace --all-targets --features via-b
+    # via-primitives stays no-alloc-clean under via-c (the repack module is
+    # `cfg(all(via-b, alloc))`, so it is fully absent here — the zero-cost gate).
+    cargo check --package via-primitives --features via-c
+
+# Run the test suite under the default build and the via-b feature (the new
+# gated surface) — unit tests + doctests for both.
+test-variants:
+    cargo test --workspace
+    cargo test --workspace --features via-b
+
 # ─── bench ───────────────────────────────────────────────────────────────
 #
 # Per-step + full-pipeline perf benchmarks (criterion). Use the save/compare
@@ -125,3 +141,9 @@ regen-kats-layer5:
 # Regenerate the Layer-6 cross-language KAT constants in crates/via-primitives/tests/data/.
 regen-kats-layer6:
     cd .references/via-spec && python3 scripts/gen_layer6_kats.py
+
+# Regenerate the Layer-7 (VIA-B) KAT fixtures. UNLIKE layers 3-6 there is NO
+# Python reference for VIA-B — fixtures are Rust-golden, produced by a
+# `via-b,kat-regen`-gated test (lands in Layer-7 Part 5). Placeholder until then.
+regen-kats-layer7:
+    @echo "Layer-7 KATs are Rust-golden (no Python ref); the kat-regen test lands in Part 5."

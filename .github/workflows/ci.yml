@@ -56,6 +56,33 @@ jobs:
       - name: Doctests
         run: cargo test --doc
 
+  # ─── 2b. Variant features (via-c / via-b) ──────────────────────────────
+  variant-features:
+    name: Variant features (via-c / via-b)
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # via-c must compile with NO via-b surface present.
+      - name: Build (via-c)
+        run: cargo build --all-targets --features via-c
+
+      # via-b enables the new gated surface (implies via-c).
+      - name: Build (via-b)
+        run: cargo build --all-targets --features via-b
+
+      # Zero-cost boundary: via-primitives stays no-alloc-clean under via-c —
+      # the repack module is `cfg(all(via-b, alloc))`, so it is fully absent.
+      - name: via-primitives no-alloc under via-c (repack absent)
+        run: cargo check --package via-primitives --features via-c
+
+      # The via-b gated tests (VariantParams markers, BatchedQuery, ViaB _CHECK).
+      - name: Tests (via-b)
+        run: cargo test --lib --bins --tests --features via-b
+
   # ─── 3. Docs (rustdoc build + doctests) ────────────────────────────────
   docs:
     name: Docs
