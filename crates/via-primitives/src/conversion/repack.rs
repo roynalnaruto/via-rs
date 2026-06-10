@@ -25,6 +25,9 @@ use crate::algebra::ring::element::Poly;
 use crate::encryption::MLWECiphertext;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext};
 
+// Cascade key structs whose `keys_*` suffix the repack views borrow (zero-copy).
+use super::{LweToRlweKeyN8, LweToRlweKeyN64};
+
 /// §3.1 (VIA-B) — MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
 /// `(RANK, N_LARGE)`-MLWE (`N_LARGE = N·d`) encrypting
 /// `ι^{N→N_LARGE}(M_0, …, M_{d-1})`.
@@ -222,6 +225,9 @@ macro_rules! repack_cascade {
         input_count = $d:literal,
         schedule = $sched:ident,
         key = $key:ident,
+        cascade_key = $ckey:ident,
+        view = $view:ident,
+        from_cascade = $from:ident,
         gen = $gen:ident,
         repack = $repack:ident,
         steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
@@ -331,6 +337,40 @@ macro_rules! repack_cascade {
             )+
             $crate::conversion::mlwe_to_rlwe(&v.into_iter().next().unwrap())
         }
+
+        #[doc = concat!(
+            "Borrowing schedule for the `n1=", stringify!($n1), ", T=", stringify!($t),
+            "` repack, backed by a SUFFIX of an existing [`", stringify!($ckey),
+            "`] cascade key — zero-copy (the §3.5 key reuse: no new offline payload). ",
+            "Built by [`", stringify!($from), "`]."
+        )]
+        pub struct $view<'a, $modp: $modbound, const $lev: usize> {
+            cascade: &'a $ckey<$modp, $lev>,
+        }
+
+        impl<'a, $modp: $modbound, const $lev: usize> $sched<$modp, $lev>
+            for $view<'a, $modp, $lev>
+        {
+            $(
+                fn $field(&self) -> &[$crate::encryption::types::RLevCiphertext<
+                    $nout, $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>, $lev>; $rin] {
+                    // Zero-copy borrow: the step list matches the cascade suffix,
+                    // so this field has exactly the schedule's expected type.
+                    &self.cascade.$field
+                }
+            )+
+        }
+
+        #[doc = concat!(
+            "Borrow the `keys_*` suffix of a [`", stringify!($ckey),
+            "`] cascade key as a [`", stringify!($view), "`] repack schedule (",
+            stringify!($repack), "'s `pp_qck`-reuse entry point)."
+        )]
+        pub fn $from<$modp: $modbound, const $lev: usize>(
+            cascade: &$ckey<$modp, $lev>,
+        ) -> $view<'_, $modp, $lev> {
+            $view { cascade }
+        }
     };
 }
 
@@ -348,6 +388,9 @@ repack_cascade! {
     input_count = 4, // D = T·n1/K = 2·8/4
     schedule = RepackScheduleN8T2,
     key = RepackKeysN8T2,
+    cascade_key = LweToRlweKeyN8,
+    view = RepackViewN8T2,
+    from_cascade = repack_keys_n8_t2_from_cascade,
     gen = gen_repack_keys_n8_t2,
     repack = repack_n8_t2,
     steps = [
@@ -370,6 +413,9 @@ repack_cascade! {
     input_count = 32, // D = T·n1/K = 8·64/16
     schedule = RepackScheduleN64T8,
     key = RepackKeysN64T8,
+    cascade_key = LweToRlweKeyN64,
+    view = RepackViewN64T8,
+    from_cascade = repack_keys_n64_t8_from_cascade,
     gen = gen_repack_keys_n64_t8,
     repack = repack_n64_t8,
     steps = [
@@ -387,7 +433,7 @@ mod tests {
     use crate::algebra::ring::element::Poly;
     use crate::algebra::ring::form::Coefficient;
     use crate::algebra::zq::modulus::ConstModulus;
-    use crate::conversion::{extr, gen_conv_step_key};
+    use crate::conversion::{extr, gen_conv_step_key, gen_lwe_to_rlwe_key_n8};
     use crate::encryption::types::SecretKey;
     use crate::encryption::{decode, encode};
     use crate::sampling::distribution::Distribution;
@@ -596,5 +642,85 @@ mod tests {
         assert_eq!(recovered.coeff(1).to_u64(), 0);
         assert_eq!(recovered.coeff(2).to_u64(), 0);
         assert_eq!(recovered.coeff(32).to_u64(), 0); // M_t[32] = 0
+    }
+
+    /// §3.5 key reuse: repack with keys BORROWED from a full cascade key
+    /// (`gen_lwe_to_rlwe_key_n8`) — exactly the `pp_qck` the server already holds
+    /// — reconstructs the paper interleave. Proves the query-compression
+    /// cascade's `keys_4`/`keys_8` ARE valid repack keys (no new offline payload).
+    #[test]
+    fn repack_n8_t2_via_cascade_keys_reconstructs() {
+        type P8p = Poly<8, ConstModulus<16>, Coefficient>;
+        let q = ConstModulus::<65537>;
+        let p = ConstModulus::<16>;
+        const L: usize = 8;
+        const BASE: u64 = 8;
+        let mut prg = Shake256Prg::new(b"repack-n8-t2-via-cascade");
+        let sk = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg);
+        let m0 = encode::<8, R8, P8p>(&P8p::new(p, [2, 0, 0, 0, 5, 0, 0, 0]), q);
+        let m1 = encode::<8, R8, P8p>(&P8p::new(p, [3, 0, 0, 0, 7, 0, 0, 0]), q);
+        let c0 = sk.encrypt(&m0, Distribution::Ternary, &mut prg);
+        let c1 = sk.encrypt(&m1, Distribution::Ternary, &mut prg);
+        // The FULL cascade key (keys_2, keys_4, keys_8), as shipped in pp_qck.
+        let cascade = gen_lwe_to_rlwe_key_n8::<ConstModulus<65537>, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut prg,
+        );
+        let view = repack_keys_n8_t2_from_cascade(&cascade); // borrow keys_4, keys_8
+        let inputs = [c0, c1];
+        let out = repack_n8_t2(&inputs, &view, BASE);
+        let mut acc = out.body;
+        acc -= out.mask * *sk.poly();
+        let recovered: P8p = decode::<8, R8, P8p>(&acc, p);
+        assert_eq!(recovered.coeff(0).to_u64(), 2);
+        assert_eq!(recovered.coeff(2).to_u64(), 3);
+        assert_eq!(recovered.coeff(4).to_u64(), 5);
+        assert_eq!(recovered.coeff(6).to_u64(), 7);
+    }
+
+    /// #1-risk byte-equality guard: repack with the BORROWED cascade suffix is
+    /// coefficient-for-coefficient identical to repack with a dedicated oracle
+    /// whose PRG is aligned to the cascade's (the `keys_2` step consumed first).
+    /// Proves the borrowed `keys_4`/`keys_8` ARE the oracle's `keys_4`/`keys_8`.
+    #[test]
+    fn repack_n8_t2_borrowed_equals_oracle() {
+        type P8p = Poly<8, ConstModulus<16>, Coefficient>;
+        let q = ConstModulus::<65537>;
+        let p = ConstModulus::<16>;
+        const L: usize = 8;
+        const BASE: u64 = 8;
+        let mut prg_kg = Shake256Prg::new(b"repack-n8-t2-equality-kg");
+        let sk = SecretKey::<8, R8>::keygen(q, Distribution::Ternary, &mut prg_kg);
+        let m0 = encode::<8, R8, P8p>(&P8p::new(p, [2, 0, 0, 0, 5, 0, 0, 0]), q);
+        let m1 = encode::<8, R8, P8p>(&P8p::new(p, [3, 0, 0, 0, 7, 0, 0, 0]), q);
+        let c0 = sk.encrypt(&m0, Distribution::Ternary, &mut prg_kg);
+        let c1 = sk.encrypt(&m1, Distribution::Ternary, &mut prg_kg);
+        let inputs = [c0, c1];
+        // Cascade key from a fixed key-seed.
+        let mut prg_c = Shake256Prg::new(b"repack-equality-keyseed");
+        let cascade = gen_lwe_to_rlwe_key_n8::<ConstModulus<65537>, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut prg_c,
+        );
+        let view = repack_keys_n8_t2_from_cascade(&cascade);
+        // PRG-aligned oracle: same key-seed; consume the `keys_2`-shaped step
+        // first (as the cascade does), then generate keys_4, keys_8.
+        let mut prg_o = Shake256Prg::new(b"repack-equality-keyseed");
+        let _keys_2 =
+            gen_conv_step_key::<8, 1, 2, 8, R8, L>(&sk, BASE, Distribution::Ternary, &mut prg_o);
+        let oracle = gen_repack_keys_n8_t2::<ConstModulus<65537>, L>(
+            &sk,
+            BASE,
+            Distribution::Ternary,
+            &mut prg_o,
+        );
+        let out_view = repack_n8_t2(&inputs, &view, BASE);
+        let out_oracle = repack_n8_t2(&inputs, &oracle, BASE);
+        assert_eq!(out_view.mask, out_oracle.mask, "mask coeff-for-coeff");
+        assert_eq!(out_view.body, out_oracle.body, "body coeff-for-coeff");
     }
 }

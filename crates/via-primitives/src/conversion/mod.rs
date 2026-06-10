@@ -58,8 +58,10 @@ pub mod cascade;
 // §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
 pub mod extract;
 // §7 — VIA-B homomorphic repacking (Layer 7 Part 1/2). `alloc`-gated: the
-// repack recursion holds a runtime `Vec` of MLWE ciphertexts + a
-// heterogeneous-degree key schedule. Empty until Part 1 lands.
+// repack recursion holds a runtime `Vec` of MLWE ciphertexts; the per-preset
+// key schedules are heterogeneous-degree (emitted by the `repack_cascade!`
+// macro), whose owned dedicated-key oracle and borrowing cascade-suffix view
+// feed one `repack_*` fn (the §3.5 key reuse).
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub mod repack;
 
@@ -93,8 +95,9 @@ pub use extract::{ExtrDims, extr};
 // dedicated-key oracle struct, oracle generator, `Repack` fn) the macro emits.
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub use repack::{
-    RepackKeysN8T2, RepackKeysN64T8, RepackScheduleN8T2, RepackScheduleN64T8, embed_d,
-    gen_repack_keys_n8_t2, gen_repack_keys_n64_t8, mlwes_insert, mlwes_to_mlwe, repack_n8_t2,
+    RepackKeysN8T2, RepackKeysN64T8, RepackScheduleN8T2, RepackScheduleN64T8, RepackViewN8T2,
+    RepackViewN64T8, embed_d, gen_repack_keys_n8_t2, gen_repack_keys_n64_t8, mlwes_insert,
+    mlwes_to_mlwe, repack_keys_n8_t2_from_cascade, repack_keys_n64_t8_from_cascade, repack_n8_t2,
     repack_n64_t8,
 };
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
