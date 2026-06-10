@@ -497,6 +497,56 @@ impl<
             cascade,
         )
     }
+
+    /// VIA-B (M1): run the batch answer pipeline for `T` queries — delegates to
+    /// [`answer_batch`](crate::batch::answer_batch) with the record degree fixed
+    /// to the server's `N_REC` (= `N3` for a [`ViaBServer`]). `repack` and
+    /// `cascade` are injected per call (same pattern as [`Server::answer`]'s
+    /// `cascade`); see the free function for the pipeline and error conditions.
+    ///
+    /// `paper:via.pdf §4.5–4.7 (VIA-B answer)`
+    #[cfg(feature = "via-b")]
+    pub fn answer_batch<R3L, const T: usize, RepackFn, CascadeFn>(
+        &self,
+        batch: &via_protocol::BatchedQuery<N1, 1, R1::Projected<1>>,
+        repack: RepackFn,
+        cascade: CascadeFn,
+    ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
+    where
+        R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
+        RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
+        CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    {
+        crate::batch::answer_batch::<
+            N1,
+            N2,
+            N_REC,
+            T,
+            R1,
+            R2,
+            R3L,
+            R3,
+            R4,
+            Rp,
+            K,
+            L_QUERY,
+            L_CK,
+            L_RSK,
+            D,
+            RepackFn,
+            CascadeFn,
+        >(
+            batch,
+            &self.public_params,
+            &self.encoded_db,
+            self.q1_mod,
+            self.q2_mod,
+            self.q3_mod,
+            self.q4_mod,
+            repack,
+            cascade,
+        )
+    }
 }
 
 /// VIA-C server (M1): [`Server`] with the record degree fixed to `N_REC = N2`
@@ -847,6 +897,68 @@ mod tests {
                 expected: (1 + 1 + 2) * L_QUERY,
                 got: 3 * L_QUERY,
             },
+        );
+    }
+
+    /// VIA-B `answer_batch` propagates `QueryLengthMismatch` from the inner
+    /// `answer_through_crot` — the T-loop runs the prefix per query at `N_REC=N3`.
+    /// At `N3=2` each inner query needs `(1+1+log₂(8/2))·L_QUERY = 8` LWEs; feeding
+    /// empty inner queries surfaces the mismatch (the repack closure type-checks
+    /// but is never reached). Full batch e2e is P5.
+    #[cfg(feature = "via-b")]
+    #[test]
+    fn answer_batch_propagates_inner_query_length_mismatch() {
+        use via_primitives::conversion::repack::{repack_keys_n8_t2_from_cascade, repack_n8_t2};
+        use via_protocol::BatchedQuery;
+
+        const N3: usize = 2;
+        const T: usize = 2;
+        let mut prg = Shake256Prg::new(b"answer-batch-len");
+        let records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
+        let (pp, db, _s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
+
+        // T=2 inner queries, each empty (wrong length → QueryLengthMismatch).
+        let batch = BatchedQuery::new(alloc::vec![
+            CompressedQuery::new(alloc::vec![]),
+            CompressedQuery::new(alloc::vec![]),
+        ]);
+
+        let err = crate::batch::answer_batch::<
+            N1,
+            N2,
+            N3,
+            T,
+            R8,
+            R8,
+            R8,
+            R4,
+            R4,
+            R8,
+            Cascade,
+            L_QUERY,
+            L_CK,
+            L_RSK,
+            D,
+            _,
+            _,
+        >(
+            &batch,
+            &pp,
+            &db,
+            q1,
+            q2,
+            q3,
+            q4,
+            |rotateds: &[RLWECiphertext<N1, R8>], k: &Cascade| {
+                let arr: &[_; T] = rotateds.try_into().unwrap();
+                repack_n8_t2(arr, &repack_keys_n8_t2_from_cascade(k), 8u64)
+            },
+            lwe_to_rlwe_n8::<DynModulus, L_CK>,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ViaError::QueryLengthMismatch { .. }),
+            "answer_batch must propagate the inner QueryLengthMismatch; got {err:?}"
         );
     }
 }

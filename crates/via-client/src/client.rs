@@ -245,6 +245,104 @@ impl<
             .sk2
             .decrypt_asymmetric::<RM, RB, RP>(answer, q3_mod, q4_mod, p_mod))
     }
+
+    /// VIA-B `batch_query` (M1): compress `T` flat indices into a
+    /// [`BatchedQuery`](via_protocol::BatchedQuery) of `T`
+    /// [`CompressedQuery`](via_protocol::CompressedQuery), each built with the
+    /// **record** degree `d3 = N1/N3` as the CRot degree — more CRot bits than
+    /// VIA-C's `D = N1/N2`, matching the server's `answer_through_crot::<N_REC =
+    /// N3>`.
+    ///
+    /// `N3` (record degree) and `T` (batch count) are method const generics with
+    /// `T·N3 ≤ N2` (the record-fit invariant). `idxs[t]` is the flat index of the
+    /// `t`-th record (range `d3 · I · J`).
+    ///
+    /// # Errors
+    ///
+    /// [`ViaError::IndexOutOfRange`] if any `idxs[t] ≥ d3 · num_rows · num_cols`.
+    ///
+    /// `paper:via.pdf §4.5 (VIA-B QueryComp, T-batched)`
+    #[cfg(feature = "via-b")]
+    pub fn batch_query<const T: usize, const N3: usize>(
+        &self,
+        idxs: &[usize; T],
+        prg: &mut Shake256Prg,
+    ) -> Result<via_protocol::BatchedQuery<N1, 1, R1::Projected<1>>, ViaError>
+    where
+        R1: LweDot<N1>,
+    {
+        const {
+            assert!(N3 >= 1, "batch_query: N3 must be >= 1");
+            assert!(
+                N1.is_multiple_of(N3),
+                "batch_query: N1 must be divisible by N3"
+            );
+            assert!(N3 <= N2, "batch_query: N3 must be <= N2");
+            assert!(T > 0, "batch_query: T must be > 0");
+            assert!(T * N3 <= N2, "batch_query: T * N3 must be <= N2");
+        }
+        let _span = tracing::debug_span!("client_batch_query", t = T, n3 = N3).entered();
+
+        // d3 = N1/N3 — the finer record degree → more CRot bits than VIA-C's D.
+        let d3 = N1 / N3;
+        let num_records = d3 * self.num_rows * self.num_cols;
+        let mut queries = alloc::vec::Vec::with_capacity(T);
+        for &idx in idxs.iter() {
+            if idx >= num_records {
+                return Err(ViaError::IndexOutOfRange {
+                    index: idx,
+                    num_records,
+                });
+            }
+            queries.push(build_compressed_query::<N1, R1, L_QUERY>(
+                idx,
+                &self.sk1,
+                self.num_rows,
+                self.num_cols,
+                d3,
+                self.dmux_base,
+                self.cmux_base,
+                self.error_dist,
+                prg,
+            ));
+        }
+        Ok(via_protocol::BatchedQuery::new(queries))
+    }
+
+    /// VIA-B `recover_batch` (M1): decrypt the batched answer with `S2` and
+    /// de-interleave it into the `T` record polynomials of degree `N3`.
+    ///
+    /// The batched answer is one repacked + RespComp'd
+    /// [`ModSwitchedCiphertext<N2, RM, RB>`]; decrypting yields a degree-`N2`
+    /// plaintext in which record `t` occupies the strided slot set
+    /// `{ t + (N2/N3)·k : k ∈ [N3] }`, extracted by
+    /// [`deinterleave_batch`](crate::deinterleave_batch) as `project_at::<N3>(t)`.
+    ///
+    /// # Errors
+    ///
+    /// Infallible today (returns [`Result`] for boundary symmetry with
+    /// [`Self::recover`]).
+    ///
+    /// `paper:via.pdf §4.5 (VIA-B Recover, T-batched)`
+    #[cfg(feature = "via-b")]
+    pub fn recover_batch<RM, RB, RP, const N3: usize, const T: usize>(
+        &self,
+        answer: &ModSwitchedCiphertext<N2, RM, RB>,
+        q3_mod: RM::Modulus,
+        q4_mod: RB::Modulus,
+        p_mod: RP::Modulus,
+    ) -> Result<alloc::vec::Vec<RP::Projected<N3>>, ViaError>
+    where
+        R2: RingPoly<N2, CenteredScalar = i64>,
+        RM: RingPoly<N2>,
+        RB: RingPoly<N2>,
+        RP: RingPoly<N2>,
+    {
+        let recovered: RP = self.recover::<RM, RB, RP>(answer, q3_mod, q4_mod, p_mod)?;
+        Ok(crate::batch::deinterleave_batch::<N2, N3, T, RP>(
+            &recovered,
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -343,6 +441,28 @@ mod tests {
         assert_eq!(pp.num_cols, 2);
         assert_eq!(pp.ck_base, CK_BASE);
         assert_eq!(pp.ck_depth, L_CK);
+    }
+
+    /// VIA-B `batch_query` emits `T` inner queries, each with the VIA-B LWE count
+    /// `L_QUERY · (log₂I + log₂J + log₂(N1/N3))`. At `N3=2` (d3 = N1/N3 = 4 → 2
+    /// CRot bits, vs VIA-C's 1) and I=J=2, each inner query is `(1+1+2)·L_QUERY`.
+    #[cfg(feature = "via-b")]
+    #[test]
+    fn batch_query_emits_t_queries_with_via_b_lwe_count() {
+        let mut prg = Shake256Prg::new(b"client-batch-query");
+        let (client, _pp) = toy_setup(2, 2, &mut prg);
+        // N3=2 → d3 = N1/N3 = 4 → num_records = 4·2·2 = 16; indices 0,3 in range.
+        let batch = client
+            .batch_query::<2, 2>(&[0, 3], &mut prg)
+            .expect("in-range indices");
+        assert_eq!(batch.len(), 2, "T=2 inner queries");
+        for (t, q) in batch.queries.iter().enumerate() {
+            assert_eq!(
+                q.ciphertexts.len(),
+                L_QUERY * (1 + 1 + 2),
+                "inner query {t}: VIA-B d3=4 ⇒ 2 CRot bits ⇒ 8 LWEs"
+            );
+        }
     }
 
     /// `query` emits exactly `L_QUERY · (log₂I + log₂J + log₂d)` LWEs.
