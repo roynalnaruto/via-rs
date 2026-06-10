@@ -22,11 +22,12 @@ use alloc::vec::Vec;
 
 use crate::algebra::ring::RingPoly;
 use crate::algebra::ring::element::Poly;
+use crate::algebra::ring::rns_element::PolyRns;
 use crate::encryption::MLWECiphertext;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext};
 
 // Cascade key structs whose `keys_*` suffix the repack views borrow (zero-copy).
-use super::{LweToRlweKeyN8, LweToRlweKeyN64};
+use super::{LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN2048};
 
 /// §3.1 (VIA-B) — MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
 /// `(RANK, N_LARGE)`-MLWE (`N_LARGE = N·d`) encrypting
@@ -427,6 +428,42 @@ repack_cascade! {
     ],
 }
 
+// Paper preset (n1=2048, K=512, T=256; depth 10): the `ViaBRealisticParams`
+// repack. G = K/T = 2, D = T·n1/K = 1024; reuses the `LweToRlweKeyRnsN2048` (RNS,
+// alloc) suffix `keys_4..keys_2048`. The by-value oracle `gen_repack_keys_rns_2048
+// _t256` is generated but NOT re-exported — a by-value key at this scale overflows
+// the stack (like the cascade's own by-value n2048 gen); the depth-spike borrows
+// the heap cascade key via the view. GO/NO-GO: `repack_rns_2048_t256_spike`.
+repack_cascade! {
+    n1 = 2048,
+    t = 256,
+    ring = PolyRns,
+    mod_param = B,
+    mod_bound = crate::algebra::rns::basis::RnsBasis,
+    levels = L,
+    extr_degree = 2,    // G = K/T = 512/256
+    input_count = 1024, // D = T·n1/K = 256·2048/512
+    schedule = RepackScheduleRns2048T256,
+    key = RepackKeysRns2048T256,
+    cascade_key = LweToRlweKeyRnsN2048,
+    view = RepackViewRns2048T256,
+    from_cascade = repack_keys_rns_2048_t256_from_cascade,
+    gen = gen_repack_keys_rns_2048_t256,
+    repack = repack_rns_2048_t256,
+    steps = [
+        (keys_4, 1024, 2, 512, 4),
+        (keys_8, 512, 4, 256, 8),
+        (keys_16, 256, 8, 128, 16),
+        (keys_32, 128, 16, 64, 32),
+        (keys_64, 64, 32, 32, 64),
+        (keys_128, 32, 64, 16, 128),
+        (keys_256, 16, 128, 8, 256),
+        (keys_512, 8, 256, 4, 512),
+        (keys_1024, 4, 512, 2, 1024),
+        (keys_2048, 2, 1024, 1, 2048),
+    ],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -722,5 +759,107 @@ mod tests {
         let out_oracle = repack_n8_t2(&inputs, &oracle, BASE);
         assert_eq!(out_view.mask, out_oracle.mask, "mask coeff-for-coeff");
         assert_eq!(out_view.body, out_oracle.body, "body coeff-for-coeff");
+    }
+}
+
+/// Paper-scale depth-10 repack SPIKE — the P2 GO/NO-GO. Mirrors the cascade's own
+/// `spike_n2048_depth18_noise_closes`: builds the ~24.75 MB `LweToRlweKeyRnsN2048`
+/// cascade key with the production **boxed** builder on a bounded thread, borrows
+/// its `keys_4..keys_2048` suffix as the repack schedule (the §3.5 key reuse — no
+/// new offline payload), packs `T = 256` RLWEs over `R_{2048, q1}` through the
+/// depth-10 `mlwes_to_mlwe` recursion, and decrypts. PASS ⇒ noise closes at depth
+/// 10 ⇒ paper-scale repack GO; panic ⇒ NO-GO.
+#[cfg(test)]
+mod spike {
+    // `via-primitives` is `#![no_std]`; the test harness links `std`, named here
+    // explicitly to reach `std::thread` for the bounded-stack spawn.
+    extern crate std;
+
+    use super::{repack_keys_rns_2048_t256_from_cascade, repack_rns_2048_t256};
+    use crate::algebra::ring::element::Poly;
+    use crate::algebra::ring::form::Coefficient;
+    use crate::algebra::ring::rns_element::PolyRns;
+    use crate::algebra::rns::basis::paper::ViaCQ1Rns;
+    use crate::algebra::zq::modulus::ConstModulus;
+    use crate::conversion::gen_lwe_to_rlwe_key_rns_n2048_boxed;
+    use crate::encryption::encode;
+    use crate::encryption::types::SecretKey;
+    use crate::sampling::distribution::Distribution;
+    use crate::sampling::prg::Shake256Prg;
+    use alloc::vec::Vec;
+
+    const N1: usize = 2048;
+    const T: usize = 256;
+    const L_CK: usize = 18; // conversion-key gadget depth (paper Table 6)
+    const CK_BASE: u64 = 18; // conversion-key gadget base
+    const VAL: u64 = 7; // the single nonzero message coefficient (< p = 16)
+    const STACK: usize = 16 << 20; // 16 MB — boxed key is heap; covers builder + scratch
+
+    /// **Depth-10 repack noise GO/NO-GO** at the paper `(n1,K,T) = (2048,512,256)`.
+    #[test]
+    #[ignore = "very heavy: ~24.75 MB key + depth-10 repack of 256 RLWEs at n=2048; \
+                run with --features via-b,alloc --release -- --ignored"]
+    fn repack_rns_2048_t256_spike() {
+        type R1 = PolyRns<N1, ViaCQ1Rns, Coefficient>;
+        type P1 = Poly<N1, ConstModulus<16>, Coefficient>;
+
+        std::thread::Builder::new()
+            .stack_size(STACK)
+            .spawn(|| {
+                let basis = ViaCQ1Rns::default();
+                let p = ConstModulus::<16>;
+                let mut prg = Shake256Prg::new(b"repack-rns-2048-t256-spike");
+                let sk = SecretKey::<N1, R1>::keygen(basis, Distribution::Ternary, &mut prg);
+
+                // The production ~24.75 MB cascade key (heap-built field-by-field, so
+                // peak stack ≪ the whole key), borrowed as the repack schedule.
+                let cascade = gen_lwe_to_rlwe_key_rns_n2048_boxed::<ViaCQ1Rns, L_CK>(
+                    &sk,
+                    CK_BASE,
+                    Distribution::Ternary,
+                    &mut prg,
+                );
+                let view = repack_keys_rns_2048_t256_from_cascade(&cascade);
+
+                // T = 256 RLWE inputs, each carrying VAL=7 in coeff 0 (else zero).
+                // Heap `Vec` (16 MB of inputs) borrowed as `&[_; T]` — a by-value
+                // `[RLWE; 256]` would be a ~16 MB stack array.
+                let mut v: Vec<_> = Vec::with_capacity(T);
+                for _ in 0..T {
+                    let mut coeffs = [0u64; N1];
+                    coeffs[0] = VAL;
+                    let m = encode::<N1, R1, P1>(&Poly::new(p, coeffs), basis);
+                    v.push(sk.encrypt(&m, Distribution::Ternary, &mut prg));
+                }
+                let inputs: &[_; T] = (&v[..]).try_into().expect("T encrypted inputs");
+
+                let out = repack_rns_2048_t256(inputs, &view, CK_BASE);
+                let recovered: P1 = sk.decrypt(&out, p);
+
+                // Noise GO/NO-GO (position-agnostic): the interleave is a permutation,
+                // so the T designated coefficients each carry VAL and every other
+                // coefficient is zero. Any depth-10 noise overflow corrupts a
+                // VAL→VAL±1 or a 0→nonzero, failing one of these asserts. (Exact slot
+                // positions `4t` are validated by the depth-2/5 reconstructability
+                // tests; this spike isolates the depth-10 noise budget.)
+                let mut designated = 0usize;
+                for i in 0..N1 {
+                    let c = recovered.coeff(i).to_u64();
+                    assert!(
+                        c == 0 || c == VAL,
+                        "coeff {i} = {c} ∉ {{0, {VAL}}} — noise!"
+                    );
+                    if c == VAL {
+                        designated += 1;
+                    }
+                }
+                assert_eq!(
+                    designated, T,
+                    "exactly T={T} designated coefficients carry VAL"
+                );
+            })
+            .expect("spawn repack spike thread")
+            .join()
+            .expect("repack spike panicked (depth-10 noise did not close?)");
     }
 }

@@ -100,5 +100,16 @@ pub use repack::{
     mlwes_to_mlwe, repack_keys_n8_t2_from_cascade, repack_keys_n64_t8_from_cascade, repack_n8_t2,
     repack_n64_t8,
 };
+// Paper-scale repack preset (n1=2048, T=256; depth 10). Only the borrowing
+// schedule view + its constructor + the `Repack` fn are surfaced — the macro's
+// by-value oracle (`gen_repack_keys_rns_2048_t256` / `RepackKeysRns2048T256`) is
+// deliberately NOT re-exported (a by-value key overflows the stack at this scale,
+// exactly like the cascade's own by-value n2048 gen). The view borrows the heap
+// `LweToRlweKeyRnsN2048` cascade key — the §3.5 key reuse at paper scale.
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub use repack::{
+    RepackScheduleRns2048T256, RepackViewRns2048T256, repack_keys_rns_2048_t256_from_cascade,
+    repack_rns_2048_t256,
+};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
 // not re-exported here (the orchestrator is the public entry point).
