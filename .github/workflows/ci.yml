@@ -79,9 +79,20 @@ jobs:
       - name: via-primitives no-alloc under via-c (repack absent)
         run: cargo check --package via-primitives --features via-c
 
-      # The via-b gated tests (VariantParams markers, BatchedQuery, ViaB _CHECK).
-      - name: Tests (via-b)
-        run: cargo test --lib --bins --tests --features via-b
+      # Tests — BOTH variants, per-crate, with `alloc` where the via-b surface
+      # needs it: the repack module is `cfg(all(via-b, alloc))`, so a bare
+      # `--features via-b` on via-primitives would silently SKIP every repack test.
+      - name: Tests (via-c — primitives)
+        run: cargo test -p via-primitives --features via-c
+      - name: Tests (via-b — primitives + alloc → repack)
+        run: cargo test -p via-primitives --features via-b,alloc
+      - name: Tests (via-b — protocol / client / server)
+        run: |
+          cargo test -p via-protocol --features via-b
+          cargo test -p via-client --features via-b
+          cargo test -p via-server --features via-b
+      - name: Tests (via-b — integration, toy batch e2e)
+        run: cargo test -p via-integration --features via-b
 
   # ─── 3. Docs (rustdoc build + doctests) ────────────────────────────────
   docs:
