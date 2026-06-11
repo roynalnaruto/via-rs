@@ -23,13 +23,20 @@
 //! Convenience type aliases for the paper parameter sets live in
 //! [`aliases`].
 //!
-//! ## Coefficient form only
+//! ## Coefficient form only (for now)
 //!
-//! All Layer-2 ciphertexts hold coefficient-form polynomials. The §0.4 NTT
-//! body is currently `unimplemented!()`, and the Python reference at
-//! `.references/via-spec/pir/` also operates in coefficient form throughout,
-//! so this is both convenient and faithful to the reproducibility contract.
-//! An evaluation-form path may be added once NTT lands.
+//! All Layer-2 ciphertexts hold coefficient-form polynomials, and every
+//! polynomial multiply here takes the schoolbook negacyclic path. This stays
+//! faithful to the Python reference at `.references/via-spec/pir/`, which is
+//! coefficient-form throughout, so KAT parity is unaffected.
+//!
+//! This is a *wiring* gap, not a missing primitive: the negacyclic NTT in
+//! `algebra::ring::ntt` is fully implemented and tested on both backends
+//! (forward + inverse; single-prime `Poly` and RNS `PolyRns`), and the
+//! `into_eval()` / `into_coeff()` form conversions are live. The pending
+//! optimisation is to keep ciphertexts in evaluation form across the
+//! gadget-product / external-product hot loops so the `O(N log N)` transform
+//! cost is amortised over many multiplies.
 //!
 //! ## Example — full encrypt/decrypt round-trip
 //!
