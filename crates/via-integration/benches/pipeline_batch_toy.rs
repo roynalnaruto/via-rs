@@ -16,8 +16,8 @@ mod b {
     use via_primitives::algebra::ring::form::Coefficient;
     use via_primitives::algebra::zq::modulus::DynModulus;
     use via_primitives::conversion::{
-        LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8, repack_keys_n8_t2_from_cascade,
-        repack_n8_t2,
+        LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+        repack_keys_n8_t2_from_cascade_modswitched, repack_n8_t2,
     };
     use via_primitives::encryption::types::RLWECiphertext;
     use via_primitives::sampling::distribution::Distribution;
@@ -37,7 +37,7 @@ mod b {
     const L_CK: usize = 7;
     const L_RSK: usize = 8;
     const Q1: u64 = 1 << 36;
-    const Q2: u64 = 1 << 28; // params metadata; runtime q2 = q1 (see batch_e2e_toy.rs)
+    const Q2: u64 = 1 << 28; // real q2 < q1 (cascade keys mod-switched q1→q2; see batch_e2e_toy.rs)
     const Q3: u64 = 1 << 20;
     const Q4: u64 = 1 << 12;
     const P: u64 = 16;
@@ -88,10 +88,13 @@ mod b {
         )
     }
 
-    /// Repack closure: borrow the cascade-key suffix (§3.5) + base CK_BASE.
+    /// Repack step: mod-switch the cascade-key suffix q1→q2 (§3.5 across q1≠q2),
+    /// then pack the T post-CRot ciphertexts at base CK_BASE. The bench's
+    /// `02_repack` therefore includes the per-batch key mod-switch (realistic).
     fn repack(rotateds: &[RLWECiphertext<N1, R8>], k: &K) -> RLWECiphertext<N1, R8> {
         let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-        repack_n8_t2(arr, &repack_keys_n8_t2_from_cascade(k), CK_BASE)
+        let keys_q2 = repack_keys_n8_t2_from_cascade_modswitched(k, DynModulus::new(Q2));
+        repack_n8_t2(arr, &keys_q2, CK_BASE)
     }
 
     struct Fixture {
@@ -158,7 +161,7 @@ mod b {
 
     pub fn batch_benches(c: &mut Criterion) {
         let fx = build_fixture();
-        let q2 = fx.q1; // runtime q2 = q1
+        let q2 = DynModulus::new(Q2); // the real q2 < q1 (keys mod-switched q1→q2)
         let cascade = lwe_to_rlwe_n8::<DynModulus, L_CK>;
         let cascade_key: &K = &fx.pp.query_comp_key.lwe_to_rlwe_key;
 

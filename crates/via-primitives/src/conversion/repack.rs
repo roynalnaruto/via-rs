@@ -25,9 +25,35 @@ use crate::algebra::ring::element::Poly;
 use crate::algebra::ring::rns_element::PolyRns;
 use crate::encryption::MLWECiphertext;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext};
+use crate::switching::mod_switch::mod_switch_sym;
 
 // Cascade key structs whose `keys_*` suffix the repack views borrow (zero-copy).
 use super::{LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN2048};
+
+/// Mod-switch every gadget sample of an [`RLevCiphertext`] from its current
+/// modulus to `dst_mod`, via per-sample [`mod_switch_sym`].
+///
+/// The same-modulus-type realization of the §3.5 key reuse across `q1 ≠ q2`: the
+/// repack runs at `q2` (the post-CRot modulus, `.docs/via-b.md` §4) but the
+/// cascade keys ship at `q1`, so the server mod-switches them internally — no new
+/// offline payload. (Single-prime: `R_SRC`/`R_DST` are the same ring type at
+/// different modulus *values*. The RNS-`q1` → single-prime-`q2` cross-type switch
+/// is a separate path.)
+#[allow(non_camel_case_types)] // R_SRC/R_DST mirror `mod_switch_sym`'s convention
+pub(crate) fn mod_switch_rlev<const N: usize, R_SRC, R_DST, const L: usize>(
+    rlev: &RLevCiphertext<N, R_SRC, L>,
+    dst_mod: R_DST::Modulus,
+) -> RLevCiphertext<N, R_DST, L>
+where
+    R_SRC: RingPoly<N>,
+    R_DST: RingPoly<N>,
+{
+    RLevCiphertext {
+        samples: core::array::from_fn(|i| {
+            mod_switch_sym::<N, R_SRC, R_DST>(&rlev.samples[i], dst_mod)
+        }),
+    }
+}
 
 /// §3.1 (VIA-B) — MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
 /// `(RANK, N_LARGE)`-MLWE (`N_LARGE = N·d`) encrypting
@@ -229,6 +255,7 @@ macro_rules! repack_cascade {
         cascade_key = $ckey:ident,
         view = $view:ident,
         from_cascade = $from:ident,
+        from_cascade_modswitched = $from_ms:ident,
         gen = $gen:ident,
         repack = $repack:ident,
         steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
@@ -372,6 +399,34 @@ macro_rules! repack_cascade {
         ) -> $view<'_, $modp, $lev> {
             $view { cascade }
         }
+
+        #[doc = concat!(
+            "Mod-switch the `keys_*` suffix of a [`", stringify!($ckey),
+            "`] cascade key (at q1) to `dst_mod` (q2), yielding an OWNED [`",
+            stringify!($key), "`] repack schedule. The §3.5 key reuse when `q1 ≠ q2`: ",
+            "[`", stringify!($repack), "`] runs at q2 (the post-CRot modulus) but the ",
+            "cascade keys ship at q1, so the server mod-switches them per-answer — no ",
+            "new offline payload. Same-modulus-type only (single-prime); the RNS-q1 → ",
+            "single-prime-q2 cross-type switch is a separate path."
+        )]
+        pub fn $from_ms<$modp: $modbound, const $lev: usize>(
+            cascade: &$ckey<$modp, $lev>,
+            dst_mod: <$ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>
+                as $crate::algebra::ring::RingPoly<$n1>>::Modulus,
+        ) -> $key<$modp, $lev> {
+            $key {
+                $(
+                    $field: core::array::from_fn(|i| {
+                        $crate::conversion::repack::mod_switch_rlev::<
+                            $nout,
+                            $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>,
+                            $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>,
+                            $lev,
+                        >(&cascade.$field[i], dst_mod)
+                    }),
+                )+
+            }
+        }
     };
 }
 
@@ -392,6 +447,7 @@ repack_cascade! {
     cascade_key = LweToRlweKeyN8,
     view = RepackViewN8T2,
     from_cascade = repack_keys_n8_t2_from_cascade,
+    from_cascade_modswitched = repack_keys_n8_t2_from_cascade_modswitched,
     gen = gen_repack_keys_n8_t2,
     repack = repack_n8_t2,
     steps = [
@@ -417,6 +473,7 @@ repack_cascade! {
     cascade_key = LweToRlweKeyN64,
     view = RepackViewN64T8,
     from_cascade = repack_keys_n64_t8_from_cascade,
+    from_cascade_modswitched = repack_keys_n64_t8_from_cascade_modswitched,
     gen = gen_repack_keys_n64_t8,
     repack = repack_n64_t8,
     steps = [
@@ -448,6 +505,7 @@ repack_cascade! {
     cascade_key = LweToRlweKeyRnsN2048,
     view = RepackViewRns2048T256,
     from_cascade = repack_keys_rns_2048_t256_from_cascade,
+    from_cascade_modswitched = repack_keys_rns_2048_t256_from_cascade_modswitched,
     gen = gen_repack_keys_rns_2048_t256,
     repack = repack_rns_2048_t256,
     steps = [
@@ -759,6 +817,45 @@ mod tests {
         let out_oracle = repack_n8_t2(&inputs, &oracle, BASE);
         assert_eq!(out_view.mask, out_oracle.mask, "mask coeff-for-coeff");
         assert_eq!(out_view.body, out_oracle.body, "body coeff-for-coeff");
+    }
+
+    /// §3.5 across q1 ≠ q2 (the server's internal key mod-switch, in isolation):
+    /// gen the cascade at q1, encrypt the T inputs at q2 under the SAME S1
+    /// (rekeyed q1→q2), mod-switch the cascade suffix q1→q2 via
+    /// `repack_keys_n8_t2_from_cascade_modswitched`, repack at q2, decrypt under
+    /// S1@q2. The paper interleave reconstructs — the repack reuses the q1 cascade
+    /// keys at the q2 post-CRot modulus.
+    #[test]
+    fn repack_n8_t2_modswitched_q1_to_q2_reconstructs() {
+        use crate::algebra::zq::modulus::DynModulus;
+        use crate::switching::rekey::rekey_secret_key;
+        type R8d = Poly<8, DynModulus, Coefficient>;
+        let q1 = DynModulus::new(1 << 36);
+        let q2 = DynModulus::new(1 << 28);
+        let p = DynModulus::new(16);
+        const L: usize = 7;
+        const BASE: u64 = 64;
+        let mut prg = Shake256Prg::new(b"repack-n8-t2-modswitch-q1q2");
+        let sk1 = SecretKey::<8, R8d>::keygen(q1, Distribution::Ternary, &mut prg);
+        let sk1_q2 = rekey_secret_key::<8, R8d, R8d>(&sk1, q2);
+        // T=2 inputs encrypted at q2 under S1@q2.
+        let m0 = encode::<8, R8d, R8d>(&R8d::new(p, [2, 0, 0, 0, 5, 0, 0, 0]), q2);
+        let m1 = encode::<8, R8d, R8d>(&R8d::new(p, [3, 0, 0, 0, 7, 0, 0, 0]), q2);
+        let c0 = sk1_q2.encrypt(&m0, Distribution::Ternary, &mut prg);
+        let c1 = sk1_q2.encrypt(&m1, Distribution::Ternary, &mut prg);
+        // Cascade key built at q1; mod-switch its suffix → q2 (server-internal).
+        let cascade =
+            gen_lwe_to_rlwe_key_n8::<DynModulus, L>(&sk1, BASE, Distribution::Ternary, &mut prg);
+        let keys_q2 = repack_keys_n8_t2_from_cascade_modswitched(&cascade, q2);
+        let out = repack_n8_t2(&[c0, c1], &keys_q2, BASE);
+        // Decrypt under S1@q2.
+        let mut acc = out.body;
+        acc -= out.mask * *sk1_q2.poly();
+        let recovered: R8d = decode::<8, R8d, R8d>(&acc, p);
+        assert_eq!(recovered.coeff(0).to_u64(), 2, "M0_0 @ slot 0");
+        assert_eq!(recovered.coeff(2).to_u64(), 3, "M1_0 @ slot 2");
+        assert_eq!(recovered.coeff(4).to_u64(), 5, "M0_4 @ slot 4");
+        assert_eq!(recovered.coeff(6).to_u64(), 7, "M1_4 @ slot 6");
     }
 }
 

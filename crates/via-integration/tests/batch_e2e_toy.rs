@@ -8,15 +8,16 @@
 //! deinterleave path, and the empirical gate for P4's strided-deinterleave
 //! derivation (`record_t = recovered.project_at::<N3>(t)`).
 //!
-//! ## Single conversion modulus (q1 = q2)
+//! ## Modulus flow (q1 > q2) — the §3.5 key reuse across moduli
 //!
 //! The repack reuses the **q1** cascade keys (§3.5) but operates on the post-CRot
-//! ciphertexts which VIA-C places at **q2** (`.docs/via-b.md` §4); at q1 ≠ q2 that
-//! key_switch is a modulus mismatch, so this toy fixes **q2 = q1** (the q1→q2
-//! mod-switch is optional noise/size management — keeping the prefix at q1 keeps
-//! the repack key + ciphertext at one modulus). The q1 ≠ q2 case needs an
-//! internal cascade-key mod-switch q1→q2 (a paper-scale orchestration detail; the
-//! depth-10 repack *noise* itself is the P2 spike's GO).
+//! ciphertexts, which VIA-C places at **q2** (`.docs/via-b.md` §4); a `key_switch`
+//! across q1 ≠ q2 is a modulus mismatch. So the server **mod-switches the q1
+//! cascade-key suffix → q2** internally
+//! ([`repack_keys_n8_t2_from_cascade_modswitched`]) before repacking — the client
+//! still ships only the q1 keys, so §3.5's no-new-offline-payload holds. (Toy is
+//! single-prime; the paper's RNS-q1 → single-prime-q2 *cross-type* mod-switch is
+//! the remaining extension.)
 #![cfg(feature = "via-b")]
 
 use via_client::Client;
@@ -25,8 +26,8 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8, repack_keys_n8_t2_from_cascade,
-    repack_n8_t2,
+    LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+    repack_keys_n8_t2_from_cascade_modswitched, repack_n8_t2,
 };
 use via_primitives::encryption::types::RLWECiphertext;
 use via_primitives::sampling::distribution::Distribution;
@@ -46,11 +47,8 @@ const L_QUERY: usize = 7;
 const L_CK: usize = 7;
 const L_RSK: usize = 8;
 
-// `Q1`/`Q2` are the `PIRParams` metadata chain (validator needs q1 > q2). The
-// *runtime* `q2_mod` is set to `q1` below so the answer prefix stays at q1 and
-// the §3.5-reused cascade keys share a modulus with the repack-input ciphertexts
-// (`Q2` is unused at runtime — the runtime pipeline reads `q2_mod`, and Δ is
-// q1-based).
+// The real descending modulus chain q1 > q2 > q3 > q4 (params + runtime). The
+// repack reuses the q1 cascade keys mod-switched to q2 (see file doc).
 const Q1: u64 = 1 << 36;
 const Q2: u64 = 1 << 28;
 const Q3: u64 = 1 << 20;
@@ -107,7 +105,7 @@ fn toy_params() -> PIRParams {
 /// Batch round-trip for `idxs`; returns `(recovered, expected)` records.
 fn batch_round_trip(idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
     let q1 = DynModulus::new(Q1);
-    let q2 = q1; // single conversion modulus
+    let q2 = DynModulus::new(Q2); // the real q2 < q1; cascade keys mod-switched q1→q2 for repack
     let q3 = DynModulus::new(Q3);
     let q4 = DynModulus::new(Q4);
     let p = DynModulus::new(P);
@@ -151,10 +149,12 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
     let answer = server
         .answer_batch::<R8, T, _, _>(
             &batch,
-            // Repack closure: borrow the cascade key suffix (§3.5) + base CK_BASE.
+            // Repack closure (§3.5 across q1 ≠ q2): mod-switch the q1 cascade key
+            // suffix → q2, then repack the q2 post-CRot ciphertexts at base CK_BASE.
             |rotateds: &[RLWECiphertext<N1, R8>], k: &K| {
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-                repack_n8_t2(arr, &repack_keys_n8_t2_from_cascade(k), CK_BASE)
+                let keys_q2 = repack_keys_n8_t2_from_cascade_modswitched(k, q2);
+                repack_n8_t2(arr, &keys_q2, CK_BASE)
             },
             lwe_to_rlwe_n8::<DynModulus, L_CK>,
         )

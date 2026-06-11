@@ -97,7 +97,8 @@ pub use extract::{ExtrDims, extr};
 pub use repack::{
     RepackKeysN8T2, RepackKeysN64T8, RepackScheduleN8T2, RepackScheduleN64T8, RepackViewN8T2,
     RepackViewN64T8, embed_d, gen_repack_keys_n8_t2, gen_repack_keys_n64_t8, mlwes_insert,
-    mlwes_to_mlwe, repack_keys_n8_t2_from_cascade, repack_keys_n64_t8_from_cascade, repack_n8_t2,
+    mlwes_to_mlwe, repack_keys_n8_t2_from_cascade, repack_keys_n8_t2_from_cascade_modswitched,
+    repack_keys_n64_t8_from_cascade, repack_keys_n64_t8_from_cascade_modswitched, repack_n8_t2,
     repack_n64_t8,
 };
 // Paper-scale repack preset (n1=2048, T=256; depth 10). Only the borrowing
