@@ -31,6 +31,10 @@ jobs:
       - name: Run paper-scale pipeline benchmarks
         run: cargo bench --bench pipeline_paper -- "${{ inputs.filter }}"
 
+      # VIA-B paper batch phases (q2-key build + repack); reduced sampling.
+      - name: Run paper-scale VIA-B batch benchmarks
+        run: cargo bench --bench pipeline_batch_paper --features via-b -- "${{ inputs.filter }}"
+
       # Per-step timings + criterion HTML reports, downloadable from the run.
       - name: Upload criterion reports
         if: always()

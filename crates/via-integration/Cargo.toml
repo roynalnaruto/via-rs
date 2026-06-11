@@ -35,5 +35,10 @@ harness = false
 name    = "pipeline_batch_toy"
 harness = false
 
+# VIA-B paper-scale batch bench (requires `--features via-b`; run via bench-paper).
+[[bench]]
+name    = "pipeline_batch_paper"
+harness = false
+
 [lints]
 workspace = true

@@ -43,13 +43,15 @@ test-variants:
 # `just bench-cmp before` — criterion reports each step's % delta + whether it
 # is a statistically significant regression.
 
-# Run the fast (toy-scale) per-step benchmark suite (seconds).
+# Run the fast (toy-scale) per-step suite — VIA-C + VIA-B batch (seconds).
 bench:
     cargo bench --bench pipeline_toy
+    cargo bench --bench pipeline_batch_toy --features via-b
 
 # Run the paper-scale suite (n2048 RNS; reduced sampling; minutes) — on demand.
 bench-paper:
     cargo bench --bench pipeline_paper
+    cargo bench --bench pipeline_batch_paper --features via-b
 
 # Save the current fast-suite timings as a named baseline (run BEFORE a change).
 bench-save NAME="main":
