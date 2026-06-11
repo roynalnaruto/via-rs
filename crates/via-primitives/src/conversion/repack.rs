@@ -229,18 +229,24 @@ pub(crate) fn bit_reverse_index(i: usize, bits: u32) -> usize {
     r
 }
 
-/// Generate a complete repack preset — the schedule trait, the owned
-/// dedicated-key oracle struct, the trait impl, the oracle generator, and the
-/// `Repack` function — for a fixed `(n1, K, T)`, mirroring the
-/// [`lwe_to_rlwe_cascade!`](crate::lwe_to_rlwe_cascade) pattern.
+/// Generate the **engine** half of a repack preset — the schedule trait, the
+/// owned dedicated-key oracle struct, its trait impl, the by-value oracle
+/// generator, and the `Repack` function — for a fixed `(n1, K, T)`, mirroring
+/// the [`lwe_to_rlwe_cascade!`](crate::lwe_to_rlwe_cascade) pattern.
+///
+/// Split out from the borrowing-view half ([`repack_view!`]) so a preset whose
+/// cascade key has a *different ring type* (e.g. the single-prime
+/// `Poly<2048,q2>` repack derived by cross-type mod-switch from the RNS-`q1`
+/// cascade) can take the engine **without** the same-ring view machinery — the
+/// view would fail to type-check, since no same-ring cascade key exists for it.
 ///
 /// `steps` is the contiguous SUFFIX of the cascade's step list the repack
 /// reuses, each `(field, RANK_IN, N_IN, RANK_OUT, N_OUT)`; the generated key
 /// fields are degree-`N_OUT` RLev arrays whose types match a suffix of the
-/// matching `LweToRlweKey*` — so Part 2 borrows them zero-copy. `extr_degree`
-/// is `G = K/T` (the `Extr` output degree) and `input_count` is `D = T·n1/K`
-/// (the padded MLWE count = `2^depth`).
-macro_rules! repack_cascade {
+/// matching `LweToRlweKey*` — so [`repack_view!`] borrows them zero-copy.
+/// `extr_degree` is `G = K/T` (the `Extr` output degree) and `input_count` is
+/// `D = T·n1/K` (the padded MLWE count = `2^depth`).
+macro_rules! repack_engine {
     (
         n1 = $n1:literal,
         t = $t:literal,
@@ -252,10 +258,6 @@ macro_rules! repack_cascade {
         input_count = $d:literal,
         schedule = $sched:ident,
         key = $key:ident,
-        cascade_key = $ckey:ident,
-        view = $view:ident,
-        from_cascade = $from:ident,
-        from_cascade_modswitched = $from_ms:ident,
         gen = $gen:ident,
         repack = $repack:ident,
         steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
@@ -365,7 +367,38 @@ macro_rules! repack_cascade {
             )+
             $crate::conversion::mlwe_to_rlwe(&v.into_iter().next().unwrap())
         }
+    };
+}
 
+/// Generate the **view** half of a repack preset — the borrowing cascade-suffix
+/// schedule, [`from_cascade`](crate::conversion::repack) (zero-copy borrow), and
+/// `from_cascade_modswitched` (same-ring `q1 → q2` switch into an owned oracle).
+///
+/// Pairs with [`repack_engine!`]: the engine defines `$sched` and the owned
+/// `$key` oracle, and this macro implements `$sched` for the borrowing `$view`
+/// and builds `$key` in `from_cascade_modswitched` (item order between the two
+/// macro expansions is irrelevant). Only presets whose cascade key is the
+/// **same ring type** as the repack key invoke this — the single-prime
+/// `Poly<2048,q2>` repack derives its key by a cross-type mod-switch instead
+/// (see `repack_keys_poly_2048_t256_from_rns_cascade_boxed`) and takes the
+/// engine only.
+macro_rules! repack_view {
+    (
+        n1 = $n1:literal,
+        t = $t:literal,
+        ring = $ring:ident,
+        mod_param = $modp:ident,
+        mod_bound = $modbound:path,
+        levels = $lev:ident,
+        schedule = $sched:ident,
+        key = $key:ident,
+        cascade_key = $ckey:ident,
+        view = $view:ident,
+        from_cascade = $from:ident,
+        from_cascade_modswitched = $from_ms:ident,
+        repack = $repack:ident,
+        steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
+    ) => {
         #[doc = concat!(
             "Borrowing schedule for the `n1=", stringify!($n1), ", T=", stringify!($t),
             "` repack, backed by a SUFFIX of an existing [`", stringify!($ckey),
@@ -433,7 +466,7 @@ macro_rules! repack_cascade {
 // Toy preset (n1=8, K=4, T=2; depth 2): the reference instantiation, validated
 // by `repack_n8_t2_reconstructs`. Its key fields (`keys_4`, `keys_8`) are the
 // same types as a suffix of `LweToRlweKeyN8`'s fields — Part 2 borrows them.
-repack_cascade! {
+repack_engine! {
     n1 = 8,
     t = 2,
     ring = Poly,
@@ -444,11 +477,26 @@ repack_cascade! {
     input_count = 4, // D = T·n1/K = 2·8/4
     schedule = RepackScheduleN8T2,
     key = RepackKeysN8T2,
+    gen = gen_repack_keys_n8_t2,
+    repack = repack_n8_t2,
+    steps = [
+        (keys_4, 4, 2, 2, 4),
+        (keys_8, 2, 4, 1, 8),
+    ],
+}
+repack_view! {
+    n1 = 8,
+    t = 2,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    schedule = RepackScheduleN8T2,
+    key = RepackKeysN8T2,
     cascade_key = LweToRlweKeyN8,
     view = RepackViewN8T2,
     from_cascade = repack_keys_n8_t2_from_cascade,
     from_cascade_modswitched = repack_keys_n8_t2_from_cascade_modswitched,
-    gen = gen_repack_keys_n8_t2,
     repack = repack_n8_t2,
     steps = [
         (keys_4, 4, 2, 2, 4),
@@ -459,7 +507,7 @@ repack_cascade! {
 // e2e-toy preset (n1=64, K=16, T=8; depth 5): the `ViaBToyParams<64,16,2,8>`
 // repack. G = K/T = 2, D = T·n1/K = 32; reuses the `LweToRlweKeyN64` suffix
 // `keys_4..keys_64`. Validated by `repack_n64_t8_reconstructs`.
-repack_cascade! {
+repack_engine! {
     n1 = 64,
     t = 8,
     ring = Poly,
@@ -470,11 +518,29 @@ repack_cascade! {
     input_count = 32, // D = T·n1/K = 8·64/16
     schedule = RepackScheduleN64T8,
     key = RepackKeysN64T8,
+    gen = gen_repack_keys_n64_t8,
+    repack = repack_n64_t8,
+    steps = [
+        (keys_4, 32, 2, 16, 4),
+        (keys_8, 16, 4, 8, 8),
+        (keys_16, 8, 8, 4, 16),
+        (keys_32, 4, 16, 2, 32),
+        (keys_64, 2, 32, 1, 64),
+    ],
+}
+repack_view! {
+    n1 = 64,
+    t = 8,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    schedule = RepackScheduleN64T8,
+    key = RepackKeysN64T8,
     cascade_key = LweToRlweKeyN64,
     view = RepackViewN64T8,
     from_cascade = repack_keys_n64_t8_from_cascade,
     from_cascade_modswitched = repack_keys_n64_t8_from_cascade_modswitched,
-    gen = gen_repack_keys_n64_t8,
     repack = repack_n64_t8,
     steps = [
         (keys_4, 32, 2, 16, 4),
@@ -491,7 +557,7 @@ repack_cascade! {
 // _t256` is generated but NOT re-exported — a by-value key at this scale overflows
 // the stack (like the cascade's own by-value n2048 gen); the depth-spike borrows
 // the heap cascade key via the view. GO/NO-GO: `repack_rns_2048_t256_spike`.
-repack_cascade! {
+repack_engine! {
     n1 = 2048,
     t = 256,
     ring = PolyRns,
@@ -502,10 +568,6 @@ repack_cascade! {
     input_count = 1024, // D = T·n1/K = 256·2048/512
     schedule = RepackScheduleRns2048T256,
     key = RepackKeysRns2048T256,
-    cascade_key = LweToRlweKeyRnsN2048,
-    view = RepackViewRns2048T256,
-    from_cascade = repack_keys_rns_2048_t256_from_cascade,
-    from_cascade_modswitched = repack_keys_rns_2048_t256_from_cascade_modswitched,
     gen = gen_repack_keys_rns_2048_t256,
     repack = repack_rns_2048_t256,
     steps = [
@@ -520,6 +582,138 @@ repack_cascade! {
         (keys_1024, 4, 512, 2, 1024),
         (keys_2048, 2, 1024, 1, 2048),
     ],
+}
+repack_view! {
+    n1 = 2048,
+    t = 256,
+    ring = PolyRns,
+    mod_param = B,
+    mod_bound = crate::algebra::rns::basis::RnsBasis,
+    levels = L,
+    schedule = RepackScheduleRns2048T256,
+    key = RepackKeysRns2048T256,
+    cascade_key = LweToRlweKeyRnsN2048,
+    view = RepackViewRns2048T256,
+    from_cascade = repack_keys_rns_2048_t256_from_cascade,
+    from_cascade_modswitched = repack_keys_rns_2048_t256_from_cascade_modswitched,
+    repack = repack_rns_2048_t256,
+    steps = [
+        (keys_4, 1024, 2, 512, 4),
+        (keys_8, 512, 4, 256, 8),
+        (keys_16, 256, 8, 128, 16),
+        (keys_32, 128, 16, 64, 32),
+        (keys_64, 64, 32, 32, 64),
+        (keys_128, 32, 64, 16, 128),
+        (keys_256, 16, 128, 8, 256),
+        (keys_512, 8, 256, 4, 512),
+        (keys_1024, 4, 512, 2, 1024),
+        (keys_2048, 2, 1024, 1, 2048),
+    ],
+}
+
+// Paper-scale SINGLE-PRIME repack preset (n1=2048, K=512, T=256; depth 10) over
+// `Poly<2048, q2>` — the *production* paper repack. The real repack runs at the
+// single-prime post-CRot modulus q2 (≈2^34, one u64 prime), NOT the q1-RNS
+// `PolyRns` of the `…_rns_2048_t256` preset (a single-modulus noise spike). It
+// has no same-ring cascade key — the only n2048 cascade is RNS-`q1` — so it
+// takes the engine ONLY; its q2 key is derived by cross-type mod-switch from the
+// RNS-`q1` cascade via `repack_keys_poly_2048_t256_from_rns_cascade_boxed` (the
+// §3.5 key reuse). The by-value `gen_repack_keys_poly_2048_t256` is generated but
+// NOT re-exported — a ~11.25 MiB key by value overflows the stack.
+repack_engine! {
+    n1 = 2048,
+    t = 256,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    extr_degree = 2,    // G = K/T = 512/256
+    input_count = 1024, // D = T·n1/K = 256·2048/512
+    schedule = RepackSchedulePoly2048T256,
+    key = RepackKeysPoly2048T256,
+    gen = gen_repack_keys_poly_2048_t256,
+    repack = repack_poly_2048_t256,
+    steps = [
+        (keys_4, 1024, 2, 512, 4),
+        (keys_8, 512, 4, 256, 8),
+        (keys_16, 256, 8, 128, 16),
+        (keys_32, 128, 16, 64, 32),
+        (keys_64, 64, 32, 32, 64),
+        (keys_128, 32, 64, 16, 128),
+        (keys_256, 16, 128, 8, 256),
+        (keys_512, 8, 256, 4, 512),
+        (keys_1024, 4, 512, 2, 1024),
+        (keys_2048, 2, 1024, 1, 2048),
+    ],
+}
+
+/// Build the single-prime `Poly<2048,q2>` repack key
+/// ([`RepackKeysPoly2048T256`]) from the RNS-`q1` LWE→RLWE cascade key
+/// ([`LweToRlweKeyRnsN2048`]) the server already holds, **field-by-field on the
+/// heap**, cross-type mod-switching each RNS-`q1` step-key RLev → single-prime
+/// `q2`.
+///
+/// The production paper-scale realization of the §3.5 key reuse: the repack runs
+/// at the single-prime post-CRot modulus `q2`, but the cascade ships at the
+/// 2-prime RNS `q1`; the server derives the `q2` repack key internally — no new
+/// offline payload. The same-ring [`from_cascade_modswitched`](repack_view!) of
+/// the macro cannot express this (its source and target are one ring type), and
+/// returning the ~11.25 MiB key by value would overflow the stack, so this is
+/// hand-written to mirror the cascade's own boxed builder.
+///
+/// Peak stack is a **single** degree-2048 `RLev` (~589 KiB): each
+/// [`mod_switch_rlev`] call returns one switched step key, written straight into
+/// its heap slot via `addr_of_mut!`, never assembling a whole field (let alone
+/// the whole key) on the stack.
+#[allow(clippy::needless_range_loop)] // index drives both src field and heap slot
+pub fn repack_keys_poly_2048_t256_from_rns_cascade_boxed<B, M, const L: usize>(
+    rns: &LweToRlweKeyRnsN2048<B, L>,
+    q2: M,
+) -> alloc::boxed::Box<RepackKeysPoly2048T256<M, L>>
+where
+    B: crate::algebra::rns::basis::RnsBasis,
+    M: crate::algebra::zq::modulus::Modulus,
+{
+    use crate::algebra::ring::form::Coefficient;
+    use core::ptr::addr_of_mut;
+
+    let mut boxed = alloc::boxed::Box::<RepackKeysPoly2048T256<M, L>>::new_uninit();
+    let ptr = boxed.as_mut_ptr();
+    // One `mod_switch_rlev` per (field, index); each writes one switched RLev
+    // straight into its heap slot. `$nout` (output degree) and the field's
+    // `RANK_IN` mirror the engine `steps` list above exactly.
+    macro_rules! switch_field {
+        ($field:ident, $nout:literal, $rank_in:literal) => {
+            for i in 0..$rank_in {
+                // SAFETY: `ptr` is a valid `*mut RepackKeysPoly2048T256`; the
+                // slot `(*ptr).$field[i]` is one `RLev` of size matching the
+                // value written. Every (field, i) pair below is written exactly
+                // once, covering the whole struct before `assume_init`. We form
+                // no reference to uninitialised memory (`addr_of_mut!`), and the
+                // cross-type `mod_switch_rlev` returns the value by move.
+                unsafe {
+                    addr_of_mut!((*ptr).$field[i]).write(mod_switch_rlev::<
+                        $nout,
+                        PolyRns<$nout, B, Coefficient>,
+                        Poly<$nout, M, Coefficient>,
+                        L,
+                    >(&rns.$field[i], q2));
+                }
+            }
+        };
+    }
+    switch_field!(keys_4, 4, 1024);
+    switch_field!(keys_8, 8, 512);
+    switch_field!(keys_16, 16, 256);
+    switch_field!(keys_32, 32, 128);
+    switch_field!(keys_64, 64, 64);
+    switch_field!(keys_128, 128, 32);
+    switch_field!(keys_256, 256, 16);
+    switch_field!(keys_512, 512, 8);
+    switch_field!(keys_1024, 1024, 4);
+    switch_field!(keys_2048, 2048, 2);
+    // SAFETY: every (field, index) slot was written above.
+    unsafe { boxed.assume_init() }
 }
 
 #[cfg(test)]
@@ -926,17 +1120,22 @@ mod spike {
     // explicitly to reach `std::thread` for the bounded-stack spawn.
     extern crate std;
 
-    use super::{repack_keys_rns_2048_t256_from_cascade, repack_rns_2048_t256};
+    use super::{
+        repack_keys_poly_2048_t256_from_rns_cascade_boxed, repack_keys_rns_2048_t256_from_cascade,
+        repack_poly_2048_t256, repack_rns_2048_t256,
+    };
     use crate::algebra::ring::element::Poly;
     use crate::algebra::ring::form::Coefficient;
     use crate::algebra::ring::rns_element::PolyRns;
     use crate::algebra::rns::basis::paper::ViaCQ1Rns;
     use crate::algebra::zq::modulus::ConstModulus;
+    use crate::algebra::zq::modulus::paper::ViaCQ2;
     use crate::conversion::gen_lwe_to_rlwe_key_rns_n2048_boxed;
     use crate::encryption::encode;
     use crate::encryption::types::SecretKey;
     use crate::sampling::distribution::Distribution;
     use crate::sampling::prg::Shake256Prg;
+    use crate::switching::rekey::rekey_secret_key;
     use alloc::vec::Vec;
 
     const N1: usize = 2048;
@@ -1012,5 +1211,92 @@ mod spike {
             .expect("spawn repack spike thread")
             .join()
             .expect("repack spike panicked (depth-10 noise did not close?)");
+    }
+
+    /// **The PRODUCTION paper repack GO/NO-GO** — depth-10 single-prime repack at
+    /// the paper `(n1,K,T) = (2048,512,256)`, the §3.5 key reuse end to end at
+    /// real scale. Supersedes [`repack_rns_2048_t256_spike`] (which packs over the
+    /// q1-RNS `PolyRns`, a single-modulus noise spike) as the real paper gate:
+    /// here the repack runs at the **single-prime** post-CRot modulus q2 the paper
+    /// actually uses.
+    ///
+    /// The pipeline: gen the secret key S1 at q1-RNS, build the ~24.75 MiB RNS
+    /// cascade key (boxed), **cross-type mod-switch** its `keys_4..keys_2048`
+    /// suffix into the ~11.25 MiB single-prime q2 repack key (boxed), rekey
+    /// S1 → q2, encrypt T = 256 inputs at q2 under S1@q2, run
+    /// [`repack_poly_2048_t256`], and decrypt under S1@q2. PASS ⇒ the cross-type
+    /// key derivation + depth-10 noise budget close at q2 ⇒ production repack GO;
+    /// panic ⇒ NO-GO. Both big keys + the inputs live on the heap, so peak stack
+    /// stays small (one degree-2048 `RLev` ≈ 589 KiB during the key build).
+    #[test]
+    #[ignore = "very heavy: ~24.75 MiB RNS cascade + ~11.25 MiB q2 key + depth-10 \
+                repack of 256 RLWEs at n=2048; run with --features via-b,alloc --release -- --ignored"]
+    fn repack_poly_2048_t256_spike() {
+        type Rq1 = PolyRns<N1, ViaCQ1Rns, Coefficient>;
+        type Rq2 = Poly<N1, ViaCQ2, Coefficient>;
+        type P1 = Poly<N1, ConstModulus<16>, Coefficient>;
+
+        std::thread::Builder::new()
+            .stack_size(STACK)
+            .spawn(|| {
+                let basis = ViaCQ1Rns::default();
+                let q2 = ViaCQ2::default();
+                let p = ConstModulus::<16>;
+                let mut prg = Shake256Prg::new(b"repack-poly-2048-t256-spike");
+                let sk1 = SecretKey::<N1, Rq1>::keygen(basis, Distribution::Ternary, &mut prg);
+
+                // The ~24.75 MiB RNS-q1 cascade key (heap-built), then the
+                // ~11.25 MiB single-prime q2 repack key derived from it by
+                // cross-type mod-switch (heap-built). Both never transit the stack.
+                let cascade = gen_lwe_to_rlwe_key_rns_n2048_boxed::<ViaCQ1Rns, L_CK>(
+                    &sk1,
+                    CK_BASE,
+                    Distribution::Ternary,
+                    &mut prg,
+                );
+                let q2_key = repack_keys_poly_2048_t256_from_rns_cascade_boxed(&cascade, q2);
+
+                // S1 reinterpreted at the single-prime q2 (cross-type rekey): the
+                // inputs are encrypted at q2 and decrypt under S1@q2.
+                let sk_q2 = rekey_secret_key::<N1, Rq1, Rq2>(&sk1, q2);
+
+                // T = 256 RLWE inputs at q2, each carrying VAL in coeff 0 (else
+                // zero). Heap `Vec` borrowed as `&[_; T]` — a by-value
+                // `[RLWE; 256]` at n=2048 would be a ~16 MiB stack array.
+                let mut v: Vec<_> = Vec::with_capacity(T);
+                for _ in 0..T {
+                    let mut coeffs = [0u64; N1];
+                    coeffs[0] = VAL;
+                    let m = encode::<N1, Rq2, P1>(&Poly::new(p, coeffs), q2);
+                    v.push(sk_q2.encrypt(&m, Distribution::Ternary, &mut prg));
+                }
+                let inputs: &[_; T] = (&v[..]).try_into().expect("T encrypted inputs");
+
+                let out = repack_poly_2048_t256(inputs, &*q2_key, CK_BASE);
+                let recovered: P1 = sk_q2.decrypt(&out, p);
+
+                // Noise GO/NO-GO (position-agnostic, as in the RNS spike): the
+                // interleave is a permutation, so exactly T coefficients carry VAL
+                // and every other is zero. Any cross-type-key or depth-10 noise
+                // overflow corrupts a VAL→VAL±1 or a 0→nonzero.
+                let mut designated = 0usize;
+                for i in 0..N1 {
+                    let c = recovered.coeff(i).to_u64();
+                    assert!(
+                        c == 0 || c == VAL,
+                        "coeff {i} = {c} ∉ {{0, {VAL}}} — noise!"
+                    );
+                    if c == VAL {
+                        designated += 1;
+                    }
+                }
+                assert_eq!(
+                    designated, T,
+                    "exactly T={T} designated coefficients carry VAL"
+                );
+            })
+            .expect("spawn poly repack spike thread")
+            .join()
+            .expect("poly repack spike panicked (cross-type key or depth-10 noise did not close?)");
     }
 }
