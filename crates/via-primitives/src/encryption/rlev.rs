@@ -14,7 +14,7 @@
 //! Phase 7's `gadget_product` (RLev × plaintext → RLWE) will land in
 //! this same file.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyNtt};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
@@ -201,6 +201,65 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
             result_body += digit_poly * sample.body;
         }
         RLWECiphertext::new(result_mask, result_body)
+    }
+}
+
+impl<const N: usize, R: RingPolyNtt<N>, const L: usize> RLevCiphertext<N, R, L> {
+    /// NTT-accelerated twin of
+    /// [`gadget_product`](RLevCiphertext::gadget_product), available when the
+    /// ring modulus is NTT-friendly ($q \equiv 1 \bmod 2N$ — the paper
+    /// coefficient moduli $q_1$ (RNS), $q_2$, $q_3$ all are).
+    ///
+    /// # Result
+    ///
+    /// **Bit-identical** to [`gadget_product`](RLevCiphertext::gadget_product):
+    /// the negacyclic NTT is an exact ring isomorphism over $\mathbb{Z}_q$, so
+    /// $\sum_k \mathrm{INTT}\bigl(\mathrm{NTT}(d_k) \odot \mathrm{NTT}(s_k)\bigr)
+    /// = \sum_k d_k \cdot s_k$. Equality (not just an approximation) is pinned by
+    /// the `gadget_product_ntt_matches_schoolbook_*` tests.
+    ///
+    /// # Cost
+    ///
+    /// Replaces the `2L` schoolbook `O(N²)` negacyclic muls with `3L` forward
+    /// `+ 2` inverse `O(N log N)` transforms and `2L` `O(N)` pointwise muls —
+    /// ~200× fewer scalar multiplications at `N = 2048`.
+    ///
+    /// # Memory
+    ///
+    /// `O(N)` scratch, the same asymptotics as
+    /// [`gadget_product`](RLevCiphertext::gadget_product). Each of the `L` fixed
+    /// samples is used exactly once, so they are transformed **on demand**; no
+    /// `O(L·N)` table of pre-transformed samples is materialised (that
+    /// cross-call amortisation belongs on the stored ciphertext type, not here).
+    ///
+    /// # Secret-bearing inputs
+    ///
+    /// [`forward_ntt`](RingPolyNtt::forward_ntt) consumes a `Copy` of each
+    /// sample's `mask`/`body` — these are RLWE ciphertexts (public), not raw
+    /// secret-key polynomials, so the residual-stack caveat documented on
+    /// [`Poly::into_eval`](crate::algebra::ring::element::Poly::into_eval) does
+    /// not apply.
+    pub fn gadget_product_ntt(&self, plaintext: &R, base: u64) -> RLWECiphertext<N, R> {
+        let modulus = plaintext.modulus();
+        let mut scratch = [0i128; N];
+        gadget_scale_into::<N, R>(plaintext, base, L as u8, &mut scratch);
+
+        let mut acc_mask = R::eval_zero(modulus);
+        let mut acc_body = R::eval_zero(modulus);
+        let mut digit_buf = [0i64; N];
+
+        // Same LSB-first step `k` ↔ MSB-first sample `L-1-k` pairing as
+        // `gadget_product` (the `msb_first_pairing_lock` test guards it); each
+        // product is accumulated in evaluation form, then transformed back once.
+        for k in 0..L {
+            gadget_extract_lsb_into::<N>(base, &mut scratch, &mut digit_buf);
+            let digit_eval = R::forward_ntt(R::from_centered_i64s(modulus, &digit_buf));
+            let sample = &self.samples[L - 1 - k];
+            // `digit_eval` is `Copy`, so each `*` copies it rather than moving.
+            acc_mask += digit_eval * R::forward_ntt(sample.mask);
+            acc_body += digit_eval * R::forward_ntt(sample.body);
+        }
+        RLWECiphertext::new(R::inverse_ntt(acc_mask), R::inverse_ntt(acc_body))
     }
 }
 
@@ -527,6 +586,74 @@ mod tests {
                 "VIA-C q₂ gadget product noise at coeff {j}: {c}"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // gadget_product_ntt — bit-identical to the schoolbook path
+    // -----------------------------------------------------------------------
+
+    /// The NTT-mediated gadget product must equal the schoolbook one **exactly**
+    /// (not merely within noise): the negacyclic NTT is an exact ring
+    /// isomorphism. Single-prime NTT-friendly modulus `q = 17` at `N = 4`.
+    #[test]
+    fn gadget_product_ntt_matches_schoolbook_single_prime() {
+        use crate::algebra::zq::modulus::ConstModulus;
+        type P = Poly<4, ConstModulus<17>, Coefficient>;
+        const L: usize = 4;
+        let q = ConstModulus::<17>;
+
+        // L arbitrary (non-encrypted) RLWE samples — we are checking the algebra
+        // of the two gadget-product implementations, which is noise-independent.
+        let samples: [RLWECiphertext<4, P>; L] = core::array::from_fn(|i| {
+            let i = i as u128;
+            let mask = <P as RingPoly<4>>::from_u128_coeffs(
+                q,
+                &[(3 * i + 1) % 17, (i + 4) % 17, (5 * i) % 17, (i * i) % 17],
+            );
+            let body = <P as RingPoly<4>>::from_u128_coeffs(
+                q,
+                &[(i + 7) % 17, (2 * i + 1) % 17, (4 * i) % 17, (i + 9) % 17],
+            );
+            RLWECiphertext::new(mask, body)
+        });
+        let rlev = RLevCiphertext::<4, P, L>::new(samples);
+        let plaintext = <P as RingPoly<4>>::from_u128_coeffs(q, &[3, 0, 5, 1]);
+        let base = 2u64;
+
+        let school = rlev.gadget_product(&plaintext, base);
+        let ntt = rlev.gadget_product_ntt(&plaintext, base);
+        assert_eq!(school.mask, ntt.mask, "single-prime mask mismatch");
+        assert_eq!(school.body, ntt.body, "single-prime body mismatch");
+    }
+
+    /// RNS counterpart of
+    /// [`gadget_product_ntt_matches_schoolbook_single_prime`] — exercises the
+    /// per-slot NTT on the paper VIA `q₁` basis (NTT-friendly at `N = 4`).
+    #[test]
+    fn gadget_product_ntt_matches_schoolbook_rns() {
+        use crate::algebra::rns::basis::paper::ViaQ1Rns;
+        type P = PolyRns<4, ViaQ1Rns, Coefficient>;
+        const L: usize = 5;
+        let basis = ViaQ1Rns::default();
+
+        let samples: [RLWECiphertext<4, P>; L] = core::array::from_fn(|i| {
+            let i = i as u128;
+            let mask = <P as RingPoly<4>>::from_u128_coeffs(
+                basis,
+                &[1000 * i + 1, 2 * i + 3, 7 * i, i * i + 5],
+            );
+            let body =
+                <P as RingPoly<4>>::from_u128_coeffs(basis, &[i + 11, 3 * i + 2, 9 * i, i + 13]);
+            RLWECiphertext::new(mask, body)
+        });
+        let rlev = RLevCiphertext::<4, P, L>::new(samples);
+        let plaintext = <P as RingPoly<4>>::from_u128_coeffs(basis, &[3, 1, 5, 2]);
+        let base = 8u64;
+
+        let school = rlev.gadget_product(&plaintext, base);
+        let ntt = rlev.gadget_product_ntt(&plaintext, base);
+        assert_eq!(school.mask, ntt.mask, "RNS mask mismatch");
+        assert_eq!(school.body, ntt.body, "RNS body mismatch");
     }
 
     /// `encrypt_rlev_boxed` must draw PRG identically to `encrypt_rlev` and so

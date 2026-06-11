@@ -80,6 +80,7 @@ pub mod abstraction;
 pub mod element;
 pub mod form;
 pub mod ntt;
+pub mod ntt_abstraction;
 pub mod ops;
 pub mod reshape;
 pub mod rns_element;
@@ -87,3 +88,4 @@ pub mod rns_ops;
 pub mod rns_reshape;
 
 pub use abstraction::RingPoly;
+pub use ntt_abstraction::RingPolyNtt;
