@@ -61,6 +61,12 @@ bench-save NAME="main":
 bench-cmp NAME="main":
     cargo bench --bench pipeline_toy -- --baseline {{NAME}}
 
+# Run the via-primitives kernel micro-benchmarks (NTT-mediated vs schoolbook
+# gadget product, raw NTT round-trip) — isolates the primitives the pipeline
+# benches reach only transitively.
+bench-primitives *FLAGS:
+    cargo bench --package via-primitives --bench kernels {{FLAGS}}
+
 # ─── docs ────────────────────────────────────────────────────────────────
 
 # Build rustdoc for via-primitives (KaTeX math rendering) and open in a browser.

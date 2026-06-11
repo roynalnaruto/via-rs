@@ -25,6 +25,17 @@ sha3      = { workspace = true }
 subtle    = { workspace = true }
 zeroize   = { workspace = true }
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+# Kernel-level micro-benchmarks (criterion). Complements the end-to-end pipeline
+# benches in `via-integration`; isolates the primitives the pipeline reaches only
+# transitively (NTT-mediated gadget product vs schoolbook, raw NTT round-trip).
+# Run: `just bench-primitives`.
+[[bench]]
+name    = "kernels"
+harness = false
+
 [package.metadata.docs.rs]
 # Document the full API, including the `alloc`-gated paper-scale cascade path.
 features = ["alloc"]
