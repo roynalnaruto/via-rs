@@ -15,6 +15,7 @@ extern crate alloc;
 mod error;
 mod params;
 mod presets;
+mod variant;
 mod wire;
 
 // Re-export primitives so protocol consumers only need one dep declaration.
@@ -26,6 +27,15 @@ pub use presets::{
     REALISTIC_PARAMS, TOY_PARAMS, ViaCPublicParams, ViaCRealisticParams, ViaCToyParams,
     pir_params_matches_preset,
 };
+// The common variant-dimension read surface (VIA-C ≡ n3=n2, t=1).
+pub use variant::VariantParams;
+// VIA-B preset markers + runtime sidecars (gated at the re-export boundary).
+#[cfg(feature = "via-b")]
+pub use presets::{
+    REALISTIC_B_PARAMS, TOY_B_PARAMS, ViaBPublicParams, ViaBRealisticParams, ViaBToyParams,
+};
+#[cfg(feature = "via-b")]
+pub use wire::BatchedQuery;
 pub use wire::{
     CompressedAnswer, CompressedQuery, DecompressedQuery, PrgCompressed, PublicParams,
     QueryCompressionKey, Uncompressed, WireFormat,

@@ -1,18 +1,27 @@
-//! Toy single-prime **client ↔ server** end-to-end test (P4 capstone).
+//! Toy VIA-C client↔server e2e on a **larger asymmetric grid** `I=4, J=8`
+//! (`#[ignore]`).
 //!
-//! Exercises the whole VIA-C protocol through the real public APIs of both
-//! crates — `Client::{setup, query, recover}` and `Server::{setup, answer}` —
-//! with nothing inlined:
+//! [`client_server_e2e`](super) runs the minimal **square** `2×2` grid, where the
+//! DMux and CMux trees collapse to a single level (`num_dmux = num_cmux = 1`).
+//! This module re-runs the identical VIA-C round-trip — same public APIs, same
+//! single-prime toy params — at `I=4, J=8` (`num_dmux = log₂4 = 2`,
+//! `num_cmux = log₂8 = 3`), so it additionally exercises:
 //!
-//! ```text
-//! Client::setup ─(PublicParams)→ Server::setup
-//! Client::query ─(CompressedQuery)→ Server::answer ─(answer)→ Client::recover
-//! ```
+//!   - **multi-level DMux (depth 2) + CMux (depth 3)** tree recursions, which are
+//!     degenerate single nodes at `2×2`;
+//!   - the **multi-bit client index → (row α, col β, record γ) decomposition** and
+//!     the `query_decomp` partition into `(num_dmux, num_cmux, num_crot)` RGSW
+//!     bits — single-bit per axis at `2×2`;
+//!   - **`I ≠ J`**, so a row/column transposition (structurally invisible on a
+//!     square grid) is caught;
+//!   - **`first_dim` accumulation** over a non-trivial `4×8` matrix.
 //!
-//! and asserts `recover == record[index]`. This is the strongest proof that the
-//! P4 client and the P3 server agree on every shared convention (bit ordering,
-//! gadget base, PRG-fed key layout, the q1≫q2≫q3≫q4 modulus chain). Params are
-//! the same single-prime set proven to close noise in `via-server`'s `e2e_toy`.
+//! It queries **every** index (all `d·I·J = 64` records — every one of the 32
+//! cells, both γ slots). `#[ignore]` (run with
+//! `cargo test -p via-integration -- --ignored`): the 64 full round-trips are
+//! cheap at n8 but kept off the default path; the `2×2` `client_server_e2e`
+//! remains the fast default-CI gate. Params are otherwise the single-prime toy
+//! set from `client_server_e2e`.
 
 use via_client::Client;
 use via_primitives::algebra::ring::RingPoly;
@@ -44,8 +53,8 @@ const B_QUERY: u64 = 64; // DMux/CMux gadget base (= gadget_base_1/2)
 const CK_BASE: u64 = 64; // cascade + conversion-key base
 const B_RSK: u64 = 8; // ring-switch base
 
-const NUM_ROWS: usize = 2; // I
-const NUM_COLS: usize = 2; // J
+const NUM_ROWS: usize = 4; // I — num_dmux = log₂ I = 2 (was 2 → 1 level)
+const NUM_COLS: usize = 8; // J — num_cmux = log₂ J = 3 (was 2 → 1 level)
 
 type R8 = Poly<N1, DynModulus, Coefficient>;
 type R4 = Poly<N2, DynModulus, Coefficient>;
@@ -87,16 +96,26 @@ fn toy_params() -> PIRParams {
     )
 }
 
-/// Full protocol round-trip for `index`; returns `(recovered, expected)`.
-fn round_trip(index: usize) -> (R4, R4) {
+/// A fully set-up client + server over the `4×8` toy DB, plus the recover-side
+/// moduli. Built once and reused across all 64 queries (`query`/`answer`/`recover`
+/// take `&self`), so the sweep continues a single PRG stream.
+struct Harness {
+    client: ToyClient,
+    server: ToyServer,
+    q3: DynModulus,
+    q4: DynModulus,
+    p: DynModulus,
+    prg: Shake256Prg,
+}
+
+fn build() -> Harness {
     let q1 = DynModulus::new(Q1);
     let q2 = DynModulus::new(Q2);
     let q3 = DynModulus::new(Q3);
     let q4 = DynModulus::new(Q4);
     let p = DynModulus::new(P);
-    let mut prg = Shake256Prg::new(b"via-c-client-server-e2e");
+    let mut prg = Shake256Prg::new(b"via-c-client-server-e2e-grid");
 
-    // --- Client setup → (Client, PublicParams) ---------------------------
     let (client, pp) = ToyClient::setup(
         q1,
         q3,
@@ -114,8 +133,6 @@ fn round_trip(index: usize) -> (R4, R4) {
             ))
         },
         |sk1, sk2, dist, prg| {
-            // rekey S1 → q3 (S2's modulus) before gen_rsk — concrete types so
-            // the private RekeySource bound resolves.
             let q3_mod = RingPoly::modulus(sk2.poly());
             let s1_q3 = rekey_secret_key::<N1, R8, R8>(sk1, q3_mod);
             gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, sk2, B_RSK, dist, prg)
@@ -123,51 +140,50 @@ fn round_trip(index: usize) -> (R4, R4) {
     )
     .expect("client setup");
 
-    // --- Server setup (consumes the client's PublicParams) ---------------
     let records: Vec<R4> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
     let server = ToyServer::setup::<R4>(&records, pp, q1, q2, q3, q4, p);
 
-    // --- Query → Answer → Recover ----------------------------------------
-    let query = client.query(index, &mut prg).expect("client query");
-    let answer = server
+    Harness {
+        client,
+        server,
+        q3,
+        q4,
+        p,
+        prg,
+    }
+}
+
+/// One full round-trip for `index`; returns `(recovered, expected)`.
+fn run_query(h: &mut Harness, index: usize) -> (R4, R4) {
+    let query = h.client.query(index, &mut h.prg).expect("client query");
+    let answer = h
+        .server
         .answer::<R8, _>(&query, lwe_to_rlwe_n8::<DynModulus, L_CK>)
         .expect("server answer");
-    let recovered: R4 = client
-        .recover::<R4, R4, R4>(&answer, q3, q4, p)
+    let recovered: R4 = h
+        .client
+        .recover::<R4, R4, R4>(&answer, h.q3, h.q4, h.p)
         .expect("client recover");
-
-    (recovered, records[index])
+    (recovered, record(index, h.p))
 }
 
-/// Index 0 — all query bits zero (noise closure in isolation).
+/// Every index recovers its own record on the `4×8` grid — each of the 32 cells
+/// `(α, β)` is hit by both of its `d = 2` records (`γ = 0, 1`). `index = γ·(I·J)
+/// + α·J + β`, so the sweep walks every multi-level DMux/CMux selection path.
 #[test]
-fn client_server_e2e_index_0() {
-    let (got, want) = round_trip(0);
-    assert_eq!(got, want, "recover(query(0)) must equal record[0]");
-}
-
-/// Index 5 = γ·4 + α·2 + β with (α,β,γ) = (0,1,1) — DMux off, CMux + CRot on.
-#[test]
-fn client_server_e2e_index_5() {
-    let (got, want) = round_trip(5);
-    assert_eq!(got, want, "recover(query(5)) must equal record[5]");
-}
-
-/// Index 7 = (α,β,γ) = (1,1,1) — every gate selecting.
-#[test]
-fn client_server_e2e_index_7() {
-    let (got, want) = round_trip(7);
-    assert_eq!(got, want, "recover(query(7)) must equal record[7]");
-}
-
-/// Every index in range recovers its own record (full coverage).
-#[test]
-fn client_server_e2e_all_indices() {
+#[ignore = "larger 4×8 grid (multi-level DMux/CMux); run with -- --ignored"]
+fn client_server_e2e_grid_every_cell() {
+    let mut h = build();
     for index in 0..(D * NUM_ROWS * NUM_COLS) {
-        let (got, want) = round_trip(index);
+        let (got, want) = run_query(&mut h, index);
+        let (alpha, beta, gamma) = (
+            (index / NUM_COLS) % NUM_ROWS,
+            index % NUM_COLS,
+            index / (NUM_ROWS * NUM_COLS),
+        );
         assert_eq!(
             got, want,
-            "recover(query({index})) must equal record[{index}]"
+            "recover(query({index})) must equal record[{index}] (cell α={alpha}, β={beta}, γ={gamma})"
         );
     }
 }

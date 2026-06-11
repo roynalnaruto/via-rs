@@ -56,6 +56,44 @@ jobs:
       - name: Doctests
         run: cargo test --doc
 
+  # ─── 2b. Variant features (via-c / via-b) ──────────────────────────────
+  variant-features:
+    name: Variant features (via-c / via-b)
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # via-c must compile with NO via-b surface present.
+      - name: Build (via-c)
+        run: cargo build --all-targets --features via-c
+
+      # via-b enables the new gated surface (implies via-c).
+      - name: Build (via-b)
+        run: cargo build --all-targets --features via-b
+
+      # Zero-cost boundary: via-primitives stays no-alloc-clean under via-c —
+      # the repack module is `cfg(all(via-b, alloc))`, so it is fully absent.
+      - name: via-primitives no-alloc under via-c (repack absent)
+        run: cargo check --package via-primitives --features via-c
+
+      # Tests — BOTH variants, per-crate, with `alloc` where the via-b surface
+      # needs it: the repack module is `cfg(all(via-b, alloc))`, so a bare
+      # `--features via-b` on via-primitives would silently SKIP every repack test.
+      - name: Tests (via-c — primitives)
+        run: cargo test -p via-primitives --features via-c
+      - name: Tests (via-b — primitives + alloc → repack)
+        run: cargo test -p via-primitives --features via-b,alloc
+      - name: Tests (via-b — protocol / client / server)
+        run: |
+          cargo test -p via-protocol --features via-b
+          cargo test -p via-client --features via-b
+          cargo test -p via-server --features via-b
+      - name: Tests (via-b — integration, toy batch e2e)
+        run: cargo test -p via-integration --features via-b
+
   # ─── 3. Docs (rustdoc build + doctests) ────────────────────────────────
   docs:
     name: Docs

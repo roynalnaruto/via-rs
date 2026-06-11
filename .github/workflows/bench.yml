@@ -73,6 +73,11 @@ jobs:
             cargo bench --bench pipeline_toy
           fi
 
+      # VIA-B batch per-phase bench (informational; the base-baseline +
+      # regression-comment logic above is pipeline_toy-specific).
+      - name: Benchmark VIA-B batch (toy)
+        run: cargo bench --bench pipeline_batch_toy --features via-b
+
       - name: Detect regressions
         id: regr
         if: github.event_name == 'pull_request' && env.HAVE_BASE == '1'

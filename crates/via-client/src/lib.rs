@@ -10,9 +10,13 @@
 
 extern crate alloc;
 
+#[cfg(feature = "via-b")]
+pub mod batch;
 pub mod client;
 pub mod decompose;
 pub mod query;
 
+#[cfg(feature = "via-b")]
+pub use batch::deinterleave_batch;
 pub use client::Client;
 pub use decompose::decompose_index;
