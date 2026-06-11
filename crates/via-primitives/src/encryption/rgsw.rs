@@ -16,7 +16,7 @@
 //!
 //! Phase 7's `external_product` will land in this same file.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
@@ -112,7 +112,10 @@ impl<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>
         ct: &RLWECiphertext<N, R>,
         base_neg_s_m: u64,
         base_m: u64,
-    ) -> RLWECiphertext<N, R> {
+    ) -> RLWECiphertext<N, R>
+    where
+        R: RingPolyEval<N>,
+    {
         let ct1 = self.neg_s_m.gadget_product(&ct.mask, base_neg_s_m);
         let ct2 = self.m.gadget_product(&ct.body, base_m);
         ct1 + ct2 // Phase-4 `Add for RLWECiphertext`.

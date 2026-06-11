@@ -33,7 +33,7 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext};
 use via_primitives::gates::{CRotDir, cmux_tree, crot, dmux_tree, mod_switch_rgsw};
@@ -84,9 +84,9 @@ pub fn answer_through_crot<
     const N1: usize,
     const N2: usize,
     const N_REC: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
-    R3: RingPoly<N2>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
+    R3: RingPolyEval<N2>,
     Rp: RingPoly<N1>,
     K: Zeroize,
     const L_QUERY: usize,
@@ -300,10 +300,10 @@ where
 pub fn answer_one_query<
     const N1: usize,
     const N2: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
     R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus>,
+    R3: RingPolyEval<N2, Modulus = R3L::Modulus>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     K: Zeroize,
@@ -383,9 +383,9 @@ pub struct Server<
     // Record degree: VIA-C packs `N_REC = N2`; VIA-B the finer `N_REC = N3 ≤ N2`
     // (more records per cell, more CRot bits). Gates only `setup_db`'s packing.
     const N_REC: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
-    R3: RingPoly<N2>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
+    R3: RingPolyEval<N2>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     const L_QUERY: usize,
@@ -406,9 +406,9 @@ impl<
     const N1: usize,
     const N2: usize,
     const N_REC: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
-    R3: RingPoly<N2>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
+    R3: RingPolyEval<N2>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     const L_QUERY: usize,
@@ -558,9 +558,9 @@ pub type ViaCServer<
     K: Zeroize,
     const N1: usize,
     const N2: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
-    R3: RingPoly<N2>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
+    R3: RingPolyEval<N2>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     const L_QUERY: usize,
@@ -580,9 +580,9 @@ pub type ViaBServer<
     const N1: usize,
     const N2: usize,
     const N3: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
-    R3: RingPoly<N2>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
+    R3: RingPolyEval<N2>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     const L_QUERY: usize,

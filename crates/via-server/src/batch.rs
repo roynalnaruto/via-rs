@@ -11,7 +11,7 @@
 //! `paper:via.pdf §4.5–4.7 (VIA-B answer)`
 
 use alloc::vec::Vec;
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
 use via_protocol::{BatchedQuery, PublicParams, ViaError};
@@ -73,10 +73,10 @@ pub fn answer_batch<
     const N2: usize,
     const N3: usize,
     const T: usize,
-    R1: RingPoly<N1>,
-    R2: RingPoly<N1>,
+    R1: RingPolyEval<N1>,
+    R2: RingPolyEval<N1>,
     R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus>,
+    R3: RingPolyEval<N2, Modulus = R3L::Modulus>,
     R4: RingPoly<N2>,
     Rp: RingPoly<N1>,
     K: Zeroize,

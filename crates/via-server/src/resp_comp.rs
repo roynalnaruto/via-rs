@@ -14,7 +14,7 @@
 //!
 //! `paper:via.pdf Figure 7 (§6.2)`; `via_c/server.py:230-236` (symmetric — compare only)
 
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
 use via_primitives::switching::RingSwitchKey;
 use via_primitives::switching::mod_switch::{mod_switch_asym, mod_switch_sym};
@@ -54,7 +54,7 @@ pub fn resp_comp<
     const N2: usize,
     R2: RingPoly<N1>,
     R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus>,
+    R3: RingPolyEval<N2, Modulus = R3L::Modulus>,
     R4: RingPoly<N2>,
     const L: usize,
     const D: usize,

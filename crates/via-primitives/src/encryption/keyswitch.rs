@@ -83,7 +83,11 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
     /// multiplier — so the budget is `N` times less tight than for
     /// external product.
     pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R> {
-        let product = self.gadget_product(&ct.mask, base);
+        // Schoolbook path: `key_switch` feeds the conversion-cascade / repack
+        // machinery (generic-modulus, projection-chain operand types) where the
+        // `RingPolyEval` bound does not thread cleanly; its NTT win is secondary
+        // to the gate / `FirstDim` paths.
+        let product = self.gadget_product_schoolbook(&ct.mask, base);
         RLWECiphertext::new(-product.mask, ct.body - product.body)
     }
 }

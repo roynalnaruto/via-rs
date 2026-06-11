@@ -21,6 +21,7 @@
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::algebra::ring::RingPolyEval;
 use crate::algebra::ring::abstraction::RingPoly;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
 use crate::sampling::distribution::Distribution;
@@ -251,7 +252,7 @@ pub fn gen_rsk<
 pub fn ring_switch<
     const N1: usize,
     const N2: usize,
-    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus>>,
+    R: RingPoly<N1, Projected<N2>: RingPolyEval<N2, Modulus = R::Modulus>>,
     const L: usize,
     const D: usize,
 >(

@@ -10,7 +10,7 @@
 //!   of an RGSW. This is why §4.7 lives in `gates` (Layer 4), not `encryption`
 //!   (Layer 2): importing Layer 3 into Layer 2 would invert the layer order.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
@@ -138,7 +138,7 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
 /// assert_eq!(rgsw.neg_s_m.samples.len(), 2);
 /// assert_eq!(rgsw.m.samples.len(), 2);
 /// ```
-pub fn rlwe_to_rgsw<const N: usize, R: RingPoly<N>, const L_OUT: usize, const L_CK: usize>(
+pub fn rlwe_to_rgsw<const N: usize, R: RingPolyEval<N>, const L_OUT: usize, const L_CK: usize>(
     rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
     conv_key: &RLevCiphertext<N, R, L_CK>,
     m_rlev: RLevCiphertext<N, R, L_OUT>,

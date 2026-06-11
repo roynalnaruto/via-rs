@@ -11,7 +11,7 @@
 //! `paper:primitives/query_comp.py:263-353`, `via_c/server.py:136-142`
 
 use alloc::vec::Vec;
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::RingPolyEval;
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext};
 use via_primitives::gates::rlwe_to_rgsw;
@@ -43,7 +43,7 @@ use zeroize::Zeroize;
 #[allow(clippy::too_many_arguments)]
 pub fn query_decomp<
     const N1: usize,
-    R1: RingPoly<N1>,
+    R1: RingPolyEval<N1>,
     K: Zeroize,
     const L_QUERY: usize,
     const L_CK: usize,

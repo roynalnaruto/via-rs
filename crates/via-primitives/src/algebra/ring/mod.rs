@@ -88,4 +88,4 @@ pub mod rns_ops;
 pub mod rns_reshape;
 
 pub use abstraction::RingPoly;
-pub use ntt_abstraction::RingPolyNtt;
+pub use ntt_abstraction::RingPolyEval;

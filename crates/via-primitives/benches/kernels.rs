@@ -2,11 +2,12 @@
 //!
 //! Complements the end-to-end pipeline benches in `via-integration` by isolating
 //! the primitives the pipeline reaches only transitively. The headline measure
-//! is the §0.4 NTT win on the multiplicative core: schoolbook `O(N²)`
-//! `gadget_product` vs the NTT-mediated `gadget_product_ntt`, at the paper ring
-//! degree `N = 2048` on both backends (single-prime `q₂`, RNS `q₁`), across the
-//! gadget depths `L ∈ {2, 8, 18}` used by the paper gates. A raw single-multiply
-//! comparison (schoolbook vs forward+pointwise+inverse NTT) provides context.
+//! is the §0.4 NTT win on the multiplicative core: the eval-backed
+//! `gadget_product` (real NTT at NTT-friendly moduli) vs a schoolbook reference,
+//! at the paper ring degree `N = 2048` on both backends (single-prime `q₂`, RNS
+//! `q₁`), across the gadget depths `L ∈ {2, 8, 18}` used by the paper gates. A
+//! raw single-multiply comparison (schoolbook vs forward+pointwise+inverse NTT)
+//! provides context.
 //!
 //! Run: `just bench-primitives` (or `cargo bench -p via-primitives`).
 #![allow(missing_docs)] // criterion_group! generates undocumented public items
@@ -24,7 +25,9 @@ use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::ring::rns_element::PolyRns;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::ViaCQ2;
-use via_primitives::encryption::SecretKey;
+use via_primitives::encryption::{
+    RLWECiphertext, RLevCiphertext, SecretKey, gadget_extract_lsb_into, gadget_scale_into,
+};
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 
@@ -32,6 +35,30 @@ const N: usize = 2048;
 
 type SinglePoly = Poly<N, ViaCQ2, Coefficient>;
 type RnsPoly = PolyRns<N, ViaCQ1Rns, Coefficient>;
+
+/// Schoolbook reference: the pre-NTT coefficient-form gadget-product loop. The
+/// production `gadget_product` (eval-backed) is benchmarked against this at the
+/// **same** NTT-friendly modulus, so the timing delta is purely the NTT win.
+fn schoolbook_gadget_product<const M: usize, R: RingPoly<M>, const L: usize>(
+    rlev: &RLevCiphertext<M, R, L>,
+    plaintext: &R,
+    base: u64,
+) -> RLWECiphertext<M, R> {
+    let modulus = plaintext.modulus();
+    let mut scratch = [0i128; M];
+    gadget_scale_into::<M, R>(plaintext, base, L as u8, &mut scratch);
+    let mut result_mask = R::zero(modulus);
+    let mut result_body = R::zero(modulus);
+    let mut digit_buf = [0i64; M];
+    for k in 0..L {
+        gadget_extract_lsb_into::<M>(base, &mut scratch, &mut digit_buf);
+        let digit_poly = R::from_centered_i64s(modulus, &digit_buf);
+        let sample = &rlev.samples[L - 1 - k];
+        result_mask += digit_poly * sample.mask;
+        result_body += digit_poly * sample.body;
+    }
+    RLWECiphertext::new(result_mask, result_body)
+}
 
 /// A deterministic small-norm (ternary-ish) polynomial — a realistic plaintext
 /// / message. Values do not affect the timing of the multiply path.
@@ -82,10 +109,16 @@ fn add_single<const L: usize>(g: &mut BenchmarkGroup<'_, WallTime>, base: u64) {
     let pt = <SinglePoly as RingPoly<N>>::from_centered_i64s(q, &small_centered(0xB2));
 
     g.bench_function(BenchmarkId::new("schoolbook", L), |b| {
-        b.iter(|| black_box(rlev.gadget_product(black_box(&pt), base)))
+        b.iter(|| {
+            black_box(schoolbook_gadget_product(
+                black_box(&rlev),
+                black_box(&pt),
+                base,
+            ))
+        })
     });
     g.bench_function(BenchmarkId::new("ntt", L), |b| {
-        b.iter(|| black_box(rlev.gadget_product_ntt(black_box(&pt), base)))
+        b.iter(|| black_box(rlev.gadget_product(black_box(&pt), base)))
     });
 }
 
@@ -103,10 +136,16 @@ fn add_rns<const L: usize>(g: &mut BenchmarkGroup<'_, WallTime>, base: u64) {
     let pt = <RnsPoly as RingPoly<N>>::from_centered_i64s(basis, &small_centered(0xD4));
 
     g.bench_function(BenchmarkId::new("schoolbook", L), |b| {
-        b.iter(|| black_box(rlev.gadget_product(black_box(&pt), base)))
+        b.iter(|| {
+            black_box(schoolbook_gadget_product(
+                black_box(&rlev),
+                black_box(&pt),
+                base,
+            ))
+        })
     });
     g.bench_function(BenchmarkId::new("ntt", L), |b| {
-        b.iter(|| black_box(rlev.gadget_product_ntt(black_box(&pt), base)))
+        b.iter(|| black_box(rlev.gadget_product(black_box(&pt), base)))
     });
 }
 
