@@ -1,7 +1,12 @@
-//! Toy VIA-B **batch** per-phase + full-pipeline benchmarks (n1=8, n2=4, n3=2,
-//! T=2; `repack_n8_t2`). Mirrors `pipeline_toy.rs` for the batch path: the client
-//! `batch_query`, the **isolated repack** (the one new VIA-B cost), the full
-//! `answer_batch` (T prefixes + repack + RespComp), `recover_batch`, and e2e.
+//! Toy VIA-B **batch** per-phase + full-pipeline benchmarks at the canonical
+//! preset `ViaBToyParams<64,16,2,8>` (n1=64, n2=16, n3=2, T=8; `repack_n64_t8`,
+//! depth 5). Mirrors `pipeline_toy.rs` for the batch path: the client
+//! `batch_query`, the **isolated repack** (the one new VIA-B cost — now at a
+//! non-trivial depth-5 tree over T=8 inputs), the full `answer_batch` (T prefixes
+//! + repack + RespComp), `recover_batch`, and e2e.
+//!
+//! Reduced sampling (`sample_size = 10`): at n64/T=8 one `answer_batch` runs 8
+//! cascade-heavy prefixes, so the default 100 samples would take minutes.
 //!
 //! Run: `cargo bench -p via-integration --features via-b --bench pipeline_batch_toy`.
 //! Gated on `via-b`; under default the bench binary is a no-op `main`.
@@ -16,8 +21,8 @@ mod b {
     use via_primitives::algebra::ring::form::Coefficient;
     use via_primitives::algebra::zq::modulus::DynModulus;
     use via_primitives::conversion::{
-        LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
-        repack_keys_n8_t2_from_cascade_modswitched, repack_n8_t2,
+        LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64,
+        repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
     };
     use via_primitives::encryption::types::RLWECiphertext;
     use via_primitives::sampling::distribution::Distribution;
@@ -27,14 +32,14 @@ mod b {
     use via_protocol::{BatchedQuery, KeyDist, PIRParams, PublicParams};
     use via_server::{answer_batch, answer_through_crot};
 
-    const N1: usize = 8;
-    const N2: usize = 4;
+    const N1: usize = 64;
+    const N2: usize = 16;
     const N3: usize = 2;
-    const T: usize = 2;
-    const D: usize = 2;
+    const T: usize = 8;
+    const D: usize = 4;
     const D3: usize = N1 / N3;
     const L_QUERY: usize = 7;
-    const L_CK: usize = 7;
+    const L_CK: usize = 12; // n64 cascade gadget (base 8, 12 digits) — see batch_e2e_toy.rs
     const L_RSK: usize = 8;
     const Q1: u64 = 1 << 36;
     const Q2: u64 = 1 << 28; // real q2 < q1 (cascade keys mod-switched q1→q2; see batch_e2e_toy.rs)
@@ -42,19 +47,19 @@ mod b {
     const Q4: u64 = 1 << 12;
     const P: u64 = 16;
     const B_QUERY: u64 = 64;
-    const CK_BASE: u64 = 64;
+    const CK_BASE: u64 = 8; // n64 cascade base (pairs with L_CK = 12)
     const B_RSK: u64 = 8;
     const NUM_ROWS: usize = 2;
     const NUM_COLS: usize = 2;
 
-    type R8 = Poly<N1, DynModulus, Coefficient>;
-    type R4 = Poly<N2, DynModulus, Coefficient>;
+    type R64 = Poly<N1, DynModulus, Coefficient>;
+    type R16 = Poly<N2, DynModulus, Coefficient>;
     type R2 = Poly<N3, DynModulus, Coefficient>;
-    type K = LweToRlweKeyN8<DynModulus, L_CK>;
-    type ToyClient = Client<N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>;
-    type ToyPp = PublicParams<K, N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>;
+    type K = LweToRlweKeyN64<DynModulus, L_CK>;
+    type ToyClient = Client<N1, N2, R64, R16, L_QUERY, L_CK, L_RSK, D>;
+    type ToyPp = PublicParams<K, N1, N2, R64, R16, L_QUERY, L_CK, L_RSK, D>;
 
-    const IDXS: [usize; T] = [3, 11];
+    const IDXS: [usize; T] = [3, 11, 20, 38, 72, 89, 106, 127];
 
     fn record(m: usize, p: DynModulus) -> R2 {
         let m = m as u64;
@@ -91,17 +96,17 @@ mod b {
     /// Repack step: mod-switch the cascade-key suffix q1→q2 (§3.5 across q1≠q2),
     /// then pack the T post-CRot ciphertexts at base CK_BASE. The bench's
     /// `02_repack` therefore includes the per-batch key mod-switch (realistic).
-    fn repack(rotateds: &[RLWECiphertext<N1, R8>], k: &K) -> RLWECiphertext<N1, R8> {
+    fn repack(rotateds: &[RLWECiphertext<N1, R64>], k: &K) -> RLWECiphertext<N1, R64> {
         let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-        let keys_q2 = repack_keys_n8_t2_from_cascade_modswitched(k, DynModulus::new(Q2));
-        repack_n8_t2(arr, &keys_q2, CK_BASE)
+        let keys_q2 = repack_keys_n64_t8_from_cascade_modswitched(k, DynModulus::new(Q2));
+        repack_n64_t8(arr, &keys_q2, CK_BASE)
     }
 
     struct Fixture {
         client: ToyClient,
         pp: ToyPp,
-        encoded_db: Vec<Vec<R8>>,
-        batch: BatchedQuery<N1, 1, <R8 as RingPoly<N1>>::Projected<1>>,
+        encoded_db: Vec<Vec<R64>>,
+        batch: BatchedQuery<N1, 1, <R64 as RingPoly<N1>>::Projected<1>>,
         q1: DynModulus,
         q3: DynModulus,
         q4: DynModulus,
@@ -126,14 +131,14 @@ mod b {
             Distribution::Ternary,
             &mut prg,
             |sk, base, dist, prg| {
-                Box::new(gen_lwe_to_rlwe_key_n8::<DynModulus, L_CK>(
+                Box::new(gen_lwe_to_rlwe_key_n64::<DynModulus, L_CK>(
                     sk, base, dist, prg,
                 ))
             },
             |sk1, sk2, dist, prg| {
                 let q3_mod = RingPoly::modulus(sk2.poly());
-                let s1_q3 = rekey_secret_key::<N1, R8, R8>(sk1, q3_mod);
-                gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, sk2, B_RSK, dist, prg)
+                let s1_q3 = rekey_secret_key::<N1, R64, R64>(sk1, q3_mod);
+                gen_rsk::<N1, N2, R64, R16, L_RSK, D>(&s1_q3, sk2, B_RSK, dist, prg)
             },
         )
         .expect("client setup");
@@ -142,7 +147,7 @@ mod b {
         let records: Vec<R2> = (0..D3 * NUM_ROWS * NUM_COLS)
             .map(|m| record(m, p))
             .collect();
-        let encoded_db = via_server::setup_db::<N1, N3, R8, R2>(&records, NUM_ROWS, NUM_COLS, p);
+        let encoded_db = via_server::setup_db::<N1, N3, R64, R2>(&records, NUM_ROWS, NUM_COLS, p);
         let batch = client
             .batch_query::<T, N3>(&IDXS, &mut prg)
             .expect("batch_query");
@@ -162,12 +167,30 @@ mod b {
     pub fn batch_benches(c: &mut Criterion) {
         let fx = build_fixture();
         let q2 = DynModulus::new(Q2); // the real q2 < q1 (keys mod-switched q1→q2)
-        let cascade = lwe_to_rlwe_n8::<DynModulus, L_CK>;
+        let cascade = lwe_to_rlwe_n64::<DynModulus, L_CK>;
         let cascade_key: &K = &fx.pp.query_comp_key.lwe_to_rlwe_key;
 
         // Run answer_batch once (untimed) to obtain the answer for recover_batch.
         let run_answer_batch = || {
-            answer_batch::<N1, N2, N3, T, R8, R8, R8, R4, R4, R8, K, L_QUERY, L_CK, L_RSK, D, _, _>(
+            answer_batch::<
+                N1,
+                N2,
+                N3,
+                T,
+                R64,
+                R64,
+                R64,
+                R16,
+                R16,
+                R64,
+                K,
+                L_QUERY,
+                L_CK,
+                L_RSK,
+                D,
+                _,
+                _,
+            >(
                 &fx.batch,
                 &fx.pp,
                 &fx.encoded_db,
@@ -183,22 +206,29 @@ mod b {
         let answer = run_answer_batch();
 
         // Build the T post-CRot ciphertexts (untimed) to isolate the repack.
-        let rotated: Vec<RLWECiphertext<N1, R8>> = fx
-            .batch
-            .queries
-            .iter()
-            .map(|q| {
-                answer_through_crot::<N1, N2, N3, R8, R8, R4, R8, K, L_QUERY, L_CK, L_RSK, D, _>(
-                    q,
-                    &fx.pp,
-                    &fx.encoded_db,
-                    fx.q1,
-                    q2,
-                    cascade,
-                )
-                .expect("answer_through_crot")
-            })
-            .collect();
+        let rotated: Vec<RLWECiphertext<N1, R64>> =
+            fx.batch
+                .queries
+                .iter()
+                .map(|q| {
+                    answer_through_crot::<
+                        N1,
+                        N2,
+                        N3,
+                        R64,
+                        R64,
+                        R16,
+                        R64,
+                        K,
+                        L_QUERY,
+                        L_CK,
+                        L_RSK,
+                        D,
+                        _,
+                    >(q, &fx.pp, &fx.encoded_db, fx.q1, q2, cascade)
+                    .expect("answer_through_crot")
+                })
+                .collect();
 
         c.bench_function("batch/01_batch_query", |b| {
             b.iter_batched(
@@ -207,7 +237,7 @@ mod b {
                 BatchSize::SmallInput,
             )
         });
-        // The one new VIA-B step, isolated: pack T post-CRot cts into one.
+        // The one new VIA-B step, isolated: pack T post-CRot cts into one (depth 5).
         c.bench_function("batch/02_repack", |b| {
             b.iter(|| black_box(repack(&rotated, cascade_key)))
         });
@@ -219,7 +249,7 @@ mod b {
             b.iter(|| {
                 black_box(
                     fx.client
-                        .recover_batch::<R4, R4, R4, N3, T>(&answer, fx.q3, fx.q4, fx.p),
+                        .recover_batch::<R16, R16, R16, N3, T>(&answer, fx.q3, fx.q4, fx.p),
                 )
             })
         });
@@ -233,12 +263,12 @@ mod b {
                         N2,
                         N3,
                         T,
-                        R8,
-                        R8,
-                        R8,
-                        R4,
-                        R4,
-                        R8,
+                        R64,
+                        R64,
+                        R64,
+                        R16,
+                        R16,
+                        R64,
                         K,
                         L_QUERY,
                         L_CK,
@@ -260,7 +290,7 @@ mod b {
                     .unwrap();
                     black_box(
                         fx.client
-                            .recover_batch::<R4, R4, R4, N3, T>(&ans, fx.q3, fx.q4, fx.p),
+                            .recover_batch::<R16, R16, R16, N3, T>(&ans, fx.q3, fx.q4, fx.p),
                     )
                 },
                 BatchSize::SmallInput,
@@ -270,7 +300,11 @@ mod b {
 }
 
 #[cfg(feature = "via-b")]
-criterion::criterion_group!(benches, b::batch_benches);
+criterion::criterion_group! {
+    name = benches;
+    config = criterion::Criterion::default().sample_size(10);
+    targets = b::batch_benches
+}
 #[cfg(feature = "via-b")]
 criterion::criterion_main!(benches);
 
