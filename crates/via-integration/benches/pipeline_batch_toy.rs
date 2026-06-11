@@ -30,7 +30,7 @@ mod b {
     use via_primitives::switching::gen_rsk;
     use via_primitives::switching::rekey::rekey_secret_key;
     use via_protocol::{BatchedQuery, KeyDist, PIRParams, PublicParams};
-    use via_server::{answer_batch, answer_through_crot};
+    use via_server::{PreparedDb, answer_batch, answer_through_crot};
 
     const N1: usize = 64;
     const N2: usize = 16;
@@ -167,6 +167,7 @@ mod b {
     pub fn batch_benches(c: &mut Criterion) {
         let fx = build_fixture();
         let q2 = DynModulus::new(Q2); // the real q2 < q1 (keys mod-switched q1→q2)
+        let prepared_db = PreparedDb::<N1, R64>::from_encoded(&fx.encoded_db, q2);
         let cascade = lwe_to_rlwe_n64::<DynModulus, L_CK>;
         let cascade_key: &K = &fx.pp.query_comp_key.lwe_to_rlwe_key;
 
@@ -182,7 +183,6 @@ mod b {
                 R64,
                 R16,
                 R16,
-                R64,
                 K,
                 L_QUERY,
                 L_CK,
@@ -193,7 +193,7 @@ mod b {
             >(
                 &fx.batch,
                 &fx.pp,
-                &fx.encoded_db,
+                &prepared_db,
                 fx.q1,
                 q2,
                 fx.q3,
@@ -211,22 +211,15 @@ mod b {
             .queries
             .iter()
             .map(|q| {
-                answer_through_crot::<
-                        N1,
-                        N2,
-                        N3,
-                        R64,
-                        R64,
-                        R16,
-                        R64,
-                        K,
-                        L_QUERY,
-                        L_CK,
-                        L_RSK,
-                        D,
-                        _,
-                    >(q, &fx.pp, &fx.encoded_db, fx.q1, q2, cascade)
-                    .expect("answer_through_crot")
+                answer_through_crot::<N1, N2, N3, R64, R64, R16, K, L_QUERY, L_CK, L_RSK, D, _>(
+                    q,
+                    &fx.pp,
+                    &prepared_db,
+                    fx.q1,
+                    q2,
+                    cascade,
+                )
+                .expect("answer_through_crot")
             })
             .collect();
 
@@ -268,7 +261,6 @@ mod b {
                         R64,
                         R16,
                         R16,
-                        R64,
                         K,
                         L_QUERY,
                         L_CK,
@@ -279,7 +271,7 @@ mod b {
                     >(
                         &batch,
                         &fx.pp,
-                        &fx.encoded_db,
+                        &prepared_db,
                         fx.q1,
                         q2,
                         fx.q3,

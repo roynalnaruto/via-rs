@@ -25,7 +25,7 @@ use via_primitives::switching::gen_rsk;
 use via_primitives::switching::mod_switch::mod_switch_sym;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams};
-use via_server::{answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
+use via_server::{PreparedDb, answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
 
 // ── Toy params (mirror crates/via-integration/tests/client_server_e2e.rs) ──
 const N1: usize = 8;
@@ -111,6 +111,7 @@ struct Fixture {
     client: ToyClient,
     pp: ToyPp,
     encoded_db: Vec<Vec<R8>>,
+    prepared_db: PreparedDb<N1, R8>,
     query: CompressedQuery<N1, 1, <R8 as RingPoly<N1>>::Projected<1>>,
     q1: DynModulus,
     q2: DynModulus,
@@ -144,12 +145,14 @@ fn build_fixture() -> Fixture {
     .expect("client setup");
     let records: Vec<R4> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
     let encoded_db = setup_db::<N1, N2, R8, R4>(&records, NUM_ROWS, NUM_COLS, p);
+    let prepared_db = PreparedDb::<N1, R8>::from_encoded(&encoded_db, q2);
     let query = client.query(INDEX, &mut prg).expect("client query");
 
     Fixture {
         client,
         pp,
         encoded_db,
+        prepared_db,
         query,
         q1,
         q2,
@@ -199,22 +202,8 @@ fn toy_benches(c: &mut Criterion) {
             .map(|ct| mod_switch_sym::<N1, R8, R8>(ct, fx.q2))
             .collect::<Vec<RLWECiphertext<N1, R8>>>()
     };
-    let run_first_dim = |switched: &[RLWECiphertext<N1, R8>]| {
-        let db_q2: Vec<Vec<R8>> = fx
-            .encoded_db
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        let mut cc = [0u128; N1];
-                        cell.to_u128_coeffs(&mut cc);
-                        R8::from_u128_coeffs(fx.q2, &cc)
-                    })
-                    .collect()
-            })
-            .collect();
-        first_dim::<N1, R8>(switched, &db_q2, fx.q2)
-    };
+    let run_first_dim =
+        |switched: &[RLWECiphertext<N1, R8>]| first_dim::<N1, R8>(switched, &fx.prepared_db);
     let run_cmux = |dq: &via_protocol::DecompressedQuery<N1, R8, L_QUERY>,
                     mut fd: Vec<RLWECiphertext<N1, R8>>| {
         let cmux_q2: Vec<RGSWCiphertext<N1, R8, L_QUERY, L_QUERY>> = dq
@@ -292,6 +281,9 @@ fn toy_benches(c: &mut Criterion) {
     c.bench_function("toy/04_first_dim", |b| {
         b.iter(|| black_box(run_first_dim(&switched)))
     });
+    c.bench_function("toy/04b_prepare_db", |b| {
+        b.iter(|| black_box(PreparedDb::<N1, R8>::from_encoded(&fx.encoded_db, fx.q2)))
+    });
     c.bench_function("toy/05_cmux", |b| {
         b.iter_batched(
             || fd_results.clone(),
@@ -319,32 +311,18 @@ fn toy_benches(c: &mut Criterion) {
             || Shake256Prg::new(b"via-c-bench-toy-e2e"),
             |mut prg| {
                 let query = fx.client.query(INDEX, &mut prg).expect("client query");
-                let ans = answer_one_query::<
-                    N1,
-                    N2,
-                    R8,
-                    R8,
-                    R8,
-                    R4,
-                    R4,
-                    R8,
-                    K,
-                    L_QUERY,
-                    L_CK,
-                    L_RSK,
-                    D,
-                    _,
-                >(
-                    &query,
-                    &fx.pp,
-                    &fx.encoded_db,
-                    fx.q1,
-                    fx.q2,
-                    fx.q3,
-                    fx.q4,
-                    cascade,
-                )
-                .unwrap();
+                let ans =
+                    answer_one_query::<N1, N2, R8, R8, R8, R4, R4, K, L_QUERY, L_CK, L_RSK, D, _>(
+                        &query,
+                        &fx.pp,
+                        &fx.prepared_db,
+                        fx.q1,
+                        fx.q2,
+                        fx.q3,
+                        fx.q4,
+                        cascade,
+                    )
+                    .unwrap();
                 black_box(fx.client.recover::<R4, R4, R4>(&ans, fx.q3, fx.q4, fx.p))
             },
             BatchSize::SmallInput,

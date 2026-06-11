@@ -51,7 +51,7 @@ type R8 = Poly<N1, DynModulus, Coefficient>;
 type R4 = Poly<N2, DynModulus, Coefficient>;
 type K = LweToRlweKeyN8<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>;
-type ToyServer = ViaCServer<K, N1, N2, R8, R8, R4, R4, R8, L_QUERY, L_CK, L_RSK, D>;
+type ToyServer = ViaCServer<K, N1, N2, R8, R8, R4, R4, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct record per flat index (so selection is genuinely tested).
 fn record(m: usize, p: DynModulus) -> R4 {
@@ -125,7 +125,7 @@ fn round_trip(index: usize) -> (R4, R4) {
 
     // --- Server setup (consumes the client's PublicParams) ---------------
     let records: Vec<R4> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
-    let server = ToyServer::setup::<R4>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyServer::setup::<R8, R4>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Query → Answer → Recover ----------------------------------------
     let query = client.query(index, &mut prg).expect("client query");

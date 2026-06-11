@@ -53,7 +53,7 @@ type Rec = ViaCPolyP<N2>; // p @ n2 (records)
 type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
-type PaperServer = ViaCServer<K, N1, N2, R1, R2N1, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperServer = ViaCServer<K, N1, N2, R1, R2N1, R3N2, R4N2, L_QUERY, L_CK, L_RSK, D>;
 type PaperPp = PublicParams<K, N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// Client `setup` (the keygen-heavy phase) factored out for reuse by both the
@@ -126,7 +126,7 @@ fn round_trip(index: usize) -> (Rec, Rec) {
 
     // --- Server setup ----------------------------------------------------
     let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
-    let server = PaperServer::setup::<Rec>(&records, pp, q1, q2, q3, q4, p);
+    let server = PaperServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Query → Answer → Recover ----------------------------------------
     let query = client.query(index, &mut prg).expect("client query");

@@ -18,6 +18,7 @@ use via_protocol::{BatchedQuery, PublicParams, ViaError};
 use zeroize::Zeroize;
 
 use crate::answer::answer_through_crot;
+use crate::prepared_db::PreparedDb;
 use crate::resp_comp::resp_comp;
 
 /// VIA-B answer pipeline for a batch of `T` queries:
@@ -78,7 +79,6 @@ pub fn answer_batch<
     R3L: RingPoly<N1, Projected<N2> = R3>,
     R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     K: Zeroize,
     const L_QUERY: usize,
     const L_CK: usize,
@@ -89,7 +89,7 @@ pub fn answer_batch<
 >(
     batch: &BatchedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-    encoded_db: &[Vec<Rp>],
+    prepared_db: &PreparedDb<N1, R2>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3L::Modulus,
@@ -129,8 +129,13 @@ where
     // `answer_through_crot`'s own, nested under `answer_batch`.
     let mut rotated: Vec<RLWECiphertext<N1, R2>> = Vec::with_capacity(T);
     for query in &batch.queries {
-        let ct = answer_through_crot::<N1, N2, N3, R1, R2, R3, Rp, K, L_QUERY, L_CK, L_RSK, D, _>(
-            query, pp, encoded_db, q1_mod, q2_mod, &cascade,
+        let ct = answer_through_crot::<N1, N2, N3, R1, R2, R3, K, L_QUERY, L_CK, L_RSK, D, _>(
+            query,
+            pp,
+            prepared_db,
+            q1_mod,
+            q2_mod,
+            &cascade,
         )?;
         rotated.push(ct);
     }

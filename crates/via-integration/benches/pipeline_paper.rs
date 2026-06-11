@@ -26,7 +26,7 @@ use via_primitives::switching::gen_rsk;
 use via_primitives::switching::mod_switch::mod_switch_sym;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams};
-use via_server::{answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
+use via_server::{PreparedDb, answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
 
 // ── Paper params (mirror crates/via-integration/tests/client_server_e2e_paper.rs) ──
 const N1: usize = 2048;
@@ -97,6 +97,7 @@ struct Fixture {
     client: PaperClient,
     pp: PaperPp,
     encoded_db: Vec<Vec<RpN1>>,
+    prepared_db: PreparedDb<N1, R2N1>,
     query: CompressedQuery<N1, 1, <R1 as RingPoly<N1>>::Projected<1>>,
     q1: ViaCQ1Rns,
     q2: ViaCQ2,
@@ -131,11 +132,13 @@ fn build_fixture() -> Fixture {
     .expect("client setup");
     let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
     let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, NUM_ROWS, NUM_COLS, p);
+    let prepared_db = PreparedDb::<N1, R2N1>::from_encoded(&encoded_db, q2);
     let query = client.query(INDEX, &mut prg).expect("client query");
     Fixture {
         client,
         pp,
         encoded_db,
+        prepared_db,
         query,
         q1,
         q2,
@@ -182,22 +185,8 @@ fn paper_benches(c: &mut Criterion) {
             .map(|ct| mod_switch_sym::<N1, R1, R2N1>(ct, fx.q2))
             .collect::<Vec<RLWECiphertext<N1, R2N1>>>()
     };
-    let run_first_dim = |switched: &[RLWECiphertext<N1, R2N1>]| {
-        let db_q2: Vec<Vec<R2N1>> = fx
-            .encoded_db
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        let mut cc = [0u128; N1];
-                        cell.to_u128_coeffs(&mut cc);
-                        R2N1::from_u128_coeffs(fx.q2, &cc)
-                    })
-                    .collect()
-            })
-            .collect();
-        first_dim::<N1, R2N1>(switched, &db_q2, fx.q2)
-    };
+    let run_first_dim =
+        |switched: &[RLWECiphertext<N1, R2N1>]| first_dim::<N1, R2N1>(switched, &fx.prepared_db);
     let run_cmux = |dq: &via_protocol::DecompressedQuery<N1, R1, L_QUERY>,
                     mut fd: Vec<RLWECiphertext<N1, R2N1>>| {
         let cmux_q2: Vec<RGSWCiphertext<N1, R2N1, L_QUERY, L_QUERY>> = dq
@@ -273,6 +262,10 @@ fn paper_benches(c: &mut Criterion) {
     c.bench_function("paper/04_first_dim", |b| {
         b.iter(|| black_box(run_first_dim(&switched)))
     });
+    // One-time offline cost: the p→q2 lift + forward NTT of the whole DB.
+    c.bench_function("paper/04b_prepare_db", |b| {
+        b.iter(|| black_box(PreparedDb::<N1, R2N1>::from_encoded(&fx.encoded_db, fx.q2)))
+    });
     c.bench_function("paper/05_cmux", |b| {
         b.iter_batched(
             || fd_results.clone(),
@@ -312,7 +305,6 @@ fn paper_benches(c: &mut Criterion) {
                     R3N1,
                     R3N2,
                     R4N2,
-                    RpN1,
                     K,
                     L_QUERY,
                     L_CK,
@@ -322,7 +314,7 @@ fn paper_benches(c: &mut Criterion) {
                 >(
                     &query,
                     &fx.pp,
-                    &fx.encoded_db,
+                    &fx.prepared_db,
                     fx.q1,
                     fx.q2,
                     fx.q3,

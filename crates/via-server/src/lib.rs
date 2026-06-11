@@ -14,6 +14,7 @@ pub mod answer;
 #[cfg(feature = "via-b")]
 pub mod batch;
 pub mod first_dim;
+pub mod prepared_db;
 pub mod query_decomp;
 pub mod resp_comp;
 pub mod setup_db;
@@ -24,6 +25,7 @@ pub use answer::{Server, ViaCServer, answer_one_query, answer_through_crot};
 #[cfg(feature = "via-b")]
 pub use batch::answer_batch;
 pub use first_dim::first_dim;
+pub use prepared_db::PreparedDb;
 pub use query_decomp::query_decomp;
 pub use resp_comp::resp_comp;
 pub use setup_db::setup_db;

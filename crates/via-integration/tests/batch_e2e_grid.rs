@@ -72,7 +72,7 @@ type R16 = Poly<N2, DynModulus, Coefficient>;
 type R2 = Poly<N3, DynModulus, Coefficient>; // the record ring at n3
 type K = LweToRlweKeyN64<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R64, R16, L_QUERY, L_CK, L_RSK, D>;
-type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, R64, L_QUERY, L_CK, L_RSK, D>;
+type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct degree-n3 record per flat index.
 fn record(m: usize, p: DynModulus) -> R2 {
@@ -152,7 +152,7 @@ fn build() -> Harness {
     let records: Vec<R2> = (0..D3 * NUM_ROWS * NUM_COLS)
         .map(|m| record(m, p))
         .collect();
-    let server = ToyBServer::setup::<R2>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyBServer::setup::<R64, R2>(&records, pp, q1, q2, q3, q4, p);
 
     Harness {
         client,

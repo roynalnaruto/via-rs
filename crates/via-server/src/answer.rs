@@ -42,6 +42,7 @@ use via_protocol::{CompressedQuery, PublicParams, ViaError};
 use zeroize::Zeroize;
 
 use crate::first_dim::first_dim;
+use crate::prepared_db::PreparedDb;
 use crate::query_decomp::query_decomp;
 use crate::resp_comp::resp_comp;
 
@@ -64,7 +65,7 @@ use crate::resp_comp::resp_comp;
 /// # Arguments
 ///
 /// As [`answer_one_query`] minus the RespComp-only `q3_mod`/`q4_mod`: `query`,
-/// `pp`, `encoded_db`, `q1_mod`, `q2_mod`, `cascade`. (`R3L`/`R4` likewise drop —
+/// `pp`, `prepared_db`, `q1_mod`, `q2_mod`, `cascade`. (`R3L`/`R4` likewise drop —
 /// they belong to step 7.)
 ///
 /// # Errors
@@ -87,7 +88,6 @@ pub fn answer_through_crot<
     R1: RingPoly<N1> + RingPolyEval<N1>,
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
-    Rp: RingPoly<N1>,
     K: Zeroize,
     const L_QUERY: usize,
     const L_CK: usize,
@@ -97,7 +97,7 @@ pub fn answer_through_crot<
 >(
     query: &CompressedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-    encoded_db: &[Vec<Rp>],
+    prepared_db: &PreparedDb<N1, R2>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     cascade: CascadeFn,
@@ -141,9 +141,9 @@ where
     } else {
         0
     };
-    if encoded_db.len() != num_rows {
+    if prepared_db.num_rows() != num_rows {
         return Err(ViaError::DimMismatch(
-            "encoded_db row count must equal num_rows",
+            "prepared_db row count must equal num_rows",
         ));
     }
     let expected_lwes = (num_dmux + num_cmux + num_crot) * L_QUERY;
@@ -196,23 +196,10 @@ where
     });
 
     // --- Step 4: FirstDim — Σ_i c_i · db[i][j] → J columns @ q2 -----------
-    let mut fd_results = tracing::debug_span!("step4_first_dim").in_scope(|| {
-        // Lift the p-encoded DB to q2 (coefficient reinterpretation: values in
-        // [0,p) ⊂ [0,q2), no rescale).
-        let db_q2: Vec<Vec<R2>> = encoded_db
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        let mut c = [0u128; N1];
-                        cell.to_u128_coeffs(&mut c);
-                        R2::from_u128_coeffs(q2_mod, &c)
-                    })
-                    .collect()
-            })
-            .collect();
-        first_dim::<N1, R2>(&switched, &db_q2, q2_mod)
-    });
+    // The DB is pre-transformed to eval form at setup (`PreparedDb`), so FirstDim
+    // is a pure pointwise multiply-accumulate — no per-query DB transform.
+    let mut fd_results = tracing::debug_span!("step4_first_dim")
+        .in_scope(|| first_dim::<N1, R2>(&switched, prepared_db));
 
     // --- Step 5: CMux @ q2 (LSB-first) — select 1 column -----------------
     let selected = tracing::debug_span!("step5_cmux").in_scope(|| {
@@ -257,10 +244,11 @@ where
 ///
 /// # Arguments
 ///
-/// `encoded_db` is the **`p`-encoded** `I×J` matrix from [`setup_db`](crate::setup_db())
-/// (`Rp` cells); it is lifted `p → q2` per query (coefficients live in
-/// `[0,p) ⊂ [0,q2)`, so the lift is a coefficient reinterpretation, no
-/// rescale). The cascade & conversion-key gadget base is read from `pp.ck_base`
+/// `prepared_db` is the `I×J` database pre-transformed to evaluation form at `q2`
+/// ([`PreparedDb::from_encoded`], which lifts the [`setup_db`](crate::setup_db())
+/// `p`-encoding `p → q2` — a coefficient reinterpretation, coeffs in
+/// `[0,p) ⊂ [0,q2)`, no rescale — and forward-NTTs it once at setup, so FirstDim
+/// needs no per-query DB transform). The cascade & conversion-key gadget base is read from `pp.ck_base`
 /// (paper Override 7 — the cascade rides the conversion-key gadget, not
 /// `gadget_base_1`); the DMux / CMux+CRot / ring-switch bases come from
 /// `pp.params.{gadget_base_1, gadget_base_2, gadget_base_rsk}`.
@@ -268,7 +256,7 @@ where
 /// # Errors
 ///
 /// - [`ViaError::DimMismatch`] if `num_rows`/`num_cols` are not powers of two,
-///   or `encoded_db.len() != num_rows`.
+///   or `prepared_db.num_rows() != num_rows`.
 /// - [`ViaError::QueryLengthMismatch`] if the LWE count is not
 ///   `(log₂I + log₂J + log₂d) · L_QUERY`.
 ///
@@ -305,7 +293,6 @@ pub fn answer_one_query<
     R3L: RingPoly<N1, Projected<N2> = R3>,
     R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     K: Zeroize,
     const L_QUERY: usize,
     const L_CK: usize,
@@ -315,7 +302,7 @@ pub fn answer_one_query<
 >(
     query: &CompressedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-    encoded_db: &[Vec<Rp>],
+    prepared_db: &PreparedDb<N1, R2>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3L::Modulus,
@@ -337,8 +324,13 @@ where
 
     // Steps 1–6 via the variant-common prefix; N_REC = N2 keeps VIA-C semantics
     // (num_crot = log₂(N1/N2) = log₂ d) exactly.
-    let rotated = answer_through_crot::<N1, N2, N2, R1, R2, R3, Rp, K, L_QUERY, L_CK, L_RSK, D, _>(
-        query, pp, encoded_db, q1_mod, q2_mod, cascade,
+    let rotated = answer_through_crot::<N1, N2, N2, R1, R2, R3, K, L_QUERY, L_CK, L_RSK, D, _>(
+        query,
+        pp,
+        prepared_db,
+        q1_mod,
+        q2_mod,
+        cascade,
     )?;
 
     // --- Step 7: RespComp — paper-asymmetric q2 → q3 → n2 → q4 ------------
@@ -387,14 +379,13 @@ pub struct Server<
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
 > {
     public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-    encoded_db: Vec<Vec<Rp>>,
+    prepared_db: PreparedDb<N1, R2>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3::Modulus,
@@ -410,12 +401,11 @@ impl<
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> Server<K, N1, N2, N_REC, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>
+> Server<K, N1, N2, N_REC, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>
 {
     /// Compile-time `N_REC` consistency: the record ring must be a non-trivial
     /// power-of-two divisor of `N1` that fits within the query-compression ring.
@@ -438,11 +428,12 @@ impl<
     /// Build a server from raw `p`-encoded records and public parameters.
     ///
     /// Encodes the `I×J` database via [`setup_db`](crate::setup_db()) (packing
-    /// `d3 = N1/N_REC` records per cell at modulus `p`); the per-query lift
-    /// `p → q2` happens inside [`answer`](Server::answer). `RRec` is the record
-    /// ring at `(p, n_rec)`; `p_mod` is its modulus.
+    /// `d3 = N1/N_REC` records per cell at modulus `p`), then pre-transforms it to
+    /// eval form at `q2` ([`PreparedDb`]) so [`answer`](Server::answer) does no
+    /// per-query DB transform. `RRec` is the record ring at `(p, n_rec)`; `p_mod`
+    /// is its modulus.
     #[allow(clippy::too_many_arguments)]
-    pub fn setup<RRec>(
+    pub fn setup<Rp, RRec>(
         records: &[RRec],
         public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
         q1_mod: R1::Modulus,
@@ -452,6 +443,7 @@ impl<
         p_mod: Rp::Modulus,
     ) -> Self
     where
+        Rp: RingPoly<N1>,
         RRec: RingPoly<N_REC, Modulus = Rp::Modulus, Embedded<N1> = Rp>,
     {
         let () = Self::_CHECK;
@@ -461,9 +453,11 @@ impl<
             public_params.num_cols,
             p_mod,
         );
+        // Pre-transform to eval form at q2 (the `p→q2` lift + forward NTT), once.
+        let prepared_db = PreparedDb::<N1, R2>::from_encoded(&encoded_db, q2_mod);
         Self {
             public_params,
-            encoded_db,
+            prepared_db,
             q1_mod,
             q2_mod,
             q3_mod,
@@ -486,10 +480,10 @@ impl<
         R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
         CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
     {
-        answer_one_query::<N1, N2, R1, R2, R3L, R3, R4, Rp, K, L_QUERY, L_CK, L_RSK, D, CascadeFn>(
+        answer_one_query::<N1, N2, R1, R2, R3L, R3, R4, K, L_QUERY, L_CK, L_RSK, D, CascadeFn>(
             query,
             &self.public_params,
-            &self.encoded_db,
+            &self.prepared_db,
             self.q1_mod,
             self.q2_mod,
             self.q3_mod,
@@ -527,7 +521,6 @@ impl<
             R3L,
             R3,
             R4,
-            Rp,
             K,
             L_QUERY,
             L_CK,
@@ -538,7 +531,7 @@ impl<
         >(
             batch,
             &self.public_params,
-            &self.encoded_db,
+            &self.prepared_db,
             self.q1_mod,
             self.q2_mod,
             self.q3_mod,
@@ -562,12 +555,11 @@ pub type ViaCServer<
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> = Server<K, N1, N2, N2, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>;
+> = Server<K, N1, N2, N2, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>;
 
 /// VIA-B server (M1): [`Server`] with the record degree exposed as the finer
 /// `N_REC = N3 ≤ N2` (the VIA-B record ring). Gated on `via-b`; VIA-B's batch
@@ -584,12 +576,11 @@ pub type ViaBServer<
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    Rp: RingPoly<N1>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> = Server<K, N1, N2, N3, R1, R2, R3, R4, Rp, L_QUERY, L_CK, L_RSK, D>;
+> = Server<K, N1, N2, N3, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>;
 
 #[cfg(test)]
 mod tests {
@@ -629,7 +620,7 @@ mod tests {
         prg: &mut Shake256Prg,
     ) -> (
         PublicParams<Cascade, N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>,
-        Vec<Vec<R8>>,
+        PreparedDb<N1, R8>,
         SecretKey<N1, R8>,
         SecretKey<N2, R4>,
         DynModulus,
@@ -696,8 +687,10 @@ mod tests {
             L_CK,
         );
 
-        let db = crate::setup_db::setup_db::<N1, N2, R8, R4>(records, num_rows, num_cols, p);
-        (pp, db, s1, s2, q1, q2, q3, q4, p)
+        let encoded_db =
+            crate::setup_db::setup_db::<N1, N2, R8, R4>(records, num_rows, num_cols, p);
+        let prepared_db = PreparedDb::<N1, R8>::from_encoded(&encoded_db, q2);
+        (pp, prepared_db, s1, s2, q1, q2, q3, q4, p)
     }
 
     /// Build a length-`n` all-zero query (gadget-level LWEs of bit 0).
@@ -728,32 +721,18 @@ mod tests {
         let (pp, db, s1, s2, q1, q2, q3, q4, p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
-        let answer = answer_one_query::<
-            N1,
-            N2,
-            R8,
-            R8,
-            R8,
-            R4,
-            R4,
-            R8,
-            Cascade,
-            L_QUERY,
-            L_CK,
-            L_RSK,
-            D,
-            _,
-        >(
-            &query,
-            &pp,
-            &db,
-            q1,
-            q2,
-            q3,
-            q4,
-            lwe_to_rlwe_n8::<DynModulus, L_CK>,
-        )
-        .expect("pipeline must produce an answer");
+        let answer =
+            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+                &query,
+                &pp,
+                &db,
+                q1,
+                q2,
+                q3,
+                q4,
+                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            )
+            .expect("pipeline must produce an answer");
 
         // The recover path (decrypt_asymmetric under S2@q3) must also run.
         // Value is noise-dominated at these un-tuned moduli, so we assert shape
@@ -770,32 +749,18 @@ mod tests {
         let (pp, db, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 5, &mut prg); // expected 3·2 = 6
 
-        let err = answer_one_query::<
-            N1,
-            N2,
-            R8,
-            R8,
-            R8,
-            R4,
-            R4,
-            R8,
-            Cascade,
-            L_QUERY,
-            L_CK,
-            L_RSK,
-            D,
-            _,
-        >(
-            &query,
-            &pp,
-            &db,
-            q1,
-            q2,
-            q3,
-            q4,
-            lwe_to_rlwe_n8::<DynModulus, L_CK>,
-        )
-        .unwrap_err();
+        let err =
+            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+                &query,
+                &pp,
+                &db,
+                q1,
+                q2,
+                q3,
+                q4,
+                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            )
+            .unwrap_err();
         assert_eq!(
             err,
             ViaError::QueryLengthMismatch {
@@ -814,32 +779,18 @@ mod tests {
         let (pp, db, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(3, 2, &records, &mut prg);
         let query = zero_query(&s1, 6, &mut prg);
 
-        let err = answer_one_query::<
-            N1,
-            N2,
-            R8,
-            R8,
-            R8,
-            R4,
-            R4,
-            R8,
-            Cascade,
-            L_QUERY,
-            L_CK,
-            L_RSK,
-            D,
-            _,
-        >(
-            &query,
-            &pp,
-            &db,
-            q1,
-            q2,
-            q3,
-            q4,
-            lwe_to_rlwe_n8::<DynModulus, L_CK>,
-        )
-        .unwrap_err();
+        let err =
+            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+                &query,
+                &pp,
+                &db,
+                q1,
+                q2,
+                q3,
+                q4,
+                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            )
+            .unwrap_err();
         assert!(matches!(err, ViaError::DimMismatch(_)));
     }
 
@@ -855,7 +806,7 @@ mod tests {
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let rotated =
-            answer_through_crot::<N1, N2, N2, R8, R8, R4, R8, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+            answer_through_crot::<N1, N2, N2, R8, R8, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
                 &query,
                 &pp,
                 &db,
@@ -881,7 +832,7 @@ mod tests {
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let err =
-            answer_through_crot::<N1, N2, 2, R8, R8, R4, R8, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+            answer_through_crot::<N1, N2, 2, R8, R8, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
                 &query,
                 &pp,
                 &db,
@@ -933,7 +884,6 @@ mod tests {
             R8,
             R4,
             R4,
-            R8,
             Cascade,
             L_QUERY,
             L_CK,
