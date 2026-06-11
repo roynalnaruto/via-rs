@@ -149,8 +149,10 @@ regen-kats-layer5:
 regen-kats-layer6:
     cd .references/via-spec && python3 scripts/gen_layer6_kats.py
 
-# Regenerate the Layer-7 (VIA-B) KAT fixtures. UNLIKE layers 3-6 there is NO
-# Python reference for VIA-B — fixtures are Rust-golden, produced by a
-# `via-b,kat-regen`-gated test (lands in Layer-7 Part 5). Placeholder until then.
+# Layer-7 (VIA-B) has NO KATs by design: the Python reference (.references/via-spec)
+# implements VIA/VIA-C only — no via_b, no repack/Extr_d, no gen_layer7. With no
+# oracle, cross-language KATs are impossible, and a Rust-golden snapshot would just
+# duplicate the seeded batch_e2e_{toy,paper} regression anchors. See the decision
+# record at crates/via-integration/tests/data/layer7_kats.rs.
 regen-kats-layer7:
-    @echo "Layer-7 KATs are Rust-golden (no Python ref); the kat-regen test lands in Part 5."
+    @echo "Layer-7 (VIA-B) has no KATs by design — no Python VIA-B oracle; the seeded batch_e2e_{toy,paper} tests are the anchors. See tests/data/layer7_kats.rs."
