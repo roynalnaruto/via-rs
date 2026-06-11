@@ -122,8 +122,9 @@ pub use repack::{
 // key by value overflows the stack).
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub use repack::{
-    RepackKeysPoly2048T256, RepackSchedulePoly2048T256,
-    repack_keys_poly_2048_t256_from_rns_cascade_boxed, repack_poly_2048_t256,
+    RepackKeysPoly2048T8, RepackKeysPoly2048T256, RepackSchedulePoly2048T8,
+    RepackSchedulePoly2048T256, repack_keys_poly_2048_t8_from_rns_cascade_boxed,
+    repack_keys_poly_2048_t256_from_rns_cascade_boxed, repack_poly_2048_t8, repack_poly_2048_t256,
 };
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
 // not re-exported here (the orchestrator is the public entry point).

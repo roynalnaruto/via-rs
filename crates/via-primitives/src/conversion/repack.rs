@@ -716,6 +716,79 @@ where
     unsafe { boxed.assume_init() }
 }
 
+// Paper-scale SINGLE-PRIME repack preset (n1=2048, K=512, T=8; depth 5) over
+// `Poly<2048, q2>`, with N3 = N2/T = 64 — a RUNNABLE-batch variant of the
+// production `…_poly_2048_t256` preset (same single-prime q2 ring, same
+// cross-type key derivation, just T=8 so a full client↔server paper batch e2e
+// runs in minutes, not hours). Engine only; its q2 key comes from
+// `repack_keys_poly_2048_t8_from_rns_cascade_boxed`. By-value gen NOT re-exported.
+repack_engine! {
+    n1 = 2048,
+    t = 8,
+    ring = Poly,
+    mod_param = M,
+    mod_bound = crate::algebra::zq::modulus::Modulus,
+    levels = L,
+    extr_degree = 64, // G = K/T = 512/8
+    input_count = 32, // D = T·n1/K = 8·2048/512
+    schedule = RepackSchedulePoly2048T8,
+    key = RepackKeysPoly2048T8,
+    gen = gen_repack_keys_poly_2048_t8,
+    repack = repack_poly_2048_t8,
+    steps = [
+        (keys_128, 32, 64, 16, 128),
+        (keys_256, 16, 128, 8, 256),
+        (keys_512, 8, 256, 4, 512),
+        (keys_1024, 4, 512, 2, 1024),
+        (keys_2048, 2, 1024, 1, 2048),
+    ],
+}
+
+/// Boxed cross-type q2-key derivation for the `T=8` paper preset — the `T=8`
+/// analogue of [`repack_keys_poly_2048_t256_from_rns_cascade_boxed`]: builds
+/// [`RepackKeysPoly2048T8`] from the RNS-`q1` cascade key field-by-field on the
+/// heap (its suffix `keys_128..keys_2048`, 5 fields), cross-type mod-switching
+/// each RLev → single-prime `q2`.
+#[allow(clippy::needless_range_loop)]
+pub fn repack_keys_poly_2048_t8_from_rns_cascade_boxed<B, M, const L: usize>(
+    rns: &LweToRlweKeyRnsN2048<B, L>,
+    q2: M,
+) -> alloc::boxed::Box<RepackKeysPoly2048T8<M, L>>
+where
+    B: crate::algebra::rns::basis::RnsBasis,
+    M: crate::algebra::zq::modulus::Modulus,
+{
+    use crate::algebra::ring::form::Coefficient;
+    use core::ptr::addr_of_mut;
+
+    let mut boxed = alloc::boxed::Box::<RepackKeysPoly2048T8<M, L>>::new_uninit();
+    let ptr = boxed.as_mut_ptr();
+    macro_rules! switch_field {
+        ($field:ident, $nout:literal, $rank_in:literal) => {
+            for i in 0..$rank_in {
+                // SAFETY: as in the `…_t256_…` builder — one write per (field, i)
+                // slot, all covered before `assume_init`; `addr_of_mut!` forms no
+                // reference to uninitialised memory.
+                unsafe {
+                    addr_of_mut!((*ptr).$field[i]).write(mod_switch_rlev::<
+                        $nout,
+                        PolyRns<$nout, B, Coefficient>,
+                        Poly<$nout, M, Coefficient>,
+                        L,
+                    >(&rns.$field[i], q2));
+                }
+            }
+        };
+    }
+    switch_field!(keys_128, 128, 32);
+    switch_field!(keys_256, 256, 16);
+    switch_field!(keys_512, 512, 8);
+    switch_field!(keys_1024, 1024, 4);
+    switch_field!(keys_2048, 2048, 2);
+    // SAFETY: every (field, index) slot was written above.
+    unsafe { boxed.assume_init() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
