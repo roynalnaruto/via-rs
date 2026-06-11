@@ -206,12 +206,12 @@ mod b {
         let answer = run_answer_batch();
 
         // Build the T post-CRot ciphertexts (untimed) to isolate the repack.
-        let rotated: Vec<RLWECiphertext<N1, R64>> =
-            fx.batch
-                .queries
-                .iter()
-                .map(|q| {
-                    answer_through_crot::<
+        let rotated: Vec<RLWECiphertext<N1, R64>> = fx
+            .batch
+            .queries
+            .iter()
+            .map(|q| {
+                answer_through_crot::<
                         N1,
                         N2,
                         N3,
@@ -227,8 +227,8 @@ mod b {
                         _,
                     >(q, &fx.pp, &fx.encoded_db, fx.q1, q2, cascade)
                     .expect("answer_through_crot")
-                })
-                .collect();
+            })
+            .collect();
 
         c.bench_function("batch/01_batch_query", |b| {
             b.iter_batched(
