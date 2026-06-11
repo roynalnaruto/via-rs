@@ -30,5 +30,10 @@ harness = false
 name    = "pipeline_paper"
 harness = false
 
+# VIA-B batch per-phase bench (requires `--features via-b`; no-op main otherwise).
+[[bench]]
+name    = "pipeline_batch_toy"
+harness = false
+
 [lints]
 workspace = true
