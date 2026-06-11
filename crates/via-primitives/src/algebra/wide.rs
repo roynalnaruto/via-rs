@@ -61,7 +61,10 @@ pub(crate) fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
 /// # Preconditions
 ///
 /// - `divisor > 0`.
-/// - `hi < divisor` — otherwise the quotient overflows `u128`. Debug-asserted.
+/// - `hi < divisor` — otherwise the true quotient does not fit in `u128`.
+///   Asserted **always-on**: a violation panics rather than silently truncating
+///   the high quotient bits, because this is a `pub(crate)` primitive whose
+///   misuse would corrupt gadget-decomposed ciphertexts.
 ///
 /// For our use case (gadget scale step), the quotient is bounded by `B^L`
 /// which fits in `u128` with margin, and the precondition holds.
@@ -79,7 +82,7 @@ pub(crate) fn div_u256_by_u128(hi: u128, lo: u128, divisor: u128) -> u128 {
     if hi == 0 {
         return lo / divisor;
     }
-    debug_assert!(
+    assert!(
         hi < divisor,
         "div_u256_by_u128: quotient overflows u128 (hi >= divisor)"
     );
@@ -133,11 +136,14 @@ pub(crate) fn div_u256_by_u128(hi: u128, lo: u128, divisor: u128) -> u128 {
 /// # Preconditions
 ///
 /// - `divisor > 0`.
-/// - `scale < divisor` (typical for gadget decomposition where
-///   `scale = B^L` and `B^L < Q` by construction); else the quotient
-///   may overflow `u128`.
+/// - `num_abs <= divisor / 2`. This — not `scale < divisor` — is the real
+///   sufficient condition for the quotient to fit in `u128` (equivalently, for
+///   `div_u256_by_u128`'s `hi < divisor`): then
+///   `num_abs·scale + divisor/2 < divisor·2^128` for *any* `u128` `scale`. The
+///   gadget-decomposition caller satisfies it — centred coefficients obey
+///   `|c| <= Q/2 = divisor/2` — whether or not `scale = B^L` is below `divisor`.
 pub(crate) fn round_mul_div_u128(num_abs: u128, scale: u128, divisor: u128) -> u128 {
-    debug_assert!(divisor > 0);
+    assert!(divisor > 0, "round_mul_div_u128: divisor must be nonzero");
     let (lo, hi) = widening_mul_u128(num_abs, scale);
     // Add divisor / 2 for half-up rounding. May carry into `hi`.
     let half = divisor / 2;
@@ -232,6 +238,15 @@ mod tests {
         let num_abs: u128 = (1u128 << 74) + 12345;
         let (lo, hi) = widening_mul_u128(num_abs, divisor);
         assert_eq!(div_u256_by_u128(hi, lo, divisor), num_abs);
+    }
+
+    /// The `hi < divisor` precondition is always-on (an `assert!`, not a
+    /// `debug_assert!`), so a violation panics in every build rather than
+    /// silently returning a truncated quotient. `hi == divisor` is the boundary.
+    #[test]
+    #[should_panic(expected = "quotient overflows u128")]
+    fn div_u256_panics_when_hi_ge_divisor() {
+        let _ = div_u256_by_u128(5, 0, 5);
     }
 
     // -----------------------------------------------------------------------
