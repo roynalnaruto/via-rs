@@ -99,6 +99,91 @@ pub type ViaCToyParams = ViaCPublicParams<64, 16, 20, 40, 8, 4>;
 pub type ViaCRealisticParams = ViaCPublicParams<2048, 512, 2, 18, 8, 4>;
 
 // ---------------------------------------------------------------------------
+// ViaBPublicParams — const-generic ZST marker (VIA-B)
+// ---------------------------------------------------------------------------
+
+/// Zero-sized marker carrying the VIA-B compile-time dimensions.
+///
+/// Extends [`ViaCPublicParams`] with the record-ring degree `N3` (`N3 | N2 | N1`)
+/// and the batch size `T`. VIA-C is the degenerate case `N3 = N2`, `T = 1`.
+/// `D = N1 / N2` is the ring-switch fold; records-per-cell / CRot range is
+/// `N1 / N3`.
+///
+/// Use the aliases [`ViaBToyParams`] / [`ViaBRealisticParams`]; the runtime
+/// sidecars are [`TOY_B_PARAMS`] / [`REALISTIC_B_PARAMS`].
+#[cfg(feature = "via-b")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ViaBPublicParams<
+    const N1: usize,
+    const N2: usize,
+    const N3: usize,
+    const T: usize,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+>;
+
+#[cfg(feature = "via-b")]
+impl<
+    const N1: usize,
+    const N2: usize,
+    const N3: usize,
+    const T: usize,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> ViaBPublicParams<N1, N2, N3, T, L_QUERY, L_CK, L_RSK, D>
+{
+    /// Compile-time dimension consistency check.
+    ///
+    /// Force its evaluation (`let () = ViaBToyParams::_CHECK;`) to turn a
+    /// mis-typed preset alias into a compile error.
+    ///
+    /// # Panics (compile-time)
+    ///
+    /// All [`ViaCPublicParams::_CHECK`] conditions, plus: `N3 < 1` or `N3` not a
+    /// power of two; `N3 ∤ N2`; `T < 1` or `T` not a power of two;
+    /// `T * N3 > N2` (single-repack record-fit).
+    pub const _CHECK: () = {
+        // Inherit the VIA-C invariants (N1 = N2·D, power-of-two, L_* > 0).
+        let () = ViaCPublicParams::<N1, N2, L_QUERY, L_CK, L_RSK, D>::_CHECK;
+        assert!(N3 >= 1, "ViaBPublicParams: N3 must be >= 1");
+        assert!(
+            N3.is_power_of_two(),
+            "ViaBPublicParams: N3 must be a power of two"
+        );
+        // N3, N2 both powers of two ⇒ N3 | N2 ⟺ N3 ≤ N2.
+        assert!(N3 <= N2, "ViaBPublicParams: N3 must divide N2");
+        assert!(T >= 1, "ViaBPublicParams: T must be >= 1");
+        assert!(
+            T.is_power_of_two(),
+            "ViaBPublicParams: T must be a power of two"
+        );
+        assert!(
+            T * N3 <= N2,
+            "ViaBPublicParams: T * N3 must be <= N2 (single-repack record-fit)"
+        );
+    };
+}
+
+/// Toy VIA-B preset: `n1=64, n2=16, n3=2, T=8, L_QUERY=20, L_CK=40, L_RSK=8, D=4`.
+///
+/// Reuses the VIA-C n64 toy stack; `T·N3 = 16 = N2` is the single-repack
+/// boundary. Runtime sidecar: [`TOY_B_PARAMS`].
+#[cfg(feature = "via-b")]
+pub type ViaBToyParams = ViaBPublicParams<64, 16, 2, 8, 20, 40, 8, 4>;
+
+/// Realistic VIA-B preset: `n1=2048, n2=512, n3=2, T=256, L_QUERY=2, L_CK=18, L_RSK=8, D=4`.
+///
+/// Database dims and gadget params match VIA-C (paper App. B); `n3 = 2`
+/// (1-byte records at `p=16`), `T = 256` (paper Table 2). Runtime sidecar:
+/// [`REALISTIC_B_PARAMS`].
+#[cfg(feature = "via-b")]
+pub type ViaBRealisticParams = ViaBPublicParams<2048, 512, 2, 256, 2, 18, 8, 4>;
+
+// ---------------------------------------------------------------------------
 // PIRParams preset constants
 // ---------------------------------------------------------------------------
 
@@ -162,6 +247,63 @@ pub const REALISTIC_PARAMS: PIRParams = PIRParams::new(
     Some(1.0),
     Some(1.0),
     128,
+);
+
+/// Toy VIA-B `PIRParams` sidecar: [`TOY_PARAMS`] values + `n3 = 2`, `t = 8`.
+#[cfg(feature = "via-b")]
+pub const TOY_B_PARAMS: PIRParams = PIRParams::new_b(
+    64,
+    16,
+    1u128 << 40,
+    1u64 << 32,
+    1u64 << 16,
+    1u64 << 12,
+    16,
+    4,
+    20,
+    4,
+    16,
+    4,
+    8,
+    KeyDist::Ternary,
+    KeyDist::Ternary,
+    1,
+    None,
+    None,
+    None,
+    0,
+    // VIA-B: record ring n3 = 2, batch T = 8.
+    2,
+    8,
+);
+
+/// Realistic VIA-B `PIRParams` sidecar: [`REALISTIC_PARAMS`] values + `n3 = 2`,
+/// `t = 256` (paper Table 2, 1-byte records).
+#[cfg(feature = "via-b")]
+pub const REALISTIC_B_PARAMS: PIRParams = PIRParams::new_b(
+    2048,
+    512,
+    137_438_822_401u128 * 274_810_798_081u128,
+    17_175_674_881,
+    8_380_417,
+    4096,
+    16,
+    55879,
+    2,
+    81,
+    2,
+    8,
+    8,
+    KeyDist::Gaussian,
+    KeyDist::Gaussian,
+    26,
+    Some(1.0),
+    Some(1.0),
+    Some(1.0),
+    128,
+    // VIA-B: record ring n3 = 2, batch T = 256.
+    2,
+    256,
 );
 
 // ---------------------------------------------------------------------------

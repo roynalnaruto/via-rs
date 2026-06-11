@@ -153,6 +153,67 @@ impl<const N: usize, R: RingPoly<N>, const L_QUERY: usize> fmt::Debug
     }
 }
 
+// ---------------------------------------------------------------------------
+// BatchedQuery (VIA-B)
+// ---------------------------------------------------------------------------
+
+/// A VIA-B batch query: the `T` independently-compressed VIA-C queries produced
+/// by `Client::batch_query`. Length is the batch size `T`; the server runs the
+/// VIA-C answer prefix on each, then a single `Repack_{n2}` + `RespComp`.
+#[cfg(feature = "via-b")]
+pub struct BatchedQuery<const RANK: usize, const N: usize, R: RingPoly<N>> {
+    /// The `T` per-index compressed queries.
+    pub queries: Vec<CompressedQuery<RANK, N, R>>,
+}
+
+#[cfg(feature = "via-b")]
+impl<const RANK: usize, const N: usize, R: RingPoly<N>> BatchedQuery<RANK, N, R> {
+    /// Construct a `BatchedQuery` from its `T` per-index compressed queries.
+    #[inline]
+    pub fn new(queries: Vec<CompressedQuery<RANK, N, R>>) -> Self {
+        Self { queries }
+    }
+
+    /// Batch size `T` (number of queries).
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.queries.len()
+    }
+
+    /// Returns `true` if the batch carries no queries.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.queries.is_empty()
+    }
+}
+
+#[cfg(feature = "via-b")]
+impl<const RANK: usize, const N: usize, R: RingPoly<N>> Zeroize for BatchedQuery<RANK, N, R> {
+    fn zeroize(&mut self) {
+        for q in &mut self.queries {
+            q.zeroize();
+        }
+    }
+}
+
+#[cfg(feature = "via-b")]
+impl<const RANK: usize, const N: usize, R: RingPoly<N>> Drop for BatchedQuery<RANK, N, R> {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+#[cfg(feature = "via-b")]
+impl<const RANK: usize, const N: usize, R: RingPoly<N>> fmt::Debug for BatchedQuery<RANK, N, R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BatchedQuery")
+            .field("RANK", &RANK)
+            .field("N", &N)
+            .field("T", &self.queries.len())
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +269,16 @@ mod tests {
         let dbg = alloc::format!("{cq:?}");
         assert!(dbg.contains("CompressedQuery"));
         assert!(dbg.contains("len"));
+    }
+
+    #[test]
+    #[cfg(feature = "via-b")]
+    fn batched_query_construct_and_len() {
+        let z = zero_rlwe();
+        let mlwe = MLWECiphertext::<1, 8, R>::new([z.mask], z.body);
+        let cq = CompressedQuery::new(alloc::vec![mlwe]);
+        let bq = BatchedQuery::new(alloc::vec![cq]);
+        assert_eq!(bq.len(), 1);
+        assert!(!bq.is_empty());
     }
 }

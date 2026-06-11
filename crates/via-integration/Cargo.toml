@@ -15,6 +15,12 @@ via-client     = { path = "../via-client" }
 via-server     = { path = "../via-server" }
 criterion      = { workspace = true }
 
+# VIA-B integration tests/benches (e.g. `batch_e2e_toy.rs`). Enabling `via-b`
+# turns on the batch surface on the path crates (via-b ⇒ via-c transitively);
+# default (no feature) is the VIA-C path. Deferred here from P0.
+[features]
+via-b = ["via-client/via-b", "via-server/via-b"]
+
 # Per-step + full-pipeline perf benchmarks (see benches/ and `just bench`).
 [[bench]]
 name    = "pipeline_toy"
@@ -22,6 +28,16 @@ harness = false
 
 [[bench]]
 name    = "pipeline_paper"
+harness = false
+
+# VIA-B batch per-phase bench (requires `--features via-b`; no-op main otherwise).
+[[bench]]
+name    = "pipeline_batch_toy"
+harness = false
+
+# VIA-B paper-scale batch bench (requires `--features via-b`; run via bench-paper).
+[[bench]]
+name    = "pipeline_batch_paper"
 harness = false
 
 [lints]

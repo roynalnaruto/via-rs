@@ -9,7 +9,8 @@ default = ["alloc"]
 alloc   = ["via-protocol/alloc", "via-primitives/alloc"]
 via   = ["via-protocol/via"]
 via-c = ["via-protocol/via-c"]
-via-b = ["via-protocol/via-b"]
+# via-b implies the crate's own via-c so any `cfg(feature = "via-c")` gate fires under via-b too.
+via-b = ["via-protocol/via-b", "via-c"]
 
 [dependencies]
 via-primitives = { workspace = true }

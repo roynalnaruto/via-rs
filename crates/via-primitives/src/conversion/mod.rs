@@ -57,6 +57,13 @@ pub mod conv;
 pub mod cascade;
 // §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
 pub mod extract;
+// §7 — VIA-B homomorphic repacking (Layer 7 Part 1/2). `alloc`-gated: the
+// repack recursion holds a runtime `Vec` of MLWE ciphertexts; the per-preset
+// key schedules are heterogeneous-degree (emitted by the `repack_cascade!`
+// macro), whose owned dedicated-key oracle and borrowing cascade-suffix view
+// feed one `repack_*` fn (the §3.5 key reuse).
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub mod repack;
 
 pub use conv::{
     ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element,
@@ -83,5 +90,41 @@ pub use cascade::{
     LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
 };
 pub use extract::{ExtrDims, extr};
+// §7 — VIA-B repacking primitives (Part 1/2). Same gate as the `repack` module.
+// The leaf primitives + the per-preset repack families (schedule trait, owned
+// dedicated-key oracle struct, oracle generator, `Repack` fn) the macro emits.
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub use repack::{
+    RepackKeysN8T2, RepackKeysN64T8, RepackScheduleN8T2, RepackScheduleN64T8, RepackViewN8T2,
+    RepackViewN64T8, embed_d, gen_repack_keys_n8_t2, gen_repack_keys_n64_t8, mlwes_insert,
+    mlwes_to_mlwe, repack_keys_n8_t2_from_cascade, repack_keys_n8_t2_from_cascade_modswitched,
+    repack_keys_n64_t8_from_cascade, repack_keys_n64_t8_from_cascade_modswitched, repack_n8_t2,
+    repack_n64_t8,
+};
+// Paper-scale repack preset (n1=2048, T=256; depth 10). Only the borrowing
+// schedule view + its constructor + the `Repack` fn are surfaced — the macro's
+// by-value oracle (`gen_repack_keys_rns_2048_t256` / `RepackKeysRns2048T256`) is
+// deliberately NOT re-exported (a by-value key overflows the stack at this scale,
+// exactly like the cascade's own by-value n2048 gen). The view borrows the heap
+// `LweToRlweKeyRnsN2048` cascade key — the §3.5 key reuse at paper scale.
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub use repack::{
+    RepackScheduleRns2048T256, RepackViewRns2048T256, repack_keys_rns_2048_t256_from_cascade,
+    repack_rns_2048_t256,
+};
+// Paper-scale SINGLE-PRIME repack preset (n1=2048, T=256; depth 10) over
+// `Poly<2048, q2>` — the *production* paper repack (the `…_rns_2048_t256` preset
+// is a single-modulus noise spike). Engine only (no same-ring cascade key
+// exists): the schedule trait, the owned key struct, and the `Repack` fn are
+// surfaced, plus the boxed cross-type constructor that derives the q2 key from
+// the RNS-`q1` cascade (the §3.5 key reuse). The by-value oracle
+// `gen_repack_keys_poly_2048_t256` is deliberately NOT re-exported (a ~11.25 MiB
+// key by value overflows the stack).
+#[cfg(all(feature = "via-b", feature = "alloc"))]
+pub use repack::{
+    RepackKeysPoly2048T8, RepackKeysPoly2048T256, RepackSchedulePoly2048T8,
+    RepackSchedulePoly2048T256, repack_keys_poly_2048_t8_from_rns_cascade_boxed,
+    repack_keys_poly_2048_t256_from_rns_cascade_boxed, repack_poly_2048_t8, repack_poly_2048_t256,
+};
 // Kernels stay reachable via `conversion::kernels::lwe::*` but are intentionally
 // not re-exported here (the orchestrator is the public entry point).

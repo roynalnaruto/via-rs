@@ -114,16 +114,22 @@ pub struct PIRParams {
     /// Security parameter $\lambda$ in bits. `0` means no security claim
     /// (e.g. toy params).
     pub security_param: u32,
+
+    // ── Record ring & batch (VIA-B; VIA-C ≡ n3 = n2, t = 1) ──────────────────
+    /// VIA-B record-ring degree $n_3$ ($n_3 \mid n_2 \mid n_1$). Each record is
+    /// an element of $R_{n_3, p}$ and a cell packs $n_1 / n_3$ records. **VIA-C
+    /// sets `n3 = n2`** (one record per $n_2$ coefficients), so `n3` is harmless
+    /// to read in shared code.
+    pub n3: usize,
+    /// VIA-B batch size $T$ (indices fetched per query). **VIA-C sets `t = 1`.**
+    pub t: usize,
 }
 
 impl PIRParams {
-    /// Construct `PIRParams`, validating all invariants.
-    ///
-    /// # Panics
-    ///
-    /// See struct-level documentation.
+    /// Shared constructor body (M3). `new` (VIA-C) and `new_b` (VIA-B) delegate
+    /// here with their respective `(n3, t)`; validates all invariants.
     #[allow(clippy::too_many_arguments)]
-    pub const fn new(
+    const fn new_inner(
         n1: usize,
         n2: usize,
         q1: u128,
@@ -144,6 +150,8 @@ impl PIRParams {
         key_sigma_2: Option<f64>,
         error_sigma: Option<f64>,
         security_param: u32,
+        n3: usize,
+        t: usize,
     ) -> Self {
         // Ring dimension invariants.
         debug_assert!(
@@ -180,6 +188,21 @@ impl PIRParams {
             !matches!(key_dist_2, KeyDist::Gaussian) || key_sigma_2.is_some(),
             "key_sigma_2 required when key_dist_2 = Gaussian"
         );
+        // Record-ring / batch invariants (VIA-C ≡ n3 = n2, t = 1).
+        debug_assert!(
+            n3 > 0 && n3.is_power_of_two(),
+            "n3 must be a positive power of two"
+        );
+        // n3, n2 both powers of two ⇒ n3 | n2 ⟺ n3 ≤ n2.
+        debug_assert!(n3 <= n2, "n3 must divide n2");
+        debug_assert!(
+            t > 0 && t.is_power_of_two(),
+            "t (batch size) must be a positive power of two"
+        );
+        debug_assert!(
+            t * n3 <= n2,
+            "t * n3 must be <= n2 (single-repack record-fit constraint)"
+        );
         Self {
             n1,
             n2,
@@ -201,13 +224,149 @@ impl PIRParams {
             key_sigma_2,
             error_sigma,
             security_param,
+            n3,
+            t,
         }
     }
 
-    /// Dimension ratio $d = n_1 / n_2$.
+    /// Construct VIA-C `PIRParams` (record ring `n3 = n2`, batch `t = 1`).
+    /// **Signature unchanged across Layer 7** — the VIA-B-only fields are set
+    /// internally (M3), so existing VIA-C call sites compile unmodified.
+    ///
+    /// # Panics
+    ///
+    /// See struct-level documentation.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        n1: usize,
+        n2: usize,
+        q1: u128,
+        q2: u64,
+        q3: u64,
+        q4: u64,
+        p: u64,
+        gadget_base_1: u64,
+        gadget_depth_1: usize,
+        gadget_base_2: u64,
+        gadget_depth_2: usize,
+        gadget_base_rsk: u64,
+        gadget_depth_rsk: usize,
+        key_dist_1: KeyDist,
+        key_dist_2: KeyDist,
+        key_bound_2: u64,
+        key_sigma_1: Option<f64>,
+        key_sigma_2: Option<f64>,
+        error_sigma: Option<f64>,
+        security_param: u32,
+    ) -> Self {
+        Self::new_inner(
+            n1,
+            n2,
+            q1,
+            q2,
+            q3,
+            q4,
+            p,
+            gadget_base_1,
+            gadget_depth_1,
+            gadget_base_2,
+            gadget_depth_2,
+            gadget_base_rsk,
+            gadget_depth_rsk,
+            key_dist_1,
+            key_dist_2,
+            key_bound_2,
+            key_sigma_1,
+            key_sigma_2,
+            error_sigma,
+            security_param,
+            // VIA-C: record ring = n2, batch = 1.
+            n2,
+            1,
+        )
+    }
+
+    /// Construct VIA-B `PIRParams` with an explicit record-ring degree `n3` and
+    /// batch size `t` (M3). VIA-C uses [`PIRParams::new`] instead.
+    ///
+    /// # Panics
+    ///
+    /// As [`PIRParams::new`], plus: `n3` not a positive power of two, `n3 ∤ n2`,
+    /// `t` not a positive power of two, or `t * n3 > n2`.
+    #[cfg(feature = "via-b")]
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new_b(
+        n1: usize,
+        n2: usize,
+        q1: u128,
+        q2: u64,
+        q3: u64,
+        q4: u64,
+        p: u64,
+        gadget_base_1: u64,
+        gadget_depth_1: usize,
+        gadget_base_2: u64,
+        gadget_depth_2: usize,
+        gadget_base_rsk: u64,
+        gadget_depth_rsk: usize,
+        key_dist_1: KeyDist,
+        key_dist_2: KeyDist,
+        key_bound_2: u64,
+        key_sigma_1: Option<f64>,
+        key_sigma_2: Option<f64>,
+        error_sigma: Option<f64>,
+        security_param: u32,
+        n3: usize,
+        t: usize,
+    ) -> Self {
+        Self::new_inner(
+            n1,
+            n2,
+            q1,
+            q2,
+            q3,
+            q4,
+            p,
+            gadget_base_1,
+            gadget_depth_1,
+            gadget_base_2,
+            gadget_depth_2,
+            gadget_base_rsk,
+            gadget_depth_rsk,
+            key_dist_1,
+            key_dist_2,
+            key_bound_2,
+            key_sigma_1,
+            key_sigma_2,
+            error_sigma,
+            security_param,
+            n3,
+            t,
+        )
+    }
+
+    /// Dimension ratio $d = n_1 / n_2$ (the ring-switch fold).
     #[inline]
     pub const fn d(&self) -> usize {
         self.n1 / self.n2
+    }
+
+    /// Record-ring degree $n_3$ ($= n_2$ for VIA-C).
+    #[inline]
+    pub const fn n3(&self) -> usize {
+        self.n3
+    }
+
+    /// Batch size $T$ ($= 1$ for VIA-C).
+    #[inline]
+    pub const fn t(&self) -> usize {
+        self.t
+    }
+
+    /// Records per cell / CRot range $d_3 = n_1 / n_3$ ($= d$ for VIA-C).
+    #[inline]
+    pub const fn d3(&self) -> usize {
+        self.n1 / self.n3
     }
 
     /// Encoding scale $\Delta = \lceil q_1 / p \rceil$.

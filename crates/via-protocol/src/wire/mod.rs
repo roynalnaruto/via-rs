@@ -11,4 +11,6 @@ pub mod query;
 pub use answer::CompressedAnswer;
 pub use format::{PrgCompressed, Uncompressed, WireFormat};
 pub use keys::{PublicParams, QueryCompressionKey};
+#[cfg(feature = "via-b")]
+pub use query::BatchedQuery;
 pub use query::{CompressedQuery, DecompressedQuery};
