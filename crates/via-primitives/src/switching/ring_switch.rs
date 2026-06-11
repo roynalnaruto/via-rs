@@ -252,7 +252,7 @@ pub fn gen_rsk<
 pub fn ring_switch<
     const N1: usize,
     const N2: usize,
-    R: RingPoly<N1, Projected<N2>: RingPolyEval<N2, Modulus = R::Modulus>>,
+    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus> + RingPolyEval<N2>>,
     const L: usize,
     const D: usize,
 >(

@@ -8,7 +8,7 @@
 //! shape mirrors Layer 3's [`crate::switching::ring_switch::gen_rsk`]: explicit
 //! `<N_IN, N_OUT, …>` parameters plus a compile-time [`ConvDims::_CHECK`].
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::MLWECiphertext;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
 use crate::sampling::distribution::Distribution;
@@ -72,7 +72,7 @@ pub fn conv_step<
     const RANK_OUT: usize,
     const N_OUT: usize,
     R_IN: RingPoly<N_IN, Embedded<N_OUT> = R_OUT, Modulus = <R_OUT as RingPoly<N_OUT>>::Modulus>,
-    R_OUT: RingPoly<N_OUT>,
+    R_OUT: RingPoly<N_OUT> + RingPolyEval<N_OUT>,
     const L: usize,
 >(
     ct: &MLWECiphertext<RANK_IN, N_IN, R_IN>,

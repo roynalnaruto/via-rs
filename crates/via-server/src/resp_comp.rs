@@ -54,7 +54,7 @@ pub fn resp_comp<
     const N2: usize,
     R2: RingPoly<N1>,
     R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPolyEval<N2, Modulus = R3L::Modulus>,
+    R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     const L: usize,
     const D: usize,

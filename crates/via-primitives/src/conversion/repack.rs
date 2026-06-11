@@ -20,9 +20,9 @@
 
 use alloc::vec::Vec;
 
-use crate::algebra::ring::RingPoly;
 use crate::algebra::ring::element::Poly;
 use crate::algebra::ring::rns_element::PolyRns;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::MLWECiphertext;
 use crate::encryption::types::{RLWECiphertext, RLevCiphertext};
 use crate::switching::mod_switch::mod_switch_sym;
@@ -149,7 +149,7 @@ pub fn mlwes_to_mlwe<
     const RANK_OUT: usize,
     const N_OUT: usize,
     R_IN: RingPoly<N_IN, Embedded<N_OUT> = R_OUT, Modulus = <R_OUT as RingPoly<N_OUT>>::Modulus>,
-    R_OUT: RingPoly<N_OUT>,
+    R_OUT: RingPoly<N_OUT> + RingPolyEval<N_OUT>,
     const L: usize,
 >(
     pair: &[MLWECiphertext<RANK_IN, N_IN, R_IN>],
@@ -197,7 +197,7 @@ pub(crate) fn pair_convert<
     const RANK_OUT: usize,
     const N_OUT: usize,
     R_IN: RingPoly<N_IN, Embedded<N_OUT> = R_OUT, Modulus = <R_OUT as RingPoly<N_OUT>>::Modulus>,
-    R_OUT: RingPoly<N_OUT>,
+    R_OUT: RingPoly<N_OUT> + RingPolyEval<N_OUT>,
     const L: usize,
 >(
     inputs: Vec<MLWECiphertext<RANK_IN, N_IN, R_IN>>,
@@ -334,7 +334,19 @@ macro_rules! repack_engine {
             keys: &S,
             base: u64,
         ) -> $crate::encryption::types::RLWECiphertext<
-            $n1, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>> {
+            $n1, $ring<$n1, $modp, $crate::algebra::ring::form::Coefficient>>
+        where
+            // Each binary-tree level's `pair_convert` runs a `conv_step` whose
+            // internal `key_switch` is eval-form (real NTT at NTT-friendly moduli
+            // — paper single-prime q2; schoolbook identity-fallback for toy
+            // `DynModulus`). A plain `RingPolyEval` bound suffices because the
+            // trait is standalone (it does not shadow the `RingPoly`
+            // `Embedded`/`Modulus` normalisation `pair_convert` relies on).
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
             // Extr_{K/T=G} each input → (D, G)-MLWE; pad to D with zeros.
             let mut v = Vec::with_capacity($d);
             for i in 0..$t {
@@ -361,9 +373,12 @@ macro_rules! repack_engine {
             }
             // One shadowing `pair_convert` per recursion level (degrees double, count halves).
             $(
-                let v = $crate::conversion::repack::pair_convert::<$rin, $nin, $rout, $nout, _, _, $lev>(
-                    v, $sched::$field(keys), base,
-                );
+                // `R_OUT` pinned explicit (= the step-key ring) so inference
+                // never re-derives it as a projection chain `…::Embedded<…>`.
+                let v = $crate::conversion::repack::pair_convert::<
+                    $rin, $nin, $rout, $nout, _,
+                    $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>, $lev,
+                >(v, $sched::$field(keys), base);
             )+
             $crate::conversion::mlwe_to_rlwe(&v.into_iter().next().unwrap())
         }

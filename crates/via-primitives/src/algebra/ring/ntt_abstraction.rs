@@ -5,7 +5,7 @@
 //! operands once ([`to_eval`](RingPolyEval::to_eval)), multiply them pointwise
 //! and accumulate, then convert the result back once
 //! ([`from_eval`](RingPolyEval::from_eval)). It is the sibling trait the
-//! [`super::abstraction`] module docs defer: the base [`RingPoly`] stays
+//! [`super::abstraction`] module docs defer: the base [`RingPoly`](super::RingPoly) stays
 //! coefficient-only (its centred-coefficient methods are meaningless in
 //! evaluation form), and the eval-form capability lives here so it can be
 //! bounded independently exactly where it is wanted (e.g.
@@ -35,7 +35,6 @@
 
 use core::ops::{AddAssign, Mul};
 
-use super::RingPoly;
 use super::element::Poly;
 use super::form::{Coefficient, Evaluation};
 use super::ntt::NttFriendly;
@@ -43,30 +42,33 @@ use super::rns_element::PolyRns;
 use crate::algebra::rns::basis::RnsBasis;
 use crate::algebra::zq::modulus::{DynModulus, PowerOfTwoModulus};
 
-/// A [`RingPoly`] that exposes an evaluation-form representation supporting
+/// A polynomial backend exposing an evaluation-form representation that supports
 /// pointwise ring multiplication, plus the transforms to and from it.
+///
+/// **Standalone — deliberately NOT a [`RingPoly`](super::RingPoly) supertrait.** A
+/// `where T: RingPolyEval<N>` bound must not introduce a param-env candidate for
+/// `T: RingPoly<N>`, which would *shadow* `T`'s concrete `RingPoly` impl when
+/// normalising its associated types (`Embedded`/`Modulus`/`Projected`). The
+/// conversion-cascade and VIA-B repack generic code depends on that normalisation
+/// (e.g. `R_IN::Embedded<N_OUT> = R_OUT`), so a supertrait breaks them (`E0271`).
+/// Callers that need both capabilities write `T: RingPoly<N> + RingPolyEval<N>`.
 ///
 /// The associated [`Eval`](RingPolyEval::Eval) type is the eval-form image;
 /// pointwise `Mul` on it is ring multiplication and `AddAssign` is ring addition
-/// (both `O(N)` for the NTT backing). See the module docs for the two backings
-/// (real NTT vs schoolbook fallback).
-pub trait RingPolyEval<const N: usize>: RingPoly<N> {
+/// (both `O(N)` for the NTT backing). See the module docs for the two backings.
+pub trait RingPolyEval<const N: usize> {
     /// The evaluation-form image type. Pointwise `Mul` = ring mul; `AddAssign`
     /// = ring add.
     type Eval: Copy + AddAssign + Mul<Output = Self::Eval>;
 
     /// Coefficient form → evaluation form (forward NTT for NTT-friendly moduli;
-    /// the identity otherwise). Consumes `self` (callers `Copy` first, since
-    /// [`RingPoly`] requires `Copy`).
+    /// the identity otherwise). Consumes `self` (callers, which also bound
+    /// [`RingPoly`](super::RingPoly), `Copy` first).
     fn to_eval(self) -> Self::Eval;
 
     /// Evaluation form → coefficient form (inverse NTT for NTT-friendly moduli;
     /// the identity otherwise).
     fn from_eval(eval: Self::Eval) -> Self;
-
-    /// The all-zeros polynomial in evaluation form — the additive identity for
-    /// the pointwise ring, used to seed an accumulator.
-    fn eval_zero(modulus: Self::Modulus) -> Self::Eval;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,11 +88,6 @@ impl<const N: usize, M: NttFriendly<N>> RingPolyEval<N> for Poly<N, M, Coefficie
     fn from_eval(eval: Self::Eval) -> Self {
         eval.into_coeff()
     }
-
-    #[inline]
-    fn eval_zero(modulus: M) -> Self::Eval {
-        Poly::zero(modulus)
-    }
 }
 
 impl<const N: usize, B: RnsBasis> RingPolyEval<N> for PolyRns<N, B, Coefficient>
@@ -108,11 +105,6 @@ where
     #[inline]
     fn from_eval(eval: Self::Eval) -> Self {
         eval.into_coeff()
-    }
-
-    #[inline]
-    fn eval_zero(basis: B) -> Self::Eval {
-        PolyRns::zero(basis)
     }
 }
 
@@ -141,11 +133,6 @@ impl<const N: usize> RingPolyEval<N> for Poly<N, DynModulus, Coefficient> {
     fn from_eval(eval: Self::Eval) -> Self {
         eval
     }
-
-    #[inline]
-    fn eval_zero(modulus: DynModulus) -> Self::Eval {
-        Poly::zero(modulus)
-    }
 }
 
 impl<const N: usize, const LOG2_Q: u32> RingPolyEval<N>
@@ -161,10 +148,5 @@ impl<const N: usize, const LOG2_Q: u32> RingPolyEval<N>
     #[inline]
     fn from_eval(eval: Self::Eval) -> Self {
         eval
-    }
-
-    #[inline]
-    fn eval_zero(modulus: PowerOfTwoModulus<LOG2_Q>) -> Self::Eval {
-        Poly::zero(modulus)
     }
 }

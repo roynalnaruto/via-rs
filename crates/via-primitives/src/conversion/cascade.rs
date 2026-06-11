@@ -226,7 +226,19 @@ macro_rules! lwe_to_rlwe_cascade {
             base: u64,
         ) -> $crate::encryption::RLWECiphertext<
             $n, $ring<$n, $modp, $crate::algebra::ring::form::Coefficient>,
-        > {
+        >
+        where
+            // Each step's output ring drives a `conv_step` whose internal
+            // `key_switch` is eval-form: real NTT at NTT-friendly moduli (the
+            // paper RNS q1), schoolbook identity-fallback otherwise (toy
+            // `DynModulus`). A plain `RingPolyEval` bound suffices — the trait is
+            // standalone, so it does not shadow `conv_step`'s `RingPoly`
+            // `Embedded`/`Modulus` normalisation.
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
             $crate::lwe_to_rlwe_cascade!(@chain ($ring, $modp, $lev, base, key) ct ;
                 $( ($field, $rin, $nin, $rout, $nout) )+)
         }

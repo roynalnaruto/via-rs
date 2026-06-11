@@ -132,7 +132,7 @@ pub enum CRotDir {
 /// let out = crot(CRotDir::Forward, &[bit], ct, 2, 2);
 /// assert_eq!(sk.decrypt::<RP>(&out, p), Poly::new(p, [0, 1, 0, 0]));
 /// ```
-pub fn crot<const N: usize, R: RingPolyEval<N>, const L1: usize, const L2: usize>(
+pub fn crot<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     dir: CRotDir,
     rotation_bits: &[RGSWCiphertext<N, R, L1, L2>],
     ct: RLWECiphertext<N, R>,

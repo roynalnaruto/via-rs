@@ -22,7 +22,7 @@
 //! is three operator calls. Layer 3 (ring switching) and Layer 5
 //! (LWE-to-RLWE cascade) both build on this primitive.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
@@ -82,12 +82,11 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
     /// external-product noise model (Phase 7) but lacks the `m1`
     /// multiplier — so the budget is `N` times less tight than for
     /// external product.
-    pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R> {
-        // Schoolbook path: `key_switch` feeds the conversion-cascade / repack
-        // machinery (generic-modulus, projection-chain operand types) where the
-        // `RingPolyEval` bound does not thread cleanly; its NTT win is secondary
-        // to the gate / `FirstDim` paths.
-        let product = self.gadget_product_schoolbook(&ct.mask, base);
+    pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R>
+    where
+        R: RingPolyEval<N>,
+    {
+        let product = self.gadget_product(&ct.mask, base);
         RLWECiphertext::new(-product.mask, ct.body - product.body)
     }
 }

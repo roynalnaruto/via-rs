@@ -138,7 +138,12 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
 /// assert_eq!(rgsw.neg_s_m.samples.len(), 2);
 /// assert_eq!(rgsw.m.samples.len(), 2);
 /// ```
-pub fn rlwe_to_rgsw<const N: usize, R: RingPolyEval<N>, const L_OUT: usize, const L_CK: usize>(
+pub fn rlwe_to_rgsw<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L_OUT: usize,
+    const L_CK: usize,
+>(
     rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
     conv_key: &RLevCiphertext<N, R, L_CK>,
     m_rlev: RLevCiphertext<N, R, L_OUT>,

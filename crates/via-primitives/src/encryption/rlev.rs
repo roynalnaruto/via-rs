@@ -144,7 +144,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
 // of key switching (§2.4 / Phase 8) and ring switching (§3.3 / Layer 3).
 // ---------------------------------------------------------------------------
 
-impl<const N: usize, R: RingPolyEval<N>, const L: usize> RLevCiphertext<N, R, L> {
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevCiphertext<N, R, L> {
     /// §2.4 — Gadget product: $\text{plaintext} \boxdot \mathrm{RLev}_S(M)
     /// \to \mathrm{RLWE}_S(\text{plaintext} \cdot M)$.
     ///
@@ -194,12 +194,10 @@ impl<const N: usize, R: RingPolyEval<N>, const L: usize> RLevCiphertext<N, R, L>
     /// isomorphism over $\mathbb{Z}_q$); pinned by
     /// `gadget_product_matches_schoolbook_*`.
     pub fn gadget_product(&self, plaintext: &R, base: u64) -> RLWECiphertext<N, R> {
+        const { assert!(L >= 1, "gadget_product: L must be >= 1") };
         let modulus = plaintext.modulus();
         let mut scratch = [0i128; N];
         gadget_scale_into::<N, R>(plaintext, base, L as u8, &mut scratch);
-
-        let mut acc_mask = R::eval_zero(modulus);
-        let mut acc_body = R::eval_zero(modulus);
         let mut digit_buf = [0i64; N];
 
         // LSB-first extraction step `k` pairs with the MSB-first sample index
@@ -207,47 +205,23 @@ impl<const N: usize, R: RingPolyEval<N>, const L: usize> RLevCiphertext<N, R, L>
         // is accumulated in evaluation form, then transformed back once. For
         // non-NTT moduli `to_eval`/`from_eval` are identities and the pointwise
         // `*` is the schoolbook negacyclic mul, so this is exactly the old path.
-        for k in 0..L {
+        // The `k = 0` product seeds the accumulators (so no eval-form zero is
+        // needed — `RingPolyEval` is standalone and carries no modulus).
+        gadget_extract_lsb_into::<N>(base, &mut scratch, &mut digit_buf);
+        let digit0 = R::to_eval(R::from_centered_i64s(modulus, &digit_buf));
+        let s0 = &self.samples[L - 1];
+        // `digit0` is `Copy`, so each `*` copies it rather than moving.
+        let mut acc_mask = digit0 * R::to_eval(s0.mask);
+        let mut acc_body = digit0 * R::to_eval(s0.body);
+
+        for k in 1..L {
             gadget_extract_lsb_into::<N>(base, &mut scratch, &mut digit_buf);
             let digit_eval = R::to_eval(R::from_centered_i64s(modulus, &digit_buf));
             let sample = &self.samples[L - 1 - k];
-            // `digit_eval` is `Copy`, so each `*` copies it rather than moving.
             acc_mask += digit_eval * R::to_eval(sample.mask);
             acc_body += digit_eval * R::to_eval(sample.body);
         }
         RLWECiphertext::new(R::from_eval(acc_mask), R::from_eval(acc_body))
-    }
-}
-
-impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
-    /// Schoolbook (coefficient-form) gadget product — bound only on
-    /// [`RingPoly`], so it threads through the conversion-cascade / repack
-    /// machinery whose generic-modulus, projection-chain operand types do not
-    /// carry the [`RingPolyEval`] bound cleanly (the eval path's win there is
-    /// secondary to the gate/`FirstDim` paths, which use
-    /// [`gadget_product`](Self::gadget_product)). Produces an **identical**
-    /// result to [`gadget_product`](Self::gadget_product); see it for the
-    /// algorithm. `pub(crate)` — not public API.
-    pub(crate) fn gadget_product_schoolbook(
-        &self,
-        plaintext: &R,
-        base: u64,
-    ) -> RLWECiphertext<N, R> {
-        let modulus = plaintext.modulus();
-        let mut scratch = [0i128; N];
-        gadget_scale_into::<N, R>(plaintext, base, L as u8, &mut scratch);
-
-        let mut result_mask = R::zero(modulus);
-        let mut result_body = R::zero(modulus);
-        let mut digit_buf = [0i64; N];
-        for k in 0..L {
-            gadget_extract_lsb_into::<N>(base, &mut scratch, &mut digit_buf);
-            let digit_poly = R::from_centered_i64s(modulus, &digit_buf);
-            let sample = &self.samples[L - 1 - k];
-            result_mask += digit_poly * sample.mask;
-            result_body += digit_poly * sample.body;
-        }
-        RLWECiphertext::new(result_mask, result_body)
     }
 }
 
