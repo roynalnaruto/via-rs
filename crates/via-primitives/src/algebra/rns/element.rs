@@ -686,39 +686,7 @@ mod tests {
         assert!(c1 < 50.0, "m1 chi^2 = {c1}, counts = {counts1:?}");
     }
 
-    /// SplitMix64 — duplicate of the helper in `zq::element::tests` so the
-    /// uniformity tests don't need a cross-module dependency. Lift to a
-    /// shared `test_util` module if a third caller appears.
-    struct SplitMix64(u64);
-
-    impl SplitMix64 {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-    }
-
-    impl RngCore for SplitMix64 {
-        fn next_u32(&mut self) -> u32 {
-            self.next_u64() as u32
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn fill_bytes(&mut self, dst: &mut [u8]) {
-            for chunk in dst.chunks_mut(8) {
-                let bytes = self.next_u64().to_le_bytes();
-                chunk.copy_from_slice(&bytes[..chunk.len()]);
-            }
-        }
-        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
-            self.fill_bytes(dst);
-            Ok(())
-        }
-    }
+    use crate::test_util::SplitMix64;
 
     // ----- §0.6 RNS centred-lift tests -----
 

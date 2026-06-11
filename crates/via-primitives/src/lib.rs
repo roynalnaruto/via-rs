@@ -45,3 +45,8 @@ pub mod gates;
 pub mod params;
 pub mod sampling;
 pub mod switching;
+
+/// Test-only helpers shared across unit tests (e.g. the `SplitMix64` PRG). Gated
+/// out of every non-test build, so it has no effect on the `no_std` surface.
+#[cfg(test)]
+mod test_util;
