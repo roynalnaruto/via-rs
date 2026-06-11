@@ -857,6 +857,60 @@ mod tests {
         assert_eq!(recovered.coeff(4).to_u64(), 5, "M0_4 @ slot 4");
         assert_eq!(recovered.coeff(6).to_u64(), 7, "M1_4 @ slot 6");
     }
+
+    /// §3.5 CROSS-TYPE (RNS q1 → single-prime q2) — the paper-shape modulus
+    /// switch in miniature: gen the **RNS** cascade at q1 (`PolyRns`), cross-type
+    /// mod-switch its `keys_4`/`keys_8` suffix → **single-prime** q2 (`Poly`) into
+    /// a `RepackKeysN8T2`, encrypt the inputs at q2 under S1@q2, repack at q2, and
+    /// decrypt — the interleave reconstructs. Proves the repack reuses the q1-RNS
+    /// cascade keys at the single-prime q2 the *paper* repack actually runs at (the
+    /// real paper path; the `repack_rns_2048_t256` PolyRns preset is a single-
+    /// modulus noise spike, not this).
+    #[test]
+    fn repack_n8_t2_modswitched_rns_q1_to_single_prime_q2_reconstructs() {
+        use crate::algebra::ring::rns_element::PolyRns;
+        use crate::algebra::rns::basis::ConstRnsBasis;
+        use crate::algebra::zq::modulus::DynModulus;
+        use crate::conversion::gen_lwe_to_rlwe_key_rns_n8;
+        use crate::switching::rekey::rekey_secret_key;
+        type Rns<const N: usize> = PolyRns<N, ConstRnsBasis<7681, 12289>, Coefficient>; // q1≈2^26.6
+        type R8d = Poly<8, DynModulus, Coefficient>; // q2 single-prime
+        let basis = ConstRnsBasis::<7681, 12289>;
+        let q2 = DynModulus::new(1 << 20);
+        let p = DynModulus::new(16);
+        const L: usize = 7;
+        const BASE: u64 = 64;
+        let mut prg = Shake256Prg::new(b"repack-n8-t2-rns-q1-to-q2");
+        let sk_rns = SecretKey::<8, Rns<8>>::keygen(basis, Distribution::Ternary, &mut prg);
+        // Same ternary S1, reinterpreted at the single-prime q2 (cross-type rekey).
+        let sk_q2 = rekey_secret_key::<8, Rns<8>, R8d>(&sk_rns, q2);
+        let m0 = encode::<8, R8d, R8d>(&R8d::new(p, [2, 0, 0, 0, 5, 0, 0, 0]), q2);
+        let m1 = encode::<8, R8d, R8d>(&R8d::new(p, [3, 0, 0, 0, 7, 0, 0, 0]), q2);
+        let c0 = sk_q2.encrypt(&m0, Distribution::Ternary, &mut prg);
+        let c1 = sk_q2.encrypt(&m1, Distribution::Ternary, &mut prg);
+        // RNS cascade at q1; cross-type mod-switch the suffix → single-prime q2.
+        let cascade =
+            gen_lwe_to_rlwe_key_rns_n8::<_, L>(&sk_rns, BASE, Distribution::Ternary, &mut prg);
+        let keys_q2 = RepackKeysN8T2::<DynModulus, L> {
+            keys_4: core::array::from_fn(|i| {
+                mod_switch_rlev::<4, Rns<4>, Poly<4, DynModulus, Coefficient>, L>(
+                    &cascade.keys_4[i],
+                    q2,
+                )
+            }),
+            keys_8: core::array::from_fn(|i| {
+                mod_switch_rlev::<8, Rns<8>, R8d, L>(&cascade.keys_8[i], q2)
+            }),
+        };
+        let out = repack_n8_t2(&[c0, c1], &keys_q2, BASE);
+        let mut acc = out.body;
+        acc -= out.mask * *sk_q2.poly();
+        let recovered: R8d = decode::<8, R8d, R8d>(&acc, p);
+        assert_eq!(recovered.coeff(0).to_u64(), 2, "M0_0 @ slot 0");
+        assert_eq!(recovered.coeff(2).to_u64(), 3, "M1_0 @ slot 2");
+        assert_eq!(recovered.coeff(4).to_u64(), 5, "M0_4 @ slot 4");
+        assert_eq!(recovered.coeff(6).to_u64(), 7, "M1_4 @ slot 6");
+    }
 }
 
 /// Paper-scale depth-10 repack SPIKE — the P2 GO/NO-GO. Mirrors the cascade's own
