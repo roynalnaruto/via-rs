@@ -33,6 +33,18 @@ path = "../crates/via-client"
 [dependencies.via-server]
 path = "../crates/via-server"
 
+# §7 VIA-B targets enable the batch/repack surface across the path crates. `via-b`
+# does NOT imply `alloc`, but the repack module is `cfg(all(via-b, alloc))`, so
+# `alloc` is listed explicitly; the §7 targets set `required-features = ["via-b"]`.
+[features]
+via-b = [
+    "via-primitives/via-b",
+    "via-primitives/alloc",
+    "via-protocol/via-b",
+    "via-client/via-b",
+    "via-server/via-b",
+]
+
 # Each fuzz target gets its own [[bin]] entry. Targets are grouped on disk by
 # the `src/primitives/` module they exercise — `fuzz_targets/{zq,rns,ring}/` —
 # but the public `name = "..."` identifier (used by the CI matrix, the
@@ -398,3 +410,26 @@ name = "protocol_e2e_roundtrip"
 path = "fuzz_targets/protocol/e2e_roundtrip.rs"
 test = false
 doc = false
+
+# §7 — VIA-B repacking + batch (require `--features via-b`; hidden otherwise).
+
+[[bin]]
+name = "conversion_embed_d_roundtrip"
+path = "fuzz_targets/conversion/embed_d_roundtrip.rs"
+test = false
+doc = false
+required-features = ["via-b"]
+
+[[bin]]
+name = "conversion_repack_roundtrip"
+path = "fuzz_targets/conversion/repack_roundtrip.rs"
+test = false
+doc = false
+required-features = ["via-b"]
+
+[[bin]]
+name = "protocol_answer_batch_roundtrip"
+path = "fuzz_targets/protocol/answer_batch_roundtrip.rs"
+test = false
+doc = false
+required-features = ["via-b"]

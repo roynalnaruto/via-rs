@@ -115,13 +115,18 @@ client-server-check:
 fuzz-list:
     cd fuzz && cargo +nightly fuzz list
 
-# Build every fuzz target (compile-only).
+# Build every fuzz target (compile-only) — default + the VIA-B (§7) targets.
 fuzz-build:
     cd fuzz && cargo +nightly fuzz build
+    cd fuzz && cargo +nightly fuzz build --features via-b
 
 # Run a single fuzz target for SECS seconds (default 60). Example: `just fuzz zq_reduce 300`.
 fuzz TARGET SECS="60":
     cd fuzz && cargo +nightly fuzz run {{TARGET}} -- -max_total_time={{SECS}}
+
+# Run a single VIA-B (§7) fuzz target for SECS seconds (e.g. `just fuzz-b conversion_repack_roundtrip`).
+fuzz-b TARGET SECS="60":
+    cd fuzz && cargo +nightly fuzz run --features via-b {{TARGET}} -- -max_total_time={{SECS}}
 
 # ─── KAT vectors ───────────────────────────────────────────────────────────
 #
