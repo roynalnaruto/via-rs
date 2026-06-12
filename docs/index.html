@@ -13,6 +13,7 @@
   <nav>
     <a href="intro.html">Intro to VIA</a>
     <a href="implementation.html">Implementation details</a>
+    <a href="audit.html">Audit</a>
     <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
   </nav>
 </div></header>
@@ -29,7 +30,11 @@
     </a>
     <a class="card" href="implementation.html">
       <h2>Implementation details &#8594;</h2>
-      <p>The <code>via-rs</code> codebase as built: an architecture map of the five crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and a correctness/security audit with source links pinned to a commit and paper citations.</p>
+      <p>The <code>via-rs</code> codebase as built: an architecture map of the five crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and the build/test status.</p>
+    </a>
+    <a class="card" href="audit.html">
+      <h2>Audit &#8594;</h2>
+      <p>A severity-ranked correctness/security audit of VIA-C and VIA-B &mdash; paper-vs-code parameter and noise-budget divergences, each finding adversarially re-validated against the paper and the code pinned to a commit, with source links and citations.</p>
     </a>
   </div>
   <p class="foot-note">Scope: <strong>VIA-C</strong> and <strong>VIA-B</strong> are implemented (VIA-B behind the <code>via-b</code> cargo feature); plain VIA is not yet implemented. See the <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">repository</a> and its README for build &amp; test instructions.</p>

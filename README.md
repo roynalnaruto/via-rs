@@ -20,9 +20,11 @@ for how and why it works.
 **Status:** **VIA-C** and **VIA-B** (the batch variant) are implemented
 end-to-end; plain VIA is not yet implemented. VIA-B lives behind the `via-b`
 cargo feature (see [Build & test](#build--test)). The crypto core is the focus
-(no HTTP/transport layer). See the [implementation analysis](https://roynalnaruto.github.io/via-rs/implementation.html)
-for what is and isn't covered, and known parameter/correctness caveats — note
-that analysis predates the VIA-B merge and currently covers VIA-C.
+(no HTTP/transport layer). See the [implementation details](https://roynalnaruto.github.io/via-rs/implementation.html)
+for the architecture and what is/isn't covered, and the
+[audit](https://roynalnaruto.github.io/via-rs/audit.html) for known
+parameter/correctness caveats — now spanning both VIA-C and VIA-B, with each
+finding adversarially re-validated.
 
 ### Codebase layout
 
