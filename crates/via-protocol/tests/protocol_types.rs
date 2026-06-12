@@ -150,7 +150,7 @@ fn uncompressed_wire_format_round_trip() {
 }
 
 /// `PrgCompressed::regenerate_masks` matches a direct `Shake256Prg` draw — the
-/// pinned cross-language KAT contract (P5 generates the Python vectors).
+/// pinned cross-language KAT contract.
 #[test]
 fn prg_mask_regen_matches_direct_prg_draw() {
     use via_protocol::primitives::sampling::Shake256Prg;
