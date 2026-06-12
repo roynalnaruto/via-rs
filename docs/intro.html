@@ -595,45 +595,57 @@
                     Move 2 — send the index in binary, expand it server-side
                 </h3>
                 <p>
-                    Lay the database out as an \(I\times J\) grid, so an index
-                    becomes a triple: row \(\alpha\), column \(\beta\), and
-                    coefficient-slot \(\gamma\) (an RLWE ciphertext will turn
-                    out to pack \(n\) values in numbered "slots" — Move 3 — and
-                    \(\gamma\) just picks which one we ultimately read). Instead
-                    of an \(I\)-length selector, the client sends the row number
-                    in <em>binary</em> — just \(\log_2 I\) encrypted control
-                    bits — and the server <strong>expands</strong> them into the
-                    one-hot row selector with a depth-\(\log_2 I\) tree of
-                    <strong>DMux</strong> gates. A DMux ("de-multiplexer") takes
-                    one ciphertext and an encrypted control bit and routes the
-                    ciphertext to one of two outputs, putting an encryption of
-                    \(0\) on the other. Cascade the bits and a single starting
-                    payload trickles down to exactly one leaf.
+                    Lay the database out as an \(I\times J\) grid, so a record's
+                    address splits into a row \(\alpha\) and a column \(\beta\)
+                    (a third index \(\gamma\) picks a slot inside the record —
+                    Move 3). Move 2 is only about selecting the
+                    <strong>row</strong>. Here is the trick: instead of sending
+                    an \(I\)-entry one-hot vector, the client sends \(\alpha\) in
+                    <em>binary</em> — just \(\log_2 I\) encrypted bits — and the
+                    server <strong>rebuilds</strong> the one-hot row selector
+                    from those bits itself, using a tree of
+                    <strong>DMux</strong> gates.
+                </p>
+                <p>
+                    A <strong>DMux</strong> ("de-multiplexer") gate takes one
+                    ciphertext and one encrypted control bit and emits
+                    <em>two</em> ciphertexts: it sends the input down one of the
+                    two outputs and puts \(\text{enc}(0)\) on the other — the bit
+                    decides which side gets the input. Wire \(\log_2 I\) of these
+                    into a binary tree, one level per address bit: drop a single
+                    \(\text{enc}(1)\) in at the root, and at each level the next
+                    bit of \(\alpha\) steers that live payload down one branch
+                    while every other branch fills with \(\text{enc}(0)\). After
+                    the last level, the \(I\) leaves are all \(\text{enc}(0)\)
+                    except the one at address \(\alpha\), which holds
+                    \(\text{enc}(1)\) — that row of leaves <em>is</em> the
+                    encrypted one-hot selector, rebuilt from \(\log_2 I\) bits.
                 </p>
 
                 <figure class="fig">
                     <pre class="mermaid">
 graph TD
-  R["payload: an encryption of 1"]
-  R -->|"bit b1 = 1, go right"| N1["live node"]
-  R -->|"left gets encryption of 0"| N0["dead (0)"]
-  N1 -->|"bit b0 = 1, go right"| L11["row 11 = enc(1)"]
-  N1 -->|"left gets enc(0)"| L10["row 10 = enc(0)"]
-  N0 --> L01["row 01 = enc(0)"]
-  N0 --> L00["row 00 = enc(0)"]
+  R["root payload = enc(1)"]
+  R -->|"high bit b₁ = 0"| N0["enc(0)"]
+  R -->|"high bit b₁ = 1 ✓"| N1["enc(1)"]
+  N0 --> L0["row 0 → enc(0)"]
+  N0 --> L1["row 1 → enc(0)"]
+  N1 -->|"low bit b₀ = 0 ✓"| L2["row 2 → enc(1)"]
+  N1 -->|"low bit b₀ = 1"| L3["row 3 → enc(0)"]
   classDef live fill:#e8f7ee,stroke:#1f9d6b,stroke-width:2px;
   classDef dead fill:#f5f7fa,stroke:#cdd5df,color:#9aa4b2;
-  class R,N1,L11 live;
-  class N0,L10,L01,L00 dead;
+  class R,N1,L2 live;
+  class N0,L0,L1,L3 dead;
 </pre
                     >
                     <figcaption>
-                        DMux tree for \(I=4\), routing to row \(\alpha = 11_2 =
-                        3\). Two encrypted control bits steer the payload down
-                        one path (green); every other leaf is filled with an
-                        encryption of \(0\). The output is the one-hot selector
-                        \([0,0,0,1]\) — built by the server, from \(\log_2 I\)
-                        bits.
+                        DMux tree for \(I=4\), routing to row \(\alpha = 2\)
+                        (binary \(10\)). The high bit \(b_1\) picks the right
+                        subtree, the low bit \(b_0\) picks the left leaf inside
+                        it (✓ = the live path); every other branch fills with
+                        \(\text{enc}(0)\). The four leaves are the encrypted
+                        one-hot selector \([0,0,1,0]\) — rebuilt by the server
+                        from just \(\log_2 4 = 2\) bits.
                     </figcaption>
                 </figure>
 
