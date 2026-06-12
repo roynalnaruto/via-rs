@@ -1,4 +1,4 @@
-//! Reduction kernels for $\mathbb{Z}_q$ — primitive §0.1 of `.docs/primitives.md`.
+//! Reduction kernels for $\mathbb{Z}_q$.
 //!
 //! Two reduction algorithms cover every modulus that appears in VIA / VIA-C /
 //! VIA-B at this layer:
@@ -17,9 +17,9 @@
 //!
 //! # Modulus range constraints
 //!
-//! The §0.1 layer is designed for $q < 2^{63}$ so that lazy-reduction
-//! intermediates in $[0, 2q)$ still fit in `u64`. Every modulus in
-//! `.docs/primitives.md` Appendix A satisfies $q \le 2^{38}$, with the
+//! This layer is designed for $q < 2^{63}$ so that lazy-reduction
+//! intermediates in $[0, 2q)$ still fit in `u64`. Every modulus used here
+//! satisfies $q \le 2^{38}$, with the
 //! largest being VIA-C's $q_1$ second RNS prime $\approx 2^{38}$.
 
 use subtle::{Choice, ConditionallySelectable};
@@ -40,7 +40,7 @@ use subtle::{Choice, ConditionallySelectable};
 /// Panics in `const` evaluation if either bound is violated:
 /// - `q < 2` — no residue ring ($q = 0$) or a trivial one ($q = 1$, always
 ///   returns 0; callers should short-circuit).
-/// - `q >= 2^63` — would break the §0.1 modulus range contract (see the
+/// - `q >= 2^63` — would break the modulus range contract (see the
 ///   module-level "Modulus range constraints" note): the unreduced sum
 ///   `a + b` in [`super::modulus::Modulus::add`] could overflow `u64`, and
 ///   the Barrett slack proof (`q_hat ∈ {⌊x/q⌋ − 1, ⌊x/q⌋}`) no longer
@@ -60,7 +60,7 @@ pub const fn barrett_mu(q: u64) -> u128 {
     assert!(q >= 2, "barrett_mu requires q >= 2");
     assert!(
         q < (1u64 << 63),
-        "barrett_mu requires q < 2^63 (§0.1 modulus range contract)",
+        "barrett_mu requires q < 2^63 (modulus range contract)",
     );
     let q = q as u128;
     let approx = u128::MAX / q;
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(mask_reduce(u128::MAX, 32), u32::MAX as u64);
     }
 
-    /// `barrett_mu` accepts `q` just under the §0.1 upper bound (`2^63 - 1`,
+    /// `barrett_mu` accepts `q` just under the upper bound (`2^63 - 1`,
     /// the largest representable non-pow2 modulus). Pairs with the panic
     /// tests below to pin both boundaries.
     #[test]
@@ -293,7 +293,7 @@ mod tests {
     }
 
     /// `barrett_mu(2^63)` must panic — the slack proof for
-    /// [`barrett_reduce`] (and the §0.1 `Modulus::add` contract) require
+    /// [`barrett_reduce`] (and the `Modulus::add` contract) require
     /// `q < 2^63`. Pow2 `q = 2^63` is still valid via the mask path
     /// ([`super::modulus::PowerOfTwoModulus<63>`]), which does not call
     /// `barrett_mu`.
@@ -323,7 +323,7 @@ mod tests {
 
     /// `barrett_reduce` at the upper slack boundary `q < 2^63`. The slack
     /// proof `q_hat ∈ {⌊x/q⌋ − 1, ⌊x/q⌋}` is tightest here; this pins the
-    /// worst case for the §0.1 modulus range. Closes review item 3 — existing
+    /// worst case for the modulus range. Closes review item 3 — existing
     /// tests stopped at ~2^38 and the fuzz target generates q ≤ 2^38, so this
     /// regime was un-exercised by both unit and fuzz coverage.
     #[test]

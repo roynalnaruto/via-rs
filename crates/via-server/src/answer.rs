@@ -1,11 +1,11 @@
-//! §6 — the 7-step VIA-C answer pipeline ([`answer_one_query`]).
+//! The 7-step VIA-C answer pipeline ([`answer_one_query`]).
 //!
 //! The free function is the variant-agnostic engine: it is generic over the
 //! ring backend, so the toy single-prime `Poly` and the paper RNS `PolyRns`
 //! both instantiate it without duplication. `VIA-C`'s server delegates here;
-//! VIA-B (Layer 7) will wrap it directly.
+//! VIA-B wraps it directly.
 //!
-//! ## Pipeline (paper §6, `via_c/server.py:103-236`)
+//! ## Pipeline
 //!
 //! | # | Step           | Primitive          | Ring move          |
 //! |---|----------------|--------------------|--------------------|
@@ -17,7 +17,7 @@
 //! | 6 | CRot           | `crot`             | 1×@q2 → 1×@q2       |
 //! | 7 | RespComp       | [`resp_comp`]      | q2 → q3 → n2 → q4   |
 //!
-//! **Bit-ordering invariant** (paper `mux.rs`/`rotate.rs`): DMux control bits
+//! **Bit-ordering invariant**: DMux control bits
 //! are **MSB-first**, CMux select bits and CRot rotation bits are **LSB-first**.
 //! The client builds the query to honour this; the server just forwards the
 //! three RGSW groups [`query_decomp`] sliced out.
@@ -28,8 +28,6 @@
 //! ring moduli cannot be reconstructed from [`PIRParams`](via_protocol::PIRParams) generically (a
 //! `u128`/`u64` has no generic path back to `R::Modulus`), so they are passed
 //! explicitly — matching every other composite primitive in this crate.
-//!
-//! `paper:via_c/server.py:103-236`
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -53,7 +51,7 @@ use crate::resp_comp::resp_comp;
 /// the CRot output `rotated: RLWECiphertext<N1, R2>` @ q2.
 ///
 /// [`answer_one_query`] appends step 7 ([`resp_comp`]) to recover the VIA-C
-/// answer; VIA-B's batch answer (Layer 7) instead calls this `T` times — once per
+/// answer; VIA-B's batch answer instead calls this `T` times — once per
 /// batched query — collects the `T` `rotated`s, **repacks** them into one
 /// ciphertext, and then runs RespComp exactly once. The seam is precisely here.
 ///
@@ -76,8 +74,6 @@ use crate::resp_comp::resp_comp;
 /// (non-power-of-two dims / row-count mismatch) and
 /// [`ViaError::QueryLengthMismatch`] (the LWE count must be
 /// `(log₂I + log₂J + log₂(N1/N_REC)) · L_QUERY`).
-///
-/// `paper:via_c/server.py:103-230` (steps 1–6)
 #[allow(
     non_camel_case_types,
     clippy::too_many_arguments,
@@ -158,7 +154,7 @@ where
         });
     }
 
-    // Cascade + conversion-key gadget base (Override 7): the cascade rides the
+    // Cascade + conversion-key gadget base: the cascade rides the
     // conversion-key gadget, so both legs of `query_decomp` use `pp.ck_base`.
     let ck_base = pp.ck_base;
     let b1 = params.gadget_base_1; // DMux @ q1
@@ -254,7 +250,7 @@ where
 /// `p`-encoding `p → q2` — a coefficient reinterpretation, coeffs in
 /// `[0,p) ⊂ [0,q2)`, no rescale — and forward-NTTs it once at setup, so FirstDim
 /// needs no per-query DB transform). The cascade & conversion-key gadget base is read from `pp.ck_base`
-/// (paper Override 7 — the cascade rides the conversion-key gadget, not
+/// (the cascade rides the conversion-key gadget, not
 /// `gadget_base_1`); the DMux / CMux+CRot / ring-switch bases come from
 /// `pp.params.{gadget_base_1, gadget_base_2, gadget_base_rsk}`.
 ///
@@ -268,7 +264,7 @@ where
 /// # Noise
 ///
 /// Toy-param closure (the full cascade→…→ring-switch chain) is verified by the
-/// `e2e_toy` gate; paper-scale closure rides the P2 SPIKE budget.
+/// `e2e_toy` gate; paper-scale closure follows from the noise analysis in the paper.
 ///
 /// # Parallelism (GPU)
 ///
@@ -283,8 +279,6 @@ where
 ///
 /// The query ciphertexts and database are RLWE/RGSW-uniform; no secret data is
 /// branched on. `%`/division timing varies only on the public moduli.
-///
-/// `paper:via_c/server.py:103-236`
 #[allow(
     non_camel_case_types,
     clippy::too_many_arguments,
@@ -366,7 +360,7 @@ where
 /// moduli), so the paper instantiation wraps the result —
 /// `CompressedAnswer::new(server.answer(&q, cascade)?)` — at the wire boundary;
 /// the generic `Server` stays one rung below it (and so is testable at the toy
-/// rings). VIA-B (Layer 7) will likewise wrap [`answer_one_query`] directly.
+/// rings). VIA-B will likewise wrap [`answer_one_query`] directly.
 ///
 /// The four moduli are stored (they cannot be reconstructed from
 /// [`PIRParams`](via_protocol::PIRParams) generically); the cascade function is
@@ -482,7 +476,7 @@ impl<
     ///
     /// `R3L` is the `q3`-at-`n1` `mod_switch_sym` intermediate
     /// (`Projected<N2> = R3`); supply it at the call site (toy: the `q3` ring at
-    /// `n1`; paper: `ViaCPolyQ3` at `n1`).
+    /// `n1`; paper-scale: `ViaCPolyQ3` at `n1`).
     pub fn answer<R3L, CascadeFn>(
         &self,
         query: &CompressedQuery<N1, 1, R1::Projected<1>>,
@@ -506,13 +500,11 @@ impl<
         )
     }
 
-    /// VIA-B (M1): run the batch answer pipeline for `T` queries — delegates to
+    /// VIA-B: run the batch answer pipeline for `T` queries — delegates to
     /// [`answer_batch`](crate::batch::answer_batch) with the record degree fixed
     /// to the server's `N_REC` (= `N3` for a [`ViaBServer`]). `repack` and
     /// `cascade` are injected per call (same pattern as [`Server::answer`]'s
     /// `cascade`); see the free function for the pipeline and error conditions.
-    ///
-    /// `paper:via.pdf §4.5–4.7 (VIA-B answer)`
     #[cfg(feature = "via-b")]
     pub fn answer_batch<R3L, const T: usize, RepackFn, CascadeFn>(
         &self,
@@ -577,9 +569,9 @@ pub type ViaCServer<
     const D: usize,
 > = Server<K, N1, N2, N2, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>;
 
-/// VIA-B server (M1): [`Server`] with the record degree exposed as the finer
+/// VIA-B server: [`Server`] with the record degree exposed as the finer
 /// `N_REC = N3 ≤ N2` (the VIA-B record ring). Gated on `via-b`; VIA-B's batch
-/// answer (Layer 7, P4) packs `T` of these finer records per query.
+/// answer packs `T` of these finer records per query.
 /// `ViaBServer<K, N1, N2, N3, …>` ≡ `Server<K, N1, N2, N3, …>`.
 #[cfg(feature = "via-b")]
 #[allow(type_alias_bounds)]

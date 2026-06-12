@@ -1,19 +1,19 @@
-//! Layer 5 — MLWE LWE-to-RLWE conversion cascade. See `.docs/primitives.md` §5.
+//! MLWE LWE-to-RLWE conversion cascade.
 //!
 //! Converts an LWE ciphertext (an $(n, 1)$-MLWE) into an RLWE (a $(1, n)$-MLWE)
-//! through $\log_2 n$ rank-halving / degree-doubling [`conv::conv_step`]s
-//! (§5.2), driven by the [`cascade`] macro (§5.3-§5.4), plus MLWE embedding
-//! (§5.1, [`mlwe_ops`]) and RLWE→MLWE extraction (§5.5, [`extract`]).
+//! through $\log_2 n$ rank-halving / degree-doubling [`conv::conv_step`]s,
+//! driven by the [`cascade`] macro, plus MLWE embedding
+//! ([`mlwe_ops`]) and RLWE→MLWE extraction ([`extract`]).
 //!
 //! ## File → primitive map
 //!
 //! | File             | Primitives                                              |
 //! |------------------|---------------------------------------------------------|
 //! | `kernels/lwe.rs` | LWE body dot product (POD / flat-slice, **CT over key**)|
-//! | `mlwe_ops.rs`    | §5.1 `embed_mlwe`, `rlwe_to_mlwe`/`mlwe_to_rlwe`, `encrypt_lwe`/`decrypt_lwe` |
-//! | `conv.rs`        | §5.2 `conv_step`, `gen_conv_step_key`                    |
-//! | `cascade.rs`     | §5.3/§5.4 `lwe_to_rlwe_cascade!`, `LWEToRLWEKey`, gen    |
-//! | `extract.rs`     | §5.5 `extr` (general-$d$; VIA-B `Repack` prerequisite)   |
+//! | `mlwe_ops.rs`    | `embed_mlwe`, `rlwe_to_mlwe`/`mlwe_to_rlwe`, `encrypt_lwe`/`decrypt_lwe` |
+//! | `conv.rs`        | `conv_step`, `gen_conv_step_key`                         |
+//! | `cascade.rs`     | `lwe_to_rlwe_cascade!`, `LWEToRLWEKey`, gen             |
+//! | `extract.rs`     | `extr` (general-$d$; VIA-B `Repack` prerequisite)       |
 //!
 //! ## The cascade in one picture
 //!
@@ -26,22 +26,22 @@
 //! ```
 //!
 //! Both the rank and the degree change at every step, and both are
-//! compile-time const-generics, so the cascade cannot be a runtime loop (as it
-//! is in the Python reference `pir/primitives/mlwe.py`). Instead [`conv::conv_step`]
-//! is a generic single-step kernel and the [`crate::lwe_to_rlwe_cascade!`] macro emits
-//! a monomorphic `lwe_to_rlwe_n<N>` chain — plus the matching
-//! heterogeneous-degree `LWEToRLWEKey` struct + generator — per concrete $n$.
+//! compile-time const-generics, so the cascade cannot be a runtime loop.
+//! Instead [`conv::conv_step`] is a generic single-step kernel and the
+//! [`crate::lwe_to_rlwe_cascade!`] macro emits a monomorphic `lwe_to_rlwe_n<N>`
+//! chain — plus the matching heterogeneous-degree `LWEToRLWEKey` struct +
+//! generator — per concrete $n$.
 //!
 //! ## GPU-portability convention
 //!
 //! Scalar-level arithmetic lives in [`kernels`] as POD-by-value + flat-slice
-//! functions (the Layer-0 kernel shape; see [`crate::algebra::zq::ops`]); the
-//! orchestrators here do ring-type plumbing and PRG draws.
+//! functions (the flat-slice kernel shape; see [`crate::algebra::zq::ops`]);
+//! the orchestrators here do ring-type plumbing and PRG draws.
 //! [`conv::conv_step`] is a **map-reduce** — the `RANK_IN` per-mask
 //! embed+key-switches are independent (the map), and only the slot/body
 //! accumulation is a reduction — so the map lowers to a device launch.
 //!
-//! ## Layer-0 prerequisites (landed in Part 0)
+//! ## Ring prerequisites
 //!
 //! Relies on [`crate::algebra::ring::RingPoly::embed_at`] / `Embedded` (the
 //! enlarging dual of `project_at`) and the relaxed $N \ge 1$ backend bound:
@@ -49,19 +49,19 @@
 
 pub mod kernels;
 
-// §5.1 — `embed_mlwe`, RLWE↔MLWE conversions, LWE encrypt/decrypt (Part 1).
+// `embed_mlwe`, RLWE↔MLWE conversions, LWE encrypt/decrypt.
 pub mod mlwe_ops;
-// §5.2 — single Conv₂ step `conv_step` + `gen_conv_step_key` (Part 2).
+// Single Conv₂ step `conv_step` + `gen_conv_step_key`.
 pub mod conv;
-// §5.3/§5.4 — `lwe_to_rlwe_cascade!` macro + `LWEToRLWEKey` (Part 3).
+// `lwe_to_rlwe_cascade!` macro + `LWEToRLWEKey`.
 pub mod cascade;
-// §5.5 — `extr` general-$d$ RLWE→MLWE extraction (Part 4).
+// `extr` general-$d$ RLWE→MLWE extraction.
 pub mod extract;
-// §7 — VIA-B homomorphic repacking (Layer 7 Part 1/2). `alloc`-gated: the
+// VIA-B homomorphic repacking. `alloc`-gated: the
 // repack recursion holds a runtime `Vec` of MLWE ciphertexts; the per-preset
 // key schedules are heterogeneous-degree (emitted by the `repack_cascade!`
 // macro), whose owned dedicated-key oracle and borrowing cascade-suffix view
-// feed one `repack_*` fn (the §3.5 key reuse).
+// feed one `repack_*` fn (the cascade-key reuse).
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub mod repack;
 
@@ -95,7 +95,7 @@ pub use cascade::{
     lwe_to_rlwe_rns_n2048, lwe_to_rlwe_rns_n2048_eval,
 };
 pub use extract::{ExtrDims, extr};
-// §7 — VIA-B repacking primitives (Part 1/2). Same gate as the `repack` module.
+// VIA-B repacking primitives. Same gate as the `repack` module.
 // The leaf primitives + the per-preset repack families (schedule trait, owned
 // dedicated-key oracle struct, oracle generator, `Repack` fn) the macro emits.
 #[cfg(all(feature = "via-b", feature = "alloc"))]
@@ -111,7 +111,7 @@ pub use repack::{
 // by-value oracle (`gen_repack_keys_rns_2048_t256` / `RepackKeysRns2048T256`) is
 // deliberately NOT re-exported (a by-value key overflows the stack at this scale,
 // exactly like the cascade's own by-value n2048 gen). The view borrows the heap
-// `LweToRlweKeyRnsN2048` cascade key — the §3.5 key reuse at paper scale.
+// `LweToRlweKeyRnsN2048` cascade key — the cascade-key reuse at paper scale.
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub use repack::{
     RepackScheduleRns2048T256, RepackViewRns2048T256, repack_keys_rns_2048_t256_from_cascade,
@@ -122,7 +122,7 @@ pub use repack::{
 // is a single-modulus noise spike). Engine only (no same-ring cascade key
 // exists): the schedule trait, the owned key struct, and the `Repack` fn are
 // surfaced, plus the boxed cross-type constructor that derives the q2 key from
-// the RNS-`q1` cascade (the §3.5 key reuse). The by-value oracle
+// the RNS-`q1` cascade (the cascade-key reuse). The by-value oracle
 // `gen_repack_keys_poly_2048_t256` is deliberately NOT re-exported (a ~11.25 MiB
 // key by value overflows the stack).
 #[cfg(all(feature = "via-b", feature = "alloc"))]

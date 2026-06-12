@@ -1,12 +1,10 @@
-//! §7 — VIA-B batch client helper: the recovered-answer de-interleave.
+//! VIA-B batch client helper: the recovered-answer de-interleave.
 //!
 //! Gated `#[cfg(feature = "via-b")]` at the [`crate`] boundary. The batch
 //! actions [`Client::batch_query`](crate::Client::batch_query) and
 //! [`Client::recover_batch`](crate::Client::recover_batch) live on
 //! [`crate::Client`] (they need its private key material); this module holds the
 //! pure de-interleave map `recover_batch` applies.
-//!
-//! `paper:via.pdf §4.5 (VIA-B client-side)`
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::RingPoly;
@@ -29,7 +27,7 @@ use via_primitives::algebra::ring::RingPoly;
 ///
 /// Index manipulation on public data only.
 ///
-/// `paper:via.pdf §4.5; slot map derived from the §3.4 repack interleave`
+/// The slot map is the inverse of the VIA-B repack interleave.
 pub fn deinterleave_batch<const N2: usize, const N3: usize, const T: usize, R>(
     recovered: &R,
 ) -> Vec<R::Projected<N3>>
@@ -62,7 +60,7 @@ mod tests {
 
     /// `deinterleave_batch` strided map at `N2=4, N3=2, T=2` (stride `N2/N3 = 2`):
     /// record `t = project_at::<2>(t) = [poly[t], poly[t+2]]`. So `poly [1,2,3,4]`
-    /// → record0 `[1,3]`, record1 `[2,4]` — the inverse of the §3.4 repack
+    /// → record0 `[1,3]`, record1 `[2,4]` — the inverse of the repack
     /// interleave, NOT a contiguous `[1,2]/[3,4]` window.
     #[test]
     fn deinterleave_batch_strided_windows() {

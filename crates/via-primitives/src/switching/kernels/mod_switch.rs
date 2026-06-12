@@ -1,6 +1,6 @@
-//! GPU-portable coefficient-level kernels for modulus switching (§3.1–§3.2).
+//! GPU-portable coefficient-level kernels for modulus switching.
 //!
-//! Following the Layer-0 kernel-shape convention (see
+//! Following the low-level kernel-shape convention (see
 //! [`crate::algebra::zq::ops`]): every kernel takes plain-old-data constants
 //! by value plus flat slices, so the same body lowers to a CUDA / Metal
 //! thread-grid launch. [`RescaleConsts`] is `Copy` and holds the three
@@ -10,10 +10,10 @@
 //! # Constant-time: No
 //!
 //! The rescale arithmetic is applied to RLWE-uniform ciphertext coefficients,
-//! which leak nothing about secrets through timing under the RLWE assumption
-//! (§0.6, §3.1). These kernels are *not* constant-time over their inputs and
-//! must not be used on secret-key material; the §3.4 rekeying path has its own
-//! constant-time kernels in [`super::rekey`].
+//! which leak nothing about secrets through timing under the RLWE assumption.
+//! These kernels are *not* constant-time over their inputs and must not be used
+//! on secret-key material; the rekeying path has its own constant-time kernels
+//! in [`super::rekey`].
 
 use crate::algebra::zq::modulus::Modulus;
 

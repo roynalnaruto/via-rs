@@ -1,4 +1,4 @@
-//! RLWE keygen, encode, decode, encrypt, decrypt — `.docs/primitives.md` §2.2.
+//! RLWE keygen, encode, decode, encrypt, decrypt.
 //!
 //! The full RLWE-symmetric primitive set, generic over a [`RingPoly`]
 //! backend so the same code runs at single-prime `q` and at the RNS
@@ -8,14 +8,14 @@
 //!
 //! Key-bearing operations are inherent methods on [`SecretKey`]:
 //!
-//! - [`SecretKey::keygen`] — sample from one of the §1.3-§1.5
+//! - [`SecretKey::keygen`] — sample from one of the key
 //!   distributions.
 //! - [`SecretKey::encrypt`] — encrypt an already-$\Delta$-encoded message.
 //! - [`SecretKey::decrypt_raw`] — return $B - A \cdot S$ (the encoded
-//!   message plus noise); used for noise inspection and the Layer-3
+//!   message plus noise); used for noise inspection and the
 //!   [`SecretKey::decrypt_asymmetric`] path.
 //! - [`SecretKey::decrypt`] — wrap `decrypt_raw` + [`decode`].
-//! - [`SecretKey::decrypt_asymmetric`] — §3.2 `RespCompRecover`: decrypt a
+//! - [`SecretKey::decrypt_asymmetric`] — `RespCompRecover`: decrypt a
 //!   [`ModSwitchedCiphertext`] whose mask (at $q_3$) and body (at $q_4$)
 //!   live at different moduli.
 //!
@@ -25,26 +25,25 @@
 //!
 //! ## Why symmetric encryption uses `&self` on `SecretKey`
 //!
-//! The paper specifies symmetric RLWE: $B = A \cdot S + e + M'$ literally
+//! VIA uses symmetric RLWE: $B = A \cdot S + e + M'$ literally
 //! requires $S$, so there is no public/private split. Putting `encrypt`
 //! on `SecretKey` is the right architectural mirror — the client holds
 //! `S` and uses it for both ends. A genuine public-key variant would be a
 //! separate algorithm with different noise analysis and is not part of
 //! the VIA protocol.
 //!
-//! ## Python parity
+//! ## Parity notes
 //!
-//! Every primitive in this module mirrors `pir/primitives/rlwe.py`
-//! line-for-line. The non-obvious bits:
+//! The non-obvious bits:
 //!
 //! - `Δ = -(-q // p)` (`encode`) becomes `q.div_ceil(p)` — same ceil-div
 //!   semantics, integer-only.
 //! - The decode rounding step `(p * c_centered + q // 2) // q` uses
-//!   [`i128::div_euclid`], **not** `/` — Python's `//` floors toward
-//!   $-\infty$; Rust's `/` truncates toward zero. They disagree at exactly
-//!   the negative-numerator boundary cases noise correction provokes.
+//!   [`i128::div_euclid`], **not** `/` — floored division toward
+//!   $-\infty$, where Rust's `/` truncates toward zero. They disagree at
+//!   exactly the negative-numerator boundary cases noise correction provokes.
 //! - [`SecretKey::encrypt`] consumes PRG bytes in the order **mask `A`
-//!   first, error `e` second**, matching `rlwe.py:137-173`. Reversing the
+//!   first, error `e` second**. Reversing the
 //!   order would silently desynchronise every encrypt test vector.
 
 use crate::algebra::ring::RingPoly;
@@ -54,17 +53,17 @@ use crate::sampling::prg::Shake256Prg;
 use super::types::{ModSwitchedCiphertext, RLWECiphertext, SecretKey};
 
 // ---------------------------------------------------------------------------
-// Key-bearing primitives — methods on `SecretKey<N, R>` (§2.2).
+// Key-bearing primitives — methods on `SecretKey<N, R>`.
 // ---------------------------------------------------------------------------
 
 impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
-    /// Sample a secret key from one of the §1.3-§1.5 distributions
+    /// Sample a secret key from one of the key distributions
     /// ([`Distribution::Ternary`], [`Distribution::BoundedUniform`], or
     /// [`Distribution::Gaussian`]) and lift the signed samples into the
     /// ring $R_{n, q}$ via [`RingPoly::from_centered_i64s`].
     ///
-    /// PRG consumption matches the Layer-1 sampler exactly, so seeding
-    /// the [`Shake256Prg`] identically to the Python reference yields
+    /// PRG consumption matches the sampler exactly, so seeding
+    /// the [`Shake256Prg`] identically yields
     /// byte-identical secret keys.
     pub fn keygen(modulus: R::Modulus, dist: Distribution, prg: &mut Shake256Prg) -> Self {
         let mut samples = [0i64; N];
@@ -73,7 +72,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         SecretKey::from_poly(poly)
     }
 
-    /// §2.2 — encrypt an already-$\Delta$-encoded message $M' \in R_{n, q}$
+    /// Encrypt an already-$\Delta$-encoded message $M' \in R_{n, q}$
     /// under this secret key.
     ///
     /// Algorithm:
@@ -86,7 +85,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     ///
     /// # PRG consumption order
     ///
-    /// `A` is sampled **before** `e`. The Python reference does the same;
+    /// `A` is sampled **before** `e`;
     /// reversing this order would silently break every encrypt parity
     /// test vector.
     ///
@@ -101,9 +100,9 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     ///
     /// `encoded` is the **$\Delta$-scaled** message, not the raw
     /// plaintext: call [`encode`] first if you have an unscaled
-    /// plaintext. The bare API matches the convention from §2.1 ("RLev
-    /// re-uses `encrypt` with gadget-scaled messages"); folding `encode`
-    /// in would break the Phase-6 RLev path.
+    /// plaintext. The bare API matches the convention that RLev
+    /// re-uses `encrypt` with gadget-scaled messages; folding `encode`
+    /// in would break the RLev path.
     pub fn encrypt(
         &self,
         encoded: &R,
@@ -115,7 +114,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
             self.poly.modulus() == modulus,
             "encrypt: secret-key modulus must match encoded-message modulus"
         );
-        // Step 1 — mask `A` first (order matters for Python parity).
+        // Step 1 — mask `A` first (order matters for parity).
         let mask = R::random_uniform(modulus, prg);
         // Step 2 — error `e` second.
         let mut error_samples = [0i64; N];
@@ -127,9 +126,9 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         RLWECiphertext::new(mask, body)
     }
 
-    /// §2.2 — return $B - A \cdot S$, the encoded message plus
+    /// Return $B - A \cdot S$, the encoded message plus
     /// decryption noise. Useful for direct noise inspection and as the
-    /// inner half of the Layer-3 `decrypt_asymmetric` path; ordinary
+    /// inner half of the `decrypt_asymmetric` path; ordinary
     /// callers want [`SecretKey::decrypt`] instead.
     ///
     /// Constant-time over $S$ via the same argument as
@@ -142,7 +141,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         ct.body - ct.mask * self.poly
     }
 
-    /// §2.2 — full decryption: recover the plaintext at modulus $p$.
+    /// Full decryption: recover the plaintext at modulus $p$.
     ///
     /// Composition of [`SecretKey::decrypt_raw`] (which yields the
     /// noisy encoded message at $q$) and the free function [`decode`]
@@ -151,15 +150,15 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     ///
     /// `RP` is the plaintext-side polynomial backend; the [`decode`]
     /// step's variable-time centring is acceptable here because the
-    /// decrypted value is RLWE-uniform under the §0.6 / §2.2 security
+    /// decrypted value is RLWE-uniform under the security
     /// argument.
     pub fn decrypt<RP: RingPoly<N>>(&self, ct: &RLWECiphertext<N, R>, p_mod: RP::Modulus) -> RP {
         let raw = self.decrypt_raw(ct);
         decode::<N, R, RP>(&raw, p_mod)
     }
 
-    /// §3.2 — decrypt a [`ModSwitchedCiphertext`] whose mask and body live
-    /// at **different** moduli (paper Figure 7, `RespCompRecover`). The mask
+    /// Decrypt a [`ModSwitchedCiphertext`] whose mask and body live
+    /// at **different** moduli (the `RespCompRecover` step). The mask
     /// is at $q_3$, the body at $q_4$; the secret key (this `SecretKey`,
     /// originally sampled at $q_2$ / $q_3$) is centred and re-interpreted at
     /// $q_3$ to compute $A' \cdot S$, which is then rescaled $q_3 \to q_4$:
@@ -172,10 +171,10 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     /// # Single-prime secret key
     ///
     /// The `where R: RingPoly<N, CenteredScalar = i64>` bound restricts this
-    /// method to single-prime secret keys, which matches every paper-spec
+    /// method to single-prime secret keys, which matches every
     /// VIA / VIA-C / VIA-B $S_2$ distribution (they live at the single-prime
     /// $q_2$ / $q_3$, never at an RNS composite). A future RNS-source $S_2$
-    /// would have to dispatch through §3.4 `RekeySource` before the centred
+    /// would have to dispatch through `RekeySource` before the centred
     /// lift.
     ///
     /// # Constant-time
@@ -184,7 +183,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     /// [`RingPoly::to_centered_coeffs_ct`]; the subsequent rescale operates
     /// on ciphertext (RLWE-uniform) coefficients and the final [`decode`] is
     /// variable-time on the about-to-be-revealed plaintext, both acceptable
-    /// under the §0.6 timing argument.
+    /// under the timing argument.
     pub fn decrypt_asymmetric<RM: RingPoly<N>, RB: RingPoly<N>, RP: RingPoly<N>>(
         &self,
         ct: &ModSwitchedCiphertext<N, RM, RB>,
@@ -204,7 +203,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
         let product = ct.mask * sk_q3;
         // Step 4: rescale product q3 → q4 per-coefficient. Inline integer
         // arithmetic keeps `encryption/` free of any `switching/` import
-        // (the `RescaleConsts` helper lives in Layer 3).
+        // (the `RescaleConsts` helper lives in the `switching` module).
         let q3 = RM::modulus_value(q3_mod);
         let q4 = RB::modulus_value(q4_mod);
         let q3_half = q3 / 2;
@@ -222,7 +221,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
 }
 
 // ---------------------------------------------------------------------------
-// encode — §2.2.1
+// encode
 // ---------------------------------------------------------------------------
 
 /// Lift a plaintext polynomial $m \in R_{n, p}$ to its $\Delta$-scaled
@@ -230,13 +229,13 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
 /// $\Delta = \lceil q / p \rceil$.
 ///
 /// Both source ring `RP` and target ring `RQ` are generic [`RingPoly`]
-/// instantiations. In paper-parameter use `RP` is single-prime
+/// instantiations. At the standard parameters `RP` is single-prime
 /// `Poly<N, MP, Coefficient>` (with $p \in \{16, 256\}$); the RNS form is
-/// supported but never exercised at paper parameters.
+/// supported but never exercised at the standard parameters.
 ///
 /// # Range bound
 ///
-/// Computation runs in `u128`. With paper parameters $Q \le 2^{75}$ and
+/// Computation runs in `u128`. With the standard parameters $Q \le 2^{75}$ and
 /// $p \le 256$, every intermediate fits comfortably (no overflow
 /// possible).
 ///
@@ -273,7 +272,7 @@ pub fn encode<const N: usize, RQ: RingPoly<N>, RP: RingPoly<N>>(
 }
 
 // ---------------------------------------------------------------------------
-// decode — §2.2.2
+// decode
 // ---------------------------------------------------------------------------
 
 /// Recover a plaintext polynomial in $R_{n, p}$ from a (possibly noisy)
@@ -284,14 +283,14 @@ pub fn encode<const N: usize, RQ: RingPoly<N>, RP: RingPoly<N>>(
 /// 1. Centre to $\tilde c \in (-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$
 ///    via [`RingPoly::to_centered_i128_coeffs`].
 /// 2. Round $\hat m = \big\lfloor \dfrac{p \cdot \tilde c}{q} \big\rceil$
-///    via the Python-compatible flooring formula
+///    via the flooring formula
 ///    `(p * c_centered + q / 2).div_euclid(q)`. Using `i128::div_euclid`
-///    (rather than `/`) is load-bearing: Python's `//` floors toward
+///    (rather than `/`) is load-bearing: floored division floors toward
 ///    $-\infty$, so for negative numerators the two operators disagree at
 ///    exactly the boundary cases that arise during noise correction.
 /// 3. Reduce $\hat m \bmod p$ via [`i128::rem_euclid`].
 ///
-/// All arithmetic is integer-only. With paper parameters
+/// All arithmetic is integer-only. With the standard parameters
 /// ($p \le 256$, $|c_\text{centered}| \le Q/2 \le 2^{74}$) the product
 /// $p \cdot c$ fits in `i128` with ~45 bits of headroom.
 pub fn decode<const N: usize, RQ: RingPoly<N>, RP: RingPoly<N>>(
@@ -319,11 +318,11 @@ pub fn decode<const N: usize, RQ: RingPoly<N>, RP: RingPoly<N>>(
             "decode: p * |c_centered| overflows i128"
         );
         let numerator = p * c;
-        // Python: `(p * c_centered + q // 2) // q`. Rust's `/` truncates
-        // toward zero; we need Python's floor-toward-minus-infinity, hence
+        // Round-to-nearest: `(p * c_centered + q / 2) // q`. Rust's `/`
+        // truncates toward zero; we need floor-toward-minus-infinity, hence
         // `div_euclid`.
         let rounded = (numerator + half_q).div_euclid(q);
-        // Python: `% p` always returns non-negative for positive p.
+        // `rem_euclid` always returns non-negative for positive p.
         decoded[i] = rounded.rem_euclid(p) as u128;
     }
 
@@ -331,7 +330,7 @@ pub fn decode<const N: usize, RQ: RingPoly<N>, RP: RingPoly<N>>(
 }
 
 // ---------------------------------------------------------------------------
-// Auxiliary RLWE primitives — §2.2.5.
+// Auxiliary RLWE primitives.
 //
 // These are coordinate-level operations on `RLWECiphertext` that the
 // protocol uses repeatedly (DMux's `c - C ⊠ c`, CMux's `c₀ + C ⊠ (c₁ -
@@ -393,7 +392,7 @@ impl<const N: usize, R: RingPoly<N>> core::ops::Mul<R> for RLWECiphertext<N, R> 
     ///
     /// The plaintext factor $f$ must have **small infinity-norm** — the
     /// noise $f \cdot e$ in the result grows by $\|f\|_1$ in the worst
-    /// case. With paper-class parameters and a single-monomial $f$
+    /// case. With realistic parameters and a single-monomial $f$
     /// (FirstDim's typical pattern) noise grows by 1; high-weight $f$
     /// requires larger $q$ headroom.
     ///
@@ -411,8 +410,8 @@ impl<const N: usize, R: RingPoly<N>> RLWECiphertext<N, R> {
     ///
     /// The body carries the message; the zero mask contributes nothing
     /// to decryption regardless of `S`. VIA-C feeds
-    /// `trivial(q_1, ⌊q₁ / p⌉ · 1)` into the DMux tree as the root value
-    /// (`.docs/primitives.md` §2.2.5), so the server doesn't need a fresh
+    /// `trivial(q_1, ⌊q₁ / p⌉ · 1)` into the DMux tree as the root value,
+    /// so the server doesn't need a fresh
     /// encryption of $\Delta$ from the client.
     ///
     /// `encoded` is the **$\Delta$-scaled** message, matching the
@@ -451,7 +450,7 @@ mod tests {
     // keygen
     // -----------------------------------------------------------------------
 
-    /// Keygen wires through to the §1.3 ternary sampler. The Layer-1
+    /// Keygen wires through to the ternary sampler. The
     /// parity test (`src/sampling/ternary.rs:67`) fixes the byte-level
     /// output of `Shake256Prg::new(b"test")` + ternary sampling at N=16
     /// to be `[1, -1, 1, -1, -1, 0, -1, -1, 1, -1, -1, 0, -1, 0, 1, -1]`.
@@ -588,7 +587,7 @@ mod tests {
         }
     }
 
-    /// VIA paper plaintext modulus $p = 256$, paired with the VIA-C
+    /// VIA plaintext modulus $p = 256$, paired with the VIA-C
     /// ciphertext modulus $q_2 = 17175674881 \approx 2^{34}$.
     #[test]
     fn encode_decode_roundtrip_p256_via_c_q2_n4() {
@@ -623,7 +622,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // decode rounding matches Python's flooring `//` for negative numerator
+    // decode rounding matches flooring `//` for negative numerator
     // -----------------------------------------------------------------------
 
     /// The decode rounding step at a value just past the half-bin must
@@ -631,8 +630,8 @@ mod tests {
     /// - `delta = 9`, `half_q = 8`.
     /// - For a noisy coefficient at `Δ * 1 + δ` where `δ ∈ {-4, ..., 4}`,
     ///   decoding must still recover `1`.
-    /// - For `δ` such that the centred value is exactly `-q/2`, Python's
-    ///   `(p * (-q/2) + q/2) // q = (p * -q/2 + q/2) // q`. With p=2,
+    /// - For `δ` such that the centred value is exactly `-q/2`, floored
+    ///   division gives `(p * (-q/2) + q/2) // q`. With p=2,
     ///   q=17, half_q=8: `(2 * -8 + 8) // 17 = -8 // 17 = -1`, so
     ///   `(-1) % 2 = 1`. Test that we agree.
     #[test]
@@ -643,7 +642,7 @@ mod tests {
         let centred = [-8i64, -4, 4, 8];
         let ct = <SinglePolyQ17<4>>::from_centered_i64s(ConstModulus, &centred);
         let dec: SinglePolyP2<4> = decode(&ct, p);
-        // Hand-compute Python's `(p * c + half_q) // q  %  p`:
+        // Hand-compute `(p * c + half_q) // q  %  p`:
         //   c=-8 : (-16 + 8) // 17 = -1 // 17 = -1 -> -1 % 2 = 1
         //   c=-4 : ( -8 + 8) // 17 =  0 // 17 =  0 ->  0 % 2 = 0
         //   c= 4 : (  8 + 8) // 17 = 16 // 17 =  0 ->  0 % 2 = 0
@@ -679,10 +678,10 @@ mod tests {
     }
 
     // =======================================================================
-    // Phase 3 — encrypt / decrypt_raw / decrypt
+    // encrypt / decrypt_raw / decrypt
     // =======================================================================
 
-    // For the round-trip grid we need both backends + a paper-class modulus.
+    // For the round-trip grid we need both backends + a realistic modulus.
     type SinglePolyViaCQ2<const N: usize> =
         Poly<N, crate::algebra::zq::modulus::paper::ViaCQ2, Coefficient>;
     type RnsPolyViaCQ1<const N: usize> =
@@ -698,7 +697,7 @@ mod tests {
     /// the corresponding output of `sk.encrypt(...)` byte-for-byte.
     ///
     /// If the order ever flips to "error first, then mask", `A_enc` and
-    /// `A_manual` diverge and this test fails — protecting Python byte
+    /// `A_manual` diverge and this test fails — protecting byte
     /// parity for every encrypt-flavoured test vector.
     #[test]
     fn encrypt_consumes_prg_in_order_mask_then_error() {
@@ -809,7 +808,7 @@ mod tests {
         }
     }
 
-    /// Paper-class single-prime: q = VIA-C q_2 (≈2^34), p = 256, Gaussian
+    /// Realistic single-prime: q = VIA-C q_2 (≈2^34), p = 256, Gaussian
     /// error. Uses N=16 to stretch the schoolbook poly mul a bit while
     /// keeping the test fast.
     #[test]
@@ -857,7 +856,7 @@ mod tests {
         }
     }
 
-    /// Paper-class RNS: Q = VIA-C q_1 ≈ 2^75, p = 16, Gaussian error.
+    /// Realistic RNS: Q = VIA-C q_1 ≈ 2^75, p = 16, Gaussian error.
     /// The flagship test — proves that the trait abstraction's `u128`
     /// machinery actually works at the modulus sizes the protocol uses.
     #[test]
@@ -934,7 +933,7 @@ mod tests {
     }
 
     // =======================================================================
-    // Phase 4 — auxiliary RLWE primitives (§2.2.5)
+    // auxiliary RLWE primitives
     // =======================================================================
 
     // -----------------------------------------------------------------------
@@ -1170,7 +1169,7 @@ mod tests {
     }
 
     /// Multiplying by the unit polynomial `1` is the identity on the
-    /// ciphertext bit-for-bit (operator `PartialEq` derived in Phase 1).
+    /// ciphertext bit-for-bit (via the derived `PartialEq` operator).
     #[test]
     fn polynomial_mul_by_unit_is_identity() {
         let q = PowerOfTwoModulus::<10>;
@@ -1186,11 +1185,11 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Paper-class + RNS coverage
+    // Realistic + RNS coverage
     // -----------------------------------------------------------------------
 
     /// Sum at VIA-C `q₂` ≈ 2³⁴ with Gaussian σ=4 errors. Validates that
-    /// the operator works on a paper-class single-prime modulus.
+    /// the operator works on a realistic single-prime modulus.
     #[test]
     fn add_decrypts_to_sum_at_via_c_q2_gaussian() {
         let q = crate::algebra::zq::modulus::paper::ViaCQ2::default();
@@ -1306,13 +1305,13 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // decrypt_asymmetric — §3.2 RespCompRecover
+    // decrypt_asymmetric — RespCompRecover
     // -----------------------------------------------------------------------
 
-    /// End-to-end §3.2 round-trip: encrypt at $q_3$, body-rescale to $q_4$
+    /// End-to-end round-trip: encrypt at $q_3$, body-rescale to $q_4$
     /// (the asymmetric "body-only" ModSwitch), then recover the plaintext
     /// via [`SecretKey::decrypt_asymmetric`]. Mask stays at $q_3$, body at
-    /// $q_4$ — matching the `ModSwitchedCiphertext` shape Figure 7 produces.
+    /// $q_4$ — matching the `ModSwitchedCiphertext` shape RespComp produces.
     #[test]
     fn decrypt_asymmetric_round_trip_pow2() {
         type Q3 = Poly<8, PowerOfTwoModulus<12>, Coefficient>; // q3 = 4096
@@ -1330,7 +1329,7 @@ mod tests {
         let encoded: Q3 = encode(&pt, q3m);
         let ct = sk.encrypt(&encoded, Distribution::Ternary, &mut prg);
 
-        // Body-only rescale B: q3 → q4 (the §3.2 trailing op of RespComp).
+        // Body-only rescale B: q3 → q4 (the trailing op of RespComp).
         let q3: u128 = 1 << 12;
         let q4: u128 = 1 << 8;
         let mut b = [0u128; 8];

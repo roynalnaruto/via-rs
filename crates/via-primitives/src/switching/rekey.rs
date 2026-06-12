@@ -1,4 +1,4 @@
-//! §3.4 constant-time secret-key rekeying. See `.docs/primitives.md` §3.4.
+//! Constant-time secret-key rekeying.
 //!
 //! Re-interpret a small-coefficient secret key $S \in R_{n, q_\text{src}}$ at
 //! a new modulus $q_\text{dst}$, producing $S' \in R_{n, q_\text{dst}}$ with
@@ -43,7 +43,7 @@ impl<const N: usize, R_DST: RingPoly<N>> RekeySource<N, R_DST> for i128 {
     }
 }
 
-/// §3.4 — rekey a secret key from its source modulus to `dst_mod`.
+/// Rekey a secret key from its source modulus to `dst_mod`.
 ///
 /// Centres `src_sk`'s coefficients in constant time, then reduces them mod the
 /// destination modulus. Works across backends: a single-prime source
@@ -54,7 +54,7 @@ impl<const N: usize, R_DST: RingPoly<N>> RekeySource<N, R_DST> for i128 {
 ///
 /// The centring uses [`RingPoly::to_centered_coeffs_ct`] (the secret-data
 /// variant), and the per-coefficient reduction is branchless. The whole path
-/// is constant-time over the key, as §3.4 requires (a variable-time centring
+/// is constant-time over the key, as rekeying requires (a variable-time centring
 /// would leak the key's Hamming weight through timing).
 ///
 /// ```rust
@@ -170,7 +170,7 @@ mod tests {
         }
     }
 
-    /// The i128 kernel debug-asserts on oversize coefficients (§3.4 keys are
+    /// The i128 kernel debug-asserts on oversize coefficients (rekey keys are
     /// always small; an oversize value is a caller bug).
     #[cfg(debug_assertions)]
     #[test]

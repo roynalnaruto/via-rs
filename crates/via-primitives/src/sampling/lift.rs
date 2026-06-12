@@ -1,14 +1,14 @@
-//! Layer-1 → Layer-0 bridge: lift signed centred-representation coefficients
+//! Lift signed centred-representation coefficients
 //! into canonical `[0, q)` under a given [`Modulus`].
 //!
 //! Three width-typed helpers, one per signed integer type produced by the
-//! samplers in §1.3–§1.5:
+//! samplers:
 //!
 //! | Helper | Source type | Producing sampler |
 //! |---|---|---|
-//! | [`lift_centered_i8_into_zq`] | `&[i8]` | §1.3 [`ternary`](crate::sampling::ternary::ternary) |
-//! | [`lift_centered_i32_into_zq`] | `&[i32]` | §1.4 [`bounded_uniform`](crate::sampling::bounded::bounded_uniform) |
-//! | [`lift_centered_i64_into_zq`] | `&[i64]` | §1.5 [`discrete_gaussian`](crate::sampling::gaussian::discrete_gaussian) and §1.6 [`Distribution::sample_into`](crate::sampling::distribution::Distribution::sample_into) |
+//! | [`lift_centered_i8_into_zq`] | `&[i8]` | [`ternary`](crate::sampling::ternary::ternary) |
+//! | [`lift_centered_i32_into_zq`] | `&[i32]` | [`bounded_uniform`](crate::sampling::bounded::bounded_uniform) |
+//! | [`lift_centered_i64_into_zq`] | `&[i64]` | [`discrete_gaussian`](crate::sampling::gaussian::discrete_gaussian) and [`Distribution::sample_into`](crate::sampling::distribution::Distribution::sample_into) |
 //!
 //! All three are thin wrappers around [`Modulus::reduce_i64`], which is
 //! constant-time over the input sign. That matters for secret-key
@@ -18,7 +18,7 @@
 //! ## Length contract
 //!
 //! Each helper requires `src.len() == dst.len()` and panics otherwise. This
-//! matches the Layer-0 kernel convention (`assert_eq!`, not `Result`).
+//! matches the low-level kernel convention (`assert_eq!`, not `Result`).
 
 use crate::algebra::zq::modulus::Modulus;
 
@@ -176,7 +176,7 @@ mod tests {
     fn roundtrip_i64_pow2_modulus_12() {
         let m = PowerOfTwoModulus::<12>;
         // q = 4096 is even, so the centred range is asymmetric: `(-q/2, q/2]`
-        // = `[-2047, 2048]`. The Layer-0 `to_centered_i64` threshold is
+        // = `[-2047, 2048]`. The `to_centered_i64` threshold is
         // `a > q/2 ⇒ a - q`, so `2048` stays positive and `-2048` is NOT a
         // round-trip fixed point (it lifts to `2048` and centres back to `2048`).
         let values: [i64; 9] = [-2047, -1024, -1, 0, 1, 1024, 2000, 2047, 2048];

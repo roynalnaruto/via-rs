@@ -1,4 +1,4 @@
-//! RLev encryption — `.docs/primitives.md` §2.1.
+//! RLev encryption.
 //!
 //! An RLev ciphertext encrypts a message $M$ as an array of $L$ RLWE
 //! ciphertexts, the $i$-th encrypting $g_i \cdot M$ where $g_i$ is the
@@ -7,11 +7,11 @@
 //!
 //! Unlike ordinary [`SecretKey::encrypt`], **the message is not
 //! $\Delta$-encoded** — the gadget entries serve as the scaling.
-//! Callers pass `message` as a raw ring element and rely on Phase 7's
-//! `gadget_product` (forthcoming) to recover semantic meaning from the
+//! Callers pass `message` as a raw ring element and rely on
+//! `gadget_product` to recover semantic meaning from the
 //! per-level encryptions.
 //!
-//! Phase 7's `gadget_product` (RLev × plaintext → RLWE) will land in
+//! `gadget_product` (RLev × plaintext → RLWE) lives in
 //! this same file.
 
 use crate::algebra::ring::{RingPoly, RingPolyEval};
@@ -22,7 +22,7 @@ use super::gadget::{gadget_extract_lsb_into, gadget_scale_into, gadget_vector_va
 use super::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 
 impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
-    /// §2.1 — encrypt `message` as an RLev: array of `L` RLWE
+    /// Encrypt `message` as an RLev: array of `L` RLWE
     /// ciphertexts where `samples[i]` encrypts `g_i · message` and
     /// `g_i` is the `i`-th MSB-first entry of the gadget vector.
     ///
@@ -33,17 +33,14 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     ///
     /// Sequential by sample: `samples[0]` is fully sampled (mask, then
     /// error — matching [`SecretKey::encrypt`]'s order) before
-    /// `samples[1]`, and so on. Matches `rlwe.py:285-288` in the
-    /// reference implementation; reversing the iteration would
-    /// silently break every RLev test vector against the Python
-    /// reference.
+    /// `samples[1]`, and so on. Reversing the iteration would
+    /// silently break every RLev test vector.
     ///
     /// # Argument convention
     ///
     /// `message` is the **raw** ring element: the gadget scaling is
-    /// applied internally per level. This matches the §2.1 wording
-    /// "RLev does not go through `encode`" and is what Phase 7's
-    /// gadget product will rely on.
+    /// applied internally per level. RLev does not go through `encode`,
+    /// which is what the gadget product relies on.
     pub fn encrypt_rlev<const L: usize>(
         &self,
         message: &R,
@@ -72,7 +69,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     /// Heap-building sibling of [`encrypt_rlev`](Self::encrypt_rlev): writes the
     /// `L` samples **one at a time straight into a `Box`**, so the full
     /// `[RLWECiphertext; L]` array (≈ `L · 2N · word` bytes — ~1.125 MiB at the
-    /// paper depth-18 n=2048 conversion key) is never assembled on the stack.
+    /// depth-18 n=2048 conversion key) is never assembled on the stack.
     ///
     /// PRG draws are **byte-identical** to [`encrypt_rlev`](Self::encrypt_rlev)
     /// (sample `i` ascending: `g_i·message`, then `encrypt` = mask-then-error),
@@ -115,7 +112,7 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     }
 
     /// Heap-allocating wrapper over the crate-private `encrypt_rlev_into`:
-    /// the full `[RLWECiphertext; L]` array (≈ 1.125 MiB at the paper depth-18
+    /// the full `[RLWECiphertext; L]` array (≈ 1.125 MiB at the depth-18
     /// n=2048 conversion key) is built straight into the `Box`, never on the
     /// stack. Byte-identical to [`encrypt_rlev`](Self::encrypt_rlev).
     #[cfg(feature = "alloc")]
@@ -137,15 +134,15 @@ impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
 }
 
 // ---------------------------------------------------------------------------
-// Gadget product — §2.4.
+// Gadget product.
 //
 // `plaintext ⊡ RLev_S(message) → RLWE_S(plaintext · message)` — the
 // multiplicative core of every homomorphic gate, plus the inner step
-// of key switching (§2.4 / Phase 8) and ring switching (§3.3 / Layer 3).
+// of key switching and ring switching.
 // ---------------------------------------------------------------------------
 
 impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevCiphertext<N, R, L> {
-    /// §2.4 — Gadget product: $\text{plaintext} \boxdot \mathrm{RLev}_S(M)
+    /// Gadget product: $\text{plaintext} \boxdot \mathrm{RLev}_S(M)
     /// \to \mathrm{RLWE}_S(\text{plaintext} \cdot M)$.
     ///
     /// # Algorithm
@@ -167,7 +164,7 @@ impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevCiphe
     /// # Memory
     ///
     /// `O(N)` scratch — `[i128; N]` for the scaled value plus
-    /// `[i64; N]` for the digit buffer. At paper `N=2048`, ~48 KiB
+    /// `[i64; N]` for the digit buffer. At `N=2048`, ~48 KiB
     /// total, vs ~288 KiB if we materialised the full
     /// `[[i64; N]; L]` decomposition.
     ///
@@ -176,7 +173,7 @@ impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevCiphe
     /// Per-coefficient noise of the result is bounded by
     /// `||plaintext||_1 · σ_e + round(q / B^L) / 2 + L · B / 4` — the
     /// plaintext-1-norm-times-σ term from the per-level encryption
-    /// noises summing, plus the Phase-5 reconstruction error.
+    /// noises summing, plus the gadget reconstruction error.
     ///
     /// `plaintext` should have small infinity-norm for the noise term
     /// to stay inside the decryption budget.
@@ -184,7 +181,7 @@ impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevCiphe
     /// # Backing & cost
     ///
     /// The per-level multiplies run through the [`RingPolyEval`] evaluation
-    /// form. For **NTT-friendly** moduli (paper $q_1$ RNS / $q_2$ / $q_3$) that
+    /// form. For **NTT-friendly** moduli ($q_1$ RNS / $q_2$ / $q_3$) that
     /// is the negacyclic NTT, so this is `3L` forward + `2` inverse
     /// `O(N \log N)` transforms and `2L` `O(N)` pointwise muls — ~100× fewer
     /// scalar multiplications than schoolbook at `N = 2048`. For **non-NTT**
@@ -389,7 +386,7 @@ mod tests {
         );
     }
 
-    /// Paper-class single-prime: VIA-C `q₂` with CMux-sel gadget
+    /// Realistic single-prime: VIA-C `q₂` with CMux-sel gadget
     /// `(L=2, B=81)` and σ=4 Gaussian errors.
     #[test]
     fn encrypt_rlev_at_via_c_q2_b81_l2_gaussian() {
@@ -426,7 +423,7 @@ mod tests {
         }
     }
 
-    /// Paper-class RNS: VIA-C `q₁` (`Q ≈ 2⁷⁵`) with ring-switch-key
+    /// Realistic RNS: VIA-C `q₁` (`Q ≈ 2⁷⁵`) with ring-switch-key
     /// gadget `(L=8, B=8)`. Exercises the RNS poly mul + encrypt path
     /// through every per-level RLWE in the RLev.
     #[test]
@@ -499,7 +496,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // gadget_product — Phase 7
+    // gadget_product
     // -----------------------------------------------------------------------
 
     /// `decrypt_raw(rlev.gadget_product(&m1, B), sk) ≈ m1 · m2 + noise`.
@@ -575,7 +572,7 @@ mod tests {
         }
     }
 
-    /// Paper-class single-prime: VIA-C `q₂` ≈ 2³⁴ with CMux-sel gadget
+    /// Realistic single-prime: VIA-C `q₂` ≈ 2³⁴ with CMux-sel gadget
     /// `(L=2, B=81)`, σ=4 Gaussian.
     #[test]
     fn gadget_product_at_via_c_q2_b81_l2_gaussian() {
@@ -670,7 +667,7 @@ mod tests {
         assert_eq!(got.body, want.body, "single-prime body mismatch");
     }
 
-    /// RNS counterpart on the paper VIA `q₁` basis (NTT-friendly at `N = 4`):
+    /// RNS counterpart on the VIA `q₁` basis (NTT-friendly at `N = 4`):
     /// the per-slot NTT path equals the schoolbook reference exactly.
     #[test]
     fn gadget_product_matches_schoolbook_rns() {
@@ -700,7 +697,7 @@ mod tests {
     /// T7 eval-key path: `to_eval().gadget_product(...)` (samples pre-transformed
     /// once) equals the coefficient-form `gadget_product(...)` **exactly** — so
     /// storing a static key in eval form is bit-identical on the result. Covers
-    /// single-prime (`q=17`) and RNS (paper `q₁`) NTT-friendly moduli; since the
+    /// single-prime (`q=17`) and RNS (`q₁`) NTT-friendly moduli; since the
     /// coeff path is itself pinned to schoolbook above, this transitively pins the
     /// eval path to schoolbook.
     #[test]
@@ -734,7 +731,7 @@ mod tests {
             assert_eq!(coeff.body, eval.body, "single-prime eval body mismatch");
         }
 
-        // RNS paper q₁ @ N=4 (same vectors as the schoolbook RNS test).
+        // RNS q₁ @ N=4 (same vectors as the schoolbook RNS test).
         {
             type P = PolyRns<4, ViaQ1Rns, Coefficient>;
             const L: usize = 5;
@@ -803,7 +800,7 @@ mod tests {
 
     /// `encrypt_rlev_boxed` must draw PRG identically to `encrypt_rlev` and so
     /// produce a byte-identical RLev (the heap-building must not perturb the
-    /// key). Exercised at the paper RNS q₁ — the case it exists for.
+    /// key). Exercised at the RNS q₁ — the case it exists for.
     #[cfg(feature = "alloc")]
     #[test]
     fn encrypt_rlev_boxed_matches_by_value_rns_q1() {

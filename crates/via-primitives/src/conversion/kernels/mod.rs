@@ -1,4 +1,4 @@
-//! GPU-portable scalar-level kernels for Layer-5 conversion.
+//! GPU-portable scalar-level kernels for conversion.
 //!
 //! POD constants by value + flat slices (see [`crate::algebra::zq::ops`]); the
 //! same bodies lower to a CUDA / Metal launch with no trait indirection on the

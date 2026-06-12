@@ -2,11 +2,11 @@
 //!
 //! The production paper path end to end through the real public APIs:
 //! `Client::{setup, batch_query, recover_batch}` + `Server::answer_batch`, at the
-//! paper rings/moduli (Appendix B): `n1 = 2048`, `n2 = 512`, `q1 ≈ 2^75` (2-prime
+//! paper rings/moduli: `n1 = 2048`, `n2 = 512`, `q1 ≈ 2^75` (2-prime
 //! RNS) ≫ `q2 ≈ 2^34` (single-prime) ≫ `q3 ≈ 2^23` ≫ `q4 = 2^12`, `p = 16`. The
 //! repack runs at the single-prime `q2` (`repack_poly_2048_t8`); its q2 key is
 //! derived from the RNS-`q1` cascade key by the **boxed cross-type** mod-switch
-//! `repack_keys_poly_2048_t8_from_rns_cascade_boxed` (the §3.5 key reuse — the
+//! `repack_keys_poly_2048_t8_from_rns_cascade_boxed` (cascade-key reuse — the
 //! client ships only the q1 key, the server derives q2).
 //!
 //! ## Batch size
@@ -54,7 +54,7 @@ const NUM_ROWS: usize = 2; // I
 const NUM_COLS: usize = 2; // J
 const STACK_MB: usize = 16;
 
-// Paper ring instantiation (Appendix B).
+// Paper ring instantiation.
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2 = ViaCPolyQ2<N1>; // q2 @ n1 (single-prime) — the post-CRot / repack ring
 type R3N1 = ViaCPolyQ3<N1>; // q3 @ n1 (mod_switch_sym intermediate + rekey target)
@@ -144,7 +144,7 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
         .answer_batch::<R3N1, T, _, _>(
             &batch,
             // Repack at single-prime q2: derive the q2 key (boxed, heap) from the
-            // RNS-q1 cascade key by cross-type mod-switch (§3.5), then pack.
+            // RNS-q1 cascade key by cross-type mod-switch (cascade-key reuse), then pack.
             |rotateds: &[RLWECiphertext<N1, R2>], k: &K| {
                 let q2_key = repack_keys_poly_2048_t8_from_rns_cascade_boxed(k, q2);
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");

@@ -1,19 +1,19 @@
-//! Primitive §1.6 — the [`Distribution`] dispatcher.
+//! The [`Distribution`] dispatcher.
 //!
 //! A typed bundling of `(which distribution, what parameter)` used wherever
 //! the protocol needs to sample either a secret-key coefficient or an error
-//! coefficient. Replaces the Python reference's
+//! coefficient. Replaces an
 //! `(error_dist: str, error_sigma: Optional[float])` tuple-of-fields pattern
 //! with a single value.
 //!
-//! ## The Layer-1 boundary stops here
+//! ## The sampling boundary stops here
 //!
 //! `Distribution` is **sampling-only**. It knows how to fill a `&mut [i64]`
 //! with samples from one of three distributions — and nothing else. It does
 //! **not** know about plaintexts, ciphertexts, encoding constants, or secret
 //! keys. The composition `(sample error) + (encode plaintext) + (compute
-//! ciphertext body)` lives at Layer 2 — typically as methods on the
-//! relevant secret-key type. See `.docs/primitives.md` §2.1 / §2.2.
+//! ciphertext body)` lives in the encryption layer — typically as methods on
+//! the relevant secret-key type.
 //!
 //! Concretely: there is **no** `encrypt`-like method on this enum, by design.
 //! Lifting samples into a modulus is also a separate concern, handled by the
@@ -32,15 +32,15 @@ use crate::sampling::prg::Shake256Prg;
 /// A typed dispatcher over the three sampling distributions used by every
 /// key-sampling and error-sampling call site in the protocol.
 ///
-/// See the module docs for the design rationale and Layer-1 boundary
+/// See the module docs for the design rationale and sampling-boundary
 /// guarantees.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Distribution {
-    /// Uniform over $\{-1, 0, 1\}$. Mirrors §1.3
+    /// Uniform over $\{-1, 0, 1\}$. Mirrors
     /// [`ternary`](crate::sampling::ternary::ternary).
     Ternary,
     /// Uniform over $[-B, B]$ (inclusive on both ends; $2B + 1$ values).
-    /// Mirrors §1.4 [`bounded_uniform`](crate::sampling::bounded::bounded_uniform).
+    /// Mirrors [`bounded_uniform`](crate::sampling::bounded::bounded_uniform).
     BoundedUniform {
         /// Half-range $B$. $B = 0$ collapses the distribution to a single
         /// value `0` and consumes zero PRG bytes (rides on
@@ -48,10 +48,11 @@ pub enum Distribution {
         bound: u32,
     },
     /// Discrete Gaussian with standard deviation `sigma`, centred on zero.
-    /// Mirrors §1.5 [`crate::sampling::gaussian::discrete_gaussian`].
+    /// Mirrors [`crate::sampling::gaussian::discrete_gaussian`].
     Gaussian {
         /// Standard deviation. `sigma == 0.0` produces all-zero output but
-        /// **still advances the PRG** (matches the §1.5 contract). Negative
+        /// **still advances the PRG** (matches the discrete-Gaussian
+        /// contract). Negative
         /// `sigma` negates the output sample-for-sample versus
         /// `abs(sigma)` under the same seed.
         sigma: f64,
@@ -61,7 +62,7 @@ pub enum Distribution {
 impl Distribution {
     /// Fill `out` with samples drawn from this distribution under `prg`.
     ///
-    /// PRG byte budget matches the underlying §1.3 / §1.4 / §1.5 sampler
+    /// PRG byte budget matches the underlying sampler
     /// byte-for-byte. The `Ternary` and `BoundedUniform` arms inline the
     /// per-coefficient loop (avoiding an intermediate `i8 → i64` or
     /// `i32 → i64` widening pass); the `Gaussian` arm delegates directly
@@ -99,7 +100,7 @@ impl Distribution {
             }
             Distribution::BoundedUniform { bound } => {
                 // `bound: u32` keeps `2 * bound + 1` ≤ 2^33 - 1, safely
-                // within `u64`. Match the §1.4 sampler's loop exactly.
+                // within `u64`. Match the bounded-uniform sampler's loop exactly.
                 let range = 2u64 * (bound as u64) + 1;
                 let shift = bound as i64;
                 for c in out.iter_mut() {
@@ -124,7 +125,7 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Bucket A — dispatch equivalence: Distribution::Variant.sample_into is
-    // byte-for-byte equivalent to the corresponding §1.3 / §1.4 / §1.5
+    // byte-for-byte equivalent to the corresponding underlying
     // sampler, widened to i64.
     // -----------------------------------------------------------------------
 
@@ -240,7 +241,7 @@ mod tests {
 
     #[test]
     fn bounded_uniform_bound_zero_does_not_advance_prg() {
-        // Pinned from Phase 2: bound=0 collapses to randbelow(1) which
+        // Pinned: bound=0 collapses to randbelow(1) which
         // short-circuits with NO byte consumption.
         let mut a = Shake256Prg::new(b"bnd0");
         let mut out = [0i64; 16];
@@ -256,7 +257,7 @@ mod tests {
 
     #[test]
     fn gaussian_sigma_zero_does_advance_prg() {
-        // Pinned from Phase 3: sigma=0 gives all-zero output but the PRG
+        // Pinned: sigma=0 gives all-zero output but the PRG
         // *does* advance — Box-Muller's randbelow draws fire regardless of σ.
         let mut a = Shake256Prg::new(b"gauss0");
         let mut out = [0i64; 16];
@@ -272,7 +273,7 @@ mod tests {
 
     #[test]
     fn gaussian_negative_sigma_negates_outputs() {
-        // Pinned from Phase 3: σ < 0 produces sample-for-sample negation.
+        // Pinned: σ < 0 produces sample-for-sample negation.
         let mut a = Shake256Prg::new(b"negsig");
         let mut b = Shake256Prg::new(b"negsig");
         let mut pos = [0i64; 16];
@@ -286,8 +287,8 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Bucket G — end-to-end smoke test: sample via the dispatcher, lift into
-    // a Zq modulus, observe the canonical Layer-1 → Layer-0 path Layer-2 will
-    // consume.
+    // a Zq modulus, observe the canonical sample-then-lift path the encryption
+    // layer will consume.
     // -----------------------------------------------------------------------
 
     #[test]

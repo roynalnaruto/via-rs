@@ -1,11 +1,11 @@
-//! §5.2 — single Conv₂ step `conv_step` + per-step key generation
-//! `gen_conv_step_key`. See `.docs/primitives.md` §5.2.
+//! Single Conv₂ step `conv_step` + per-step key generation
+//! `gen_conv_step_key`.
 //!
 //! One step of the LWE→RLWE cascade: convert a $(2m, n)$-MLWE into an
 //! $(m, 2n)$-MLWE by embedding every component into the doubled ring
 //! ($\iota_0$) and key-switching it from its source key component to the target
 //! component, accumulating into the output slots. The two-degree const-generic
-//! shape mirrors Layer 3's [`crate::switching::ring_switch::gen_rsk`]: explicit
+//! shape mirrors [`crate::switching::ring_switch::gen_rsk`]: explicit
 //! `<N_IN, N_OUT, …>` parameters plus a compile-time [`ConvDims::_CHECK`].
 
 use crate::algebra::ring::{RingPoly, RingPolyEval};
@@ -54,13 +54,13 @@ impl<const RANK_IN: usize, const N_IN: usize, const RANK_OUT: usize, const N_OUT
     };
 }
 
-/// §5.2 — single Conv₂ step: $(2m, n)$-MLWE $\to$ $(m, 2n)$-MLWE.
+/// Single Conv₂ step: $(2m, n)$-MLWE $\to$ $(m, 2n)$-MLWE.
 ///
 /// Embeds the body and each mask via $\iota_0$ ([`RingPoly::embed_at`] at slot
 /// 0) into `R_OUT` (degree $2n$), key-switches each embedded mask from its
 /// (embedded) source key component to the target component, and accumulates the
 /// result of input mask $\mathrm{RANK\_OUT} \cdot \mathrm{group} + j$ into
-/// output slot $j$. `paper:mlwe.py:195-268`.
+/// output slot $j$.
 ///
 /// # Parallelism (GPU)
 ///
@@ -71,7 +71,7 @@ impl<const RANK_IN: usize, const N_IN: usize, const RANK_OUT: usize, const N_OUT
 /// # Constant-time: No
 ///
 /// Inputs are RLWE-uniform; the gadget products inside `key_switch` are
-/// data-independent (§0.6).
+/// data-independent.
 ///
 /// # Panics
 ///
@@ -149,14 +149,14 @@ pub fn conv_step_eval<
     MLWECiphertext::new(result_masks, result_body)
 }
 
-/// §5.4 (per-step) — generate the `RANK_IN` RLev key-switching keys for one
+/// Generate the `RANK_IN` RLev key-switching keys for one
 /// Conv₂ step, from the single degree-`NLWE` secret key `sk`.
 ///
 /// For key index $\mathrm{group} \cdot m + j$ (with $m = \mathrm{RANK\_IN}/2$):
 /// the **source** component is $\iota_0\bigl(\pi_{m \cdot \mathrm{group} +
 /// j}^{\,\mathrm{NLWE} \to N_\text{IN}}(S)\bigr)$ and the **target** key is
 /// $\pi_j^{\,\mathrm{NLWE} \to N_\text{OUT}}(S)$; the key is
-/// $\mathrm{RLev}_{\text{target}}(\text{source})$. `paper:mlwe.py:319-342`.
+/// $\mathrm{RLev}_{\text{target}}(\text{source})$.
 ///
 /// # PRG consumption order
 ///
@@ -202,7 +202,7 @@ where
     })
 }
 
-/// §5.4 (per-step, per-key) — generate **one** RLev step key (index `key_idx` in
+/// Generate **one** RLev step key (index `key_idx` in
 /// `0..RANK_IN`) for a Conv₂ step. This is the per-element body of
 /// [`gen_conv_step_key`]; calling it for `key_idx = 0, 1, …, RANK_IN-1` in order
 /// reproduces that function's PRG draw order exactly.

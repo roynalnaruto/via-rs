@@ -23,7 +23,7 @@
 //! `#[ignore]` — run with
 //! `cargo test -p via-integration --features via-b -- --ignored via_b_grid`. The
 //! `2×2` `batch_e2e_toy` remains the default-CI gate. Modulus flow (q1 > q2, the
-//! §3.5 key reuse mod-switched into the repack) is identical to `batch_e2e_toy`.
+//! cascade-key reuse mod-switched into the repack) is identical to `batch_e2e_toy`.
 #![cfg(feature = "via-b")]
 
 use via_client::Client;

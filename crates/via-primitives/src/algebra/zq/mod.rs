@@ -1,9 +1,8 @@
-//! Primitive §0.1 — integers modulo $q$.
+//! Integers modulo $q$.
 //!
 //! This module is the foundation of the VIA primitive layering: every
 //! polynomial coefficient at every layer of the stack lives in some
-//! $\mathbb{Z}_q$ described by this module. See `.docs/primitives.md` §0.1
-//! for the mathematical contract.
+//! $\mathbb{Z}_q$ described by this module.
 //!
 //! ## Three implementations of `Modulus`
 //!
@@ -25,13 +24,12 @@
 //!
 //! ## Why `u64`?
 //!
-//! Every modulus that appears at §0.1 fits in `u64` (largest is VIA-C's $q_1$
+//! Every modulus in this module fits in `u64` (largest is VIA-C's $q_1$
 //! second RNS prime $\approx 2^{38}$). The composite $q_1$ itself is handled
-//! at §0.2 via RNS decomposition into u64 primes; §0.1 only ever sees a
-//! single prime or a single power-of-two. Multiplication intermediates use
-//! `u128`; the Barrett constant $\mu = \lfloor 2^{128} / q \rfloor$ also
-//! fits in `u128`. See `.docs/primitives.md` §0.1 "Why u64 is sufficient" for
-//! the per-modulus audit.
+//! by the RNS layer via decomposition into u64 primes; this module only ever
+//! sees a single prime or a single power-of-two. Multiplication intermediates
+//! use `u128`; the Barrett constant $\mu = \lfloor 2^{128} / q \rfloor$ also
+//! fits in `u128`.
 
 pub mod element;
 pub mod modulus;

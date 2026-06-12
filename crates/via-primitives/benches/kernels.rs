@@ -2,7 +2,7 @@
 //!
 //! Complements the end-to-end pipeline benches in `via-integration` by isolating
 //! the primitives the pipeline reaches only transitively. The headline measure
-//! is the §0.4 NTT win on the multiplicative core: the eval-backed
+//! is the NTT win on the multiplicative core: the eval-backed
 //! `gadget_product` (real NTT at NTT-friendly moduli) vs a schoolbook reference,
 //! at the paper ring degree `N = 2048` on both backends (single-prime `q₂`, RNS
 //! `q₁`), across the gadget depths `L ∈ {2, 8, 18}` used by the paper gates. A

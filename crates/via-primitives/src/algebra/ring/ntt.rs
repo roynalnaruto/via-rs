@@ -1,4 +1,4 @@
-//! Negacyclic NTT transforms — primitive §0.4.
+//! Negacyclic NTT transforms.
 //!
 //! The negacyclic NTT for $R_{n, q} = \mathbb{Z}_q\lbrack X\rbrack / (X^n + 1)$
 //! maps a polynomial in coefficient form to its evaluations at the $n$
@@ -26,8 +26,7 @@
 //!
 //! ## Algorithm
 //!
-//! **Iterative Cooley–Tukey, radix-2**, per Longa–Naehrig 2016 (also the
-//! algorithm in `.references/respire/src/math/ntt.rs:58-85`).
+//! **Iterative Cooley–Tukey, radix-2**, per Longa–Naehrig 2016.
 //!
 //! - Forward: **decimation-in-time** (DIT), $\log_2 N$ in-place butterfly
 //!   stages. Input in natural order; output in **bit-reversed** order.
@@ -108,8 +107,7 @@ const fn bit_reverse(x: usize, log_n: u32) -> usize {
 
 /// Find a primitive $2N$-th root of unity in $\mathbb{Z}_q$ — `const fn`.
 ///
-/// Strategy (per Respire `find_sqrt_primitive_root`,
-/// `.references/respire/src/math/number_theory.rs:15-45`): try each base
+/// Strategy: try each base
 /// $g = 2, 3, \ldots$; compute $\mathrm{candidate} = g^{(q - 1) / 2N}
 /// \bmod q$; verify the candidate has order **exactly** $2N$ by
 /// squaring $\log_2(2N)$ times — every intermediate power must be
@@ -126,7 +124,7 @@ const fn bit_reverse(x: usize, log_n: u32) -> usize {
 /// have order exactly $2N$, so a *uniformly random* base hits a
 /// primitive root with probability $\tfrac{1}{2}$. We don't sample
 /// uniformly — we try $g = 2, 3, \ldots$ in order — but in practice
-/// every paper prime in `.docs/primitives.md` §A.1 succeeds within the
+/// every realistic NTT-friendly prime succeeds within the
 /// first few trials.
 ///
 /// # Search cap
@@ -443,7 +441,7 @@ mod tests {
         assert_eq!(mod_pow(2, 4, 17), 16);
         assert_eq!(mod_pow(2, 8, 17), 1);
         assert_eq!(mod_pow(3, 16, 17), 1); // Fermat's little theorem
-        // Cross-check at a paper prime: any a^(q-1) ≡ 1 by Fermat.
+        // Cross-check at a realistic prime: any a^(q-1) ≡ 1 by Fermat.
         let q = 8380417u64;
         assert_eq!(mod_pow(7, q - 1, q), 1);
         assert_eq!(mod_pow(12345, q - 1, q), 1);
@@ -463,16 +461,16 @@ mod tests {
     }
 
     /// `find_primitive_2n_th_root` returns a value of order exactly $2N$
-    /// at every paper prime / paper $N$ pair. This is the corner the
+    /// at every realistic prime / $N$ pair. This is the corner the
     /// `MAX_BASE_TRIES` cap protects: a regression that requires more
     /// trials than the cap would fail at compile time, not silently
-    /// produce a wrong twiddle factor. Run at the smallest paper-N
-    /// where every paper prime is NTT-friendly (N=4) to keep the test
+    /// produce a wrong twiddle factor. Run at the smallest $N$
+    /// where every realistic prime is NTT-friendly (N=4) to keep the test
     /// fast while still exercising each prime.
     #[test]
     fn find_primitive_2n_th_root_paper_primes_within_cap() {
         for q in [
-            // Single primes from .docs/primitives.md §A.1.
+            // Single primes.
             paper::ViaCQ3::Q,
             paper::ViaQ3::Q,
             paper::ViaCQ2::Q,
@@ -531,7 +529,7 @@ mod tests {
 
     #[test]
     fn ntt_friendly_consts_n_inv_paper() {
-        // For each paper modulus we'll use at N=2048, check N * N_INV ≡ 1 (mod q).
+        // For each modulus we'll use at N=2048, check N * N_INV ≡ 1 (mod q).
         fn check<const Q: u64>(_q_marker: ConstModulus<Q>)
         where
             ConstModulus<Q>: NttFriendly<2048>,
@@ -545,8 +543,8 @@ mod tests {
         check(paper::ViaQ2::default());
     }
 
-    /// §0.4 audit (T5): every paper *coefficient* modulus that carries the
-    /// `O(N²)` multiply cost is NTT-friendly at the paper degree `N = 2048`, so
+    /// Every *coefficient* modulus that carries the
+    /// `O(N²)` multiply cost is NTT-friendly at the degree `N = 2048`, so
     /// the eval-form `RLevCiphertext::gadget_product_ntt` path applies to it.
     /// This additionally covers the RNS `q₁` slot primes (both VIA and VIA-C)
     /// that `ntt_friendly_consts_n_inv_paper` does not. The power-of-two `q₄`
@@ -586,11 +584,7 @@ mod tests {
             34_359_214_081,     // ViaQ2
             2_147_352_577,      // ViaQ3
         ] {
-            assert_eq!(
-                q % 4096,
-                1,
-                "paper coeff modulus {q} must be ≡ 1 mod 2N=4096"
-            );
+            assert_eq!(q % 4096, 1, "coeff modulus {q} must be ≡ 1 mod 2N=4096");
         }
 
         // q₄ (2¹² / 2¹⁵) and p (16 / 256) are power-of-two ⇒ q ≡ 0 mod 2N, so
@@ -646,7 +640,7 @@ mod tests {
     /// evaluation at $\psi^{2 \cdot \mathrm{br}(i, \log_2 N) + 1}$, where
     /// $\mathrm{br}$ is the bit-reversal permutation of width $\log_2 N$.
     /// This is the on-the-wire definition that `Poly::eval(i)` relies on
-    /// to mean "the value at the $i$-th NTT point" — see the §0.4 module
+    /// to mean "the value at the $i$-th NTT point" — see the module
     /// doc.
     ///
     /// Returns the forward-NTT buffer so callers can chain a downstream
@@ -696,7 +690,7 @@ mod tests {
         let _ = assert_bit_reversed_layout::<8, _>(m, [16u64, 0, 3, 11, 0, 9, 5, 7]);
     }
 
-    /// Same check at a paper prime ($q_3$ for VIA-C, $N = 8$). Locks
+    /// Same check at a realistic prime ($q_3$ for VIA-C, $N = 8$). Locks
     /// the convention at the realistic-modulus / non-trivial-log-N
     /// regime that the protocol actually consumes.
     #[test]
@@ -766,7 +760,7 @@ mod tests {
         assert_eq!(buf, input);
     }
 
-    /// Round-trip at paper $N = 2048$, $q = q_3$ (VIA-C). Exercises the
+    /// Round-trip at $N = 2048$, $q = q_3$ (VIA-C). Exercises the
     /// realistic-size code path. Slow but locks the contract.
     #[test]
     fn ntt_roundtrip_at_paper_via_c_q3() {

@@ -3,8 +3,8 @@
 //!
 //! This is the primary integration gate for `via-server`. It builds the query
 //! keys and issues a query **directly via `via-primitives`** — it does NOT
-//! depend on `via-client` (the `client ⊥ server` invariant). It mirrors the
-//! reference `test_e2e.py` structure as a pure-Rust integration test.
+//! depend on `via-client` (the `client ⊥ server` invariant). It is a pure-Rust
+//! end-to-end integration test.
 //!
 //! ## Query construction (the client's job, inlined here)
 //!

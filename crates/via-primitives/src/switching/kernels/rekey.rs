@@ -1,4 +1,4 @@
-//! GPU-portable coefficient-level kernels for §3.4 secret-key rekeying.
+//! GPU-portable coefficient-level kernels for secret-key rekeying.
 //!
 //! Re-interpret a small-coefficient secret key at a new modulus: given the
 //! **already-centred** coefficient vector of $S$ (in $(-q_\text{src}/2,
@@ -16,10 +16,10 @@
 //! constant-time over the secret. Do **not** feed a variable-time centred lift
 //! into these kernels.
 //!
-//! # Python divergence
+//! # Constant-time centring
 //!
-//! The Python reference centres with the variable-time branch
-//! `c if c <= q//2 else c - q`; the Rust path uses the constant-time
+//! A variable-time centring branch like `c if c <= q//2 else c - q` would leak
+//! the key through timing; the Rust path uses the constant-time
 //! [`crate::algebra::ring::abstraction::RingPoly::to_centered_coeffs_ct`]
 //! upstream. Both produce the identical centred integer vector, so the rekeyed
 //! key is byte-identical — only the timing behaviour differs.

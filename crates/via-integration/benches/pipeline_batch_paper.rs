@@ -1,4 +1,4 @@
-//! Paper-scale VIA-B **batch** benchmarks (n2048 RNS, Appendix B) — the two new
+//! Paper-scale VIA-B **batch** benchmarks (n2048 RNS) — the two new
 //! VIA-B server costs in isolation:
 //!
 //! - `paper_batch/01_q2_key_build` — derive the ~11.25 MiB single-prime q2 repack

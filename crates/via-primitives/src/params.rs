@@ -1,12 +1,12 @@
 //! Ergonomic type aliases for the paper parameter sets.
 //!
 //! Formerly `encryption::aliases`; relocated to the crate root so that
-//! aliases referencing Layer-3 types (e.g.
+//! aliases referencing `switching` types (e.g.
 //! [`crate::switching::ring_switch::RingSwitchKey`]) do not require an
-//! upward-layer import from within the Layer-2 `encryption` module tree.
+//! upward-layer import from within the `encryption` module tree.
 //! Still re-exported as `encryption::aliases` for backward compatibility.
 //!
-//! Layer-2 ciphertext types are generic over `R: RingPoly<N>`. At a call
+//! Ciphertext types are generic over `R: RingPoly<N>`. At a call
 //! site like `RLWECiphertext::<2048, Poly<2048, ViaCQ2, Coefficient>>` the
 //! polynomial type is verbose and the `Coefficient` form-marker noise
 //! obscures intent. The aliases below collapse each paper modulus into a
@@ -18,9 +18,8 @@
 //! - `SchemePrefix` ∈ `{Via, ViaC}`. VIA-B reuses VIA-C aliases (same
 //!   moduli).
 //! - `CiphertextKind` ∈ `{Sk, Rlwe, ..., Mlwe}`.
-//! - `ModulusTag` is the modulus subscript from `.docs/primitives.md`
-//!   Appendix A: `Q1Rns` (RNS at $q_1$), `Q2`, `Q3`, `Q4`, or `P` (the
-//!   plaintext modulus).
+//! - `ModulusTag` is the modulus subscript: `Q1Rns` (RNS at $q_1$), `Q2`,
+//!   `Q3`, `Q4`, or `P` (the plaintext modulus).
 //!
 //! Only the most common pairings ship as named aliases here; bespoke
 //! parameter combinations use the raw generic types directly.
@@ -100,7 +99,7 @@ pub type ViaCRgswQ1Rns<const N: usize, const L1: usize, const L2: usize> =
 pub type ViaCRgswQ2<const N: usize, const L1: usize, const L2: usize> =
     RGSWCiphertext<N, ViaCPolyQ2<N>, L1, L2>;
 
-/// VIA-C's `RespComp` output: mask at $q_3$, body at $q_4$ (paper Figure 7).
+/// VIA-C's `RespComp` output: mask at $q_3$, body at $q_4$.
 pub type ViaCModSwitchedQ3Q4<const N: usize> =
     ModSwitchedCiphertext<N, ViaCPolyQ3<N>, ViaCPolyQ4<N>>;
 
@@ -109,16 +108,16 @@ pub type ViaCMlweQ1Rns<const RANK: usize, const N: usize> =
 pub type ViaCMlweQ2<const RANK: usize, const N: usize> = MLWECiphertext<RANK, N, ViaCPolyQ2<N>>;
 
 // ---------------------------------------------------------------------------
-// Layer-3 ring-switch keys (§3.3)
+// Ring-switch keys
 // ---------------------------------------------------------------------------
 
 /// VIA's ring-switch key: target ring $R_{N_2, q_2}$ (the ring switch runs
-/// per-column at $q_2$ before CMux, §3.3). `D = N1 / N2`.
+/// per-column at $q_2$ before CMux). `D = N1 / N2`.
 pub type ViaRingSwitchKey<const N1: usize, const N2: usize, const L: usize, const D: usize> =
     crate::switching::ring_switch::RingSwitchKey<N1, N2, ViaPolyQ2<N2>, L, D>;
 
 /// VIA-C's ring-switch key: target ring $R_{N_2, q_3}$ (the ring switch runs
-/// inside `RespComp` after CRot at $q_3$, §6.2). `D = N1 / N2`.
+/// inside `RespComp` after CRot at $q_3$). `D = N1 / N2`.
 pub type ViaCRingSwitchKey<const N1: usize, const N2: usize, const L: usize, const D: usize> =
     crate::switching::ring_switch::RingSwitchKey<N1, N2, ViaCPolyQ3<N2>, L, D>;
 

@@ -1,18 +1,14 @@
-//! §6.2 RespComp — **paper-asymmetric** response compression (Answer step 7).
+//! RespComp — **asymmetric** response compression (Answer step 7).
 //!
-//! Paper Figure 7 specifies THREE steps:
+//! Three steps:
 //!   1. `mod_switch_sym` q2 → q3  (symmetric; both mask and body, stays at n1)
 //!   2. `ring_switch`    n1 → n2  @ q3  (input is **uniform q3** after step 1)
 //!   3. `mod_switch_asym(_, q3, q4)`  trailing **body-only** rescale → `(A@q3, ⌊q4·B/q3⌉)`
 //!
 //! Doing the asymmetric rescale **last** (after ring-switch, at degree n2)
-//! sidesteps the limitation that `resp_comp.py` cites for going symmetric — a
-//! mask@q3/body@q4 mismatch that `ring_switch` can't handle. So this Rust path
-//! is paper-faithful where the Python (`resp_comp.py`) is symmetric "for
-//! implementation simplicity". `Client::recover` decrypts with
+//! sidesteps the limitation of going symmetric — a mask@q3/body@q4 mismatch that
+//! `ring_switch` can't handle. `Client::recover` decrypts with
 //! `SecretKey::decrypt_asymmetric(S2@q3, q3, q4, p)`.
-//!
-//! `paper:via.pdf Figure 7 (§6.2)`; `via_c/server.py:230-236` (symmetric — compare only)
 
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
@@ -34,8 +30,8 @@ use via_primitives::switching::ring_switch::ring_switch_eval;
 /// # Noise
 ///
 /// Three rescales + one ring-switch; correctness needs the total under
-/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure rides on the
-/// P2 SPIKE budget.
+/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure follows from
+/// the noise analysis in the paper.
 ///
 /// # Panics
 ///
@@ -46,8 +42,6 @@ use via_primitives::switching::ring_switch::ring_switch_eval;
 ///
 /// Operates on RLWE-uniform ciphertext coefficients; no secret data is branched
 /// on. `%`/division timing varies only on the public moduli.
-///
-/// `paper:via.pdf Figure 7`
 #[allow(non_camel_case_types)]
 pub fn resp_comp<
     const N1: usize,

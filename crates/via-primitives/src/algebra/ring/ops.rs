@@ -46,7 +46,7 @@ use crate::algebra::zq::modulus::Modulus;
 /// # Cost
 ///
 /// $O(n^2)$ scalar [`Modulus::mul`] / [`Modulus::add`] / [`Modulus::sub`]
-/// calls. For $n = 2048$ at a paper modulus this is roughly four million
+/// calls. For $n = 2048$ at a realistic modulus this is roughly four million
 /// modular multiplications — about $10\,\text{ms}$ on a modern CPU with the
 /// Barrett kernel. Use the NTT-mediated path via
 /// [`super::element::Poly::into_eval`] when the call site is in a hot loop;
@@ -122,21 +122,21 @@ pub fn negacyclic_mul_slice<M: Modulus>(m: M, dst: &mut [u64], lhs: &[u64], rhs:
 ///   when the sum wraps past $n$.
 /// - The sign flips iff *exactly one* of `(i + k_red) >= n` and `neg` holds.
 ///
-/// This implements paper §4.5 `rotate`, the building block of the controlled
-/// rotation `CRot` (§4.4).
+/// This implements the `rotate` primitive, the building block of the controlled
+/// rotation `CRot`.
 ///
 /// # Constant-time
 ///
 /// Constant-time over the operand *values*. **Not** constant-time over $k$:
 /// the modular reduction `k % (2 * n)` and the resulting branches depend on
 /// $k$. This is fine because at every protocol call site $k$ is a public
-/// parameter — at §4.5 it is a loop induction variable, and at §4.4 the
+/// parameter — in the rotation it is a loop induction variable, and in `CRot` the
 /// per-bit shift $2^i$ is also a loop induction variable (the *encrypted*
 /// control bit feeds CMux, not the rotation index).
 ///
 /// **Do not** call this kernel with a $k$ that depends on secret data
 /// (a query index, a key-derived value, anything that should not leak
-/// through timing). The encrypted-exponent path lives in §4.4 `CRot`,
+/// through timing). The encrypted-exponent path lives in `CRot`,
 /// which composes this rotation with `CMux` over RGSW select bits;
 /// callers wanting encrypted rotation should route through that
 /// composite rather than passing a secret $k$ here.

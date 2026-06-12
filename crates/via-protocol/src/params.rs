@@ -1,7 +1,7 @@
 //! Runtime parameter sidecar: [`PIRParams`] + [`KeyDist`].
 //!
-//! Mirrors `.references/via-spec/pir/primitives/params.py`. Const-generic ring
-//! dimensions / gadget depths live on [`crate::ViaCPublicParams`]; this struct
+//! Const-generic ring dimensions / gadget depths live on
+//! [`crate::ViaCPublicParams`]; this struct
 //! carries the runtime `u64`/`u128` moduli, gadget bases, key distributions,
 //! and sigmas needed for sampling and serialization.
 
@@ -13,8 +13,7 @@ use core::fmt;
 
 /// Key distribution for secret-key sampling.
 ///
-/// Mirrors `pir/primitives/params.py` `key_dist_1`/`key_dist_2` string tags
-/// but as a typed enum.
+/// The `key_dist_1`/`key_dist_2` string tags, modelled as a typed enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyDist {
     /// Ternary: coefficients in $\{-1, 0, 1\}$ with equal probability.
@@ -81,7 +80,7 @@ pub struct PIRParams {
     // ── Gadget decomposition ─────────────────────────────────────────────────
     /// Gadget base $B_1$ for the large-ring (DMux ctrl) RGSW external product.
     /// Its depth `gadget_depth_1` also equals the query RGSW gadget length
-    /// `L_QUERY` (the query is compressed at `gadget_depth_1` — `client.py:117`).
+    /// `L_QUERY` (the query is compressed at `gadget_depth_1`).
     pub gadget_base_1: u64,
     /// Gadget depth $\ell_1$ for the large-ring (DMux) RGSW = `L_QUERY`.
     pub gadget_depth_1: usize,
@@ -89,7 +88,7 @@ pub struct PIRParams {
     pub gadget_base_2: u64,
     /// Gadget depth $\ell_2$ for the small-ring (CMux/CRot) tree decomposition.
     /// `≤ gadget_depth_1`: the CMux tree decomposes into the first $\ell_2$ rows
-    /// of the `L_QUERY`-row query RGSW (`server.py:196`).
+    /// of the `L_QUERY`-row query RGSW.
     pub gadget_depth_2: usize,
     /// Gadget base $B_\mathrm{rsk}$ for the ring-switch key.
     pub gadget_base_rsk: u64,
@@ -230,8 +229,8 @@ impl PIRParams {
     }
 
     /// Construct VIA-C `PIRParams` (record ring `n3 = n2`, batch `t = 1`).
-    /// **Signature unchanged across Layer 7** — the VIA-B-only fields are set
-    /// internally (M3), so existing VIA-C call sites compile unmodified.
+    /// **Signature unchanged when VIA-B was added** — the VIA-B-only fields are
+    /// set internally, so existing VIA-C call sites compile unmodified.
     ///
     /// # Panics
     ///

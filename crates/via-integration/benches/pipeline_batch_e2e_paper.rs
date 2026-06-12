@@ -1,4 +1,4 @@
-//! Paper-scale VIA-B **full `answer_batch` e2e** benchmark (n2048 RNS, Appendix B).
+//! Paper-scale VIA-B **full `answer_batch` e2e** benchmark (n2048 RNS).
 //!
 //! Complements `pipeline_batch_paper` (which times the two *isolated* new VIA-B
 //! costs — `q2_key_build`, `repack` — at the production T=256) by timing the
@@ -171,7 +171,7 @@ mod b {
         let fx = build_fixture(num_rows, num_cols, &idxs);
 
         // Repack at single-prime q2: derive the q2 key (boxed/heap) from the RNS-q1
-        // cascade key by cross-type mod-switch (§3.5), then pack — the injected
+        // cascade key by cross-type mod-switch (cascade-key reuse), then pack — the injected
         // closure `Server::answer_batch` calls between the prefix and resp_comp.
         let q2 = fx.q2;
         let repack = |rotateds: &[RLWECiphertext<N1, R2>], k: &K| {

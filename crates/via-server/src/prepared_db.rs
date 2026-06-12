@@ -4,10 +4,10 @@
 //! plaintext modulus `p`** (the `I×J` packing is a protocol contract with the client's
 //! `decompose_index`). [`PreparedDb`] is the *crypto* representation FirstDim consumes:
 //! each cell lifted `p→q2` and forward-NTT'd to **evaluation form**, computed **once at
-//! setup** so [`first_dim`](crate::first_dim) needs no per-query transform of the DB.
+//! setup** so [`first_dim`](crate::first_dim()) needs no per-query transform of the DB.
 //!
 //! This is the storage half of the FirstDim eval-form optimisation; the multiply half is
-//! [`first_dim`](crate::first_dim). For non-NTT moduli (`DynModulus`/`PowerOfTwoModulus` —
+//! [`first_dim`](crate::first_dim()). For non-NTT moduli (`DynModulus`/`PowerOfTwoModulus` —
 //! toy/test params) `R2::Eval = R2` and the transform is the identity, so a `PreparedDb`
 //! degenerates to the coefficient-form matrix and FirstDim runs schoolbook (same result).
 
@@ -19,7 +19,7 @@ use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 /// Each cell is `to_eval(lift_{p→q2}(db[i][j]))` — the forward negacyclic NTT of the
 /// `q2`-lifted coefficients (lift = coefficient reinterpretation, coeffs in
 /// `[0,p) ⊂ [0,q2)`, no rescale). Built once via [`PreparedDb::from_encoded`] and consumed
-/// by [`first_dim`](crate::first_dim) with a pointwise multiply-accumulate.
+/// by [`first_dim`](crate::first_dim()) with a pointwise multiply-accumulate.
 ///
 /// # Memory
 ///

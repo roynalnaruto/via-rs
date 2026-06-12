@@ -1,6 +1,6 @@
 //! The [`Modulus`] trait and its three concrete implementations.
 //!
-//! [`Modulus`] is the contract that the higher §0.x primitives use to talk to
+//! [`Modulus`] is the contract that the higher primitives use to talk to
 //! $\mathbb{Z}_q$. The trait surface is small — two required methods
 //! ([`Modulus::q`], [`Modulus::reduce_u128`]) plus seven provided methods
 //! that derive from them — and value-typed (`Copy + Send + Sync + 'static`)
@@ -12,7 +12,7 @@
 //!
 //! - [`ConstModulus<Q>`] — zero-sized, compile-time modulus, Barrett
 //!   constants computed by `const fn` at monomorphization time. Use for the
-//!   paper's parameter sets (see [`paper`]).
+//!   parameter sets (see [`paper`]).
 //! - [`PowerOfTwoModulus<LOG2_Q>`] — zero-sized, compile-time
 //!   $q = 2^{\text{LOG2\\_Q}}$, reduction is a single mask. Use for $q_4$ and
 //!   the plaintext modulus $p$.
@@ -23,7 +23,7 @@ use subtle::{Choice, ConditionallySelectable};
 
 use super::reduce::{barrett_mu, barrett_reduce, cond_add, cond_sub, mask_reduce};
 
-/// Abstract behaviour shared by every modulus type at §0.1.
+/// Abstract behaviour shared by every modulus type.
 ///
 /// All methods are constant-time over secret data — they may branch on the
 /// modulus value (which is a public parameter of the scheme) but never on the
@@ -112,10 +112,10 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 
     /// Reduce an arbitrary `u64` value into $[0, q)$.
     ///
-    /// Inputs in `[q, 2^64)` are explicitly accepted — samplers (§1.x) and
+    /// Inputs in `[q, 2^64)` are explicitly accepted — samplers and
     /// raw-bytes-to-Zq paths pass unreduced u64s. The default routes through
     /// [`Modulus::reduce_u128`] (Barrett), which is correct for the full
-    /// u64 range under the §0.1 `q < 2^63` contract; the
+    /// u64 range under the `q < 2^63` contract; the
     /// [`PowerOfTwoModulus`] specialisation collapses to an unconditional
     /// mask. Distinct from [`Modulus::add`] / `sub` / `mul`, which
     /// `debug_assert!` that their inputs are already reduced.
@@ -126,8 +126,8 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 
     /// Reduce an arbitrary `i64` value into $[0, q)$.
     ///
-    /// Used by the ternary / bounded-uniform / discrete-Gaussian samplers
-    /// (§1.x), which produce small signed integers that must be lifted into
+    /// Used by the ternary / bounded-uniform / discrete-Gaussian samplers,
+    /// which produce small signed integers that must be lifted into
     /// $\mathbb{Z}_q$. The *sign* of those samples is secret data (it
     /// determines a coefficient of the secret key or error polynomial), so
     /// this lift must not leak it through timing.
@@ -147,7 +147,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     }
 
     /// Centered representation $\tilde a \in (-q/2, q/2]$ with
-    /// $\tilde a \equiv a \pmod q$ — see `.docs/primitives.md` §0.6.
+    /// $\tilde a \equiv a \pmod q$.
     ///
     /// # Invariants
     ///
@@ -159,10 +159,10 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// The comparison `a > q/2` branches on a value derived from the input.
     /// Callers handling secret data should not use this helper directly;
-    /// it is intended for decoding boundaries (paper §2.2 `Dec`, §3.1
-    /// `ModSwitch`) where the value is about to be revealed. For
-    /// secret-key coefficient centring (§3.4 rekeying), use the
-    /// constant-time companion [`Self::to_centered_i64_ct`].
+    /// it is intended for decoding boundaries (`Dec`, `ModSwitch`) where the
+    /// value is about to be revealed. For secret-key coefficient centring
+    /// (rekeying), use the constant-time companion
+    /// [`Self::to_centered_i64_ct`].
     #[inline(always)]
     fn to_centered_i64(self, a: u64) -> i64 {
         debug_assert!(a < self.q(), "Modulus::to_centered_i64: a >= q");
@@ -192,7 +192,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
     ///
     /// CT over the input value $a$. The access pattern depends only
     /// on the public parameter $q$. Use this whenever centring a
-    /// **secret** coefficient — specifically the §3.4 secret-key
+    /// **secret** coefficient — specifically the secret-key
     /// rekeying step, where $S$'s small non-uniform coefficients
     /// would otherwise leak Hamming-weight information through
     /// timing/side-channels.
@@ -229,7 +229,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 /// `ConstModulus<{1u64 << L}>` *compiles* — `_CHECK` is satisfied — but it
 /// silently uses Barrett reduction even though a single mask AND would
 /// suffice. Use [`PowerOfTwoModulus<L>`] for power-of-two moduli; the
-/// paper aliases already route correctly (`ViaQ4 = PowerOfTwoModulus<15>`,
+/// aliases already route correctly (`ViaQ4 = PowerOfTwoModulus<15>`,
 /// `ViaCP = PowerOfTwoModulus<4>`, etc.).
 ///
 /// # Example
@@ -245,7 +245,7 @@ pub trait Modulus: Copy + Eq + Send + Sync + 'static {
 ///
 /// ```compile_fail
 /// use via_primitives::algebra::zq::modulus::{ConstModulus, Modulus};
-/// // Q = 2^63 violates the §0.1 modulus range contract; barrett_mu refuses
+/// // Q = 2^63 violates the modulus range contract; barrett_mu refuses
 /// // to const-evaluate, so any use of `ConstModulus::<{1u64 << 63}>::MU`
 /// // fails to compile. Use `PowerOfTwoModulus<63>` instead.
 /// const _: u128 = ConstModulus::<{ 1u64 << 63 }>::MU;
@@ -262,7 +262,7 @@ impl<const Q: u64> ConstModulus<Q> {
         assert!(Q >= 2, "ConstModulus: Q >= 2");
         assert!(
             Q < 1u64 << 63,
-            "ConstModulus: Q < 2^63 (§0.1 modulus range contract); for Q = 2^63 use PowerOfTwoModulus<63>",
+            "ConstModulus: Q < 2^63 (modulus range contract); for Q = 2^63 use PowerOfTwoModulus<63>",
         );
     };
 
@@ -376,7 +376,7 @@ impl<const LOG2_Q: u32> Modulus for PowerOfTwoModulus<LOG2_Q> {
 /// Barrett constants.
 ///
 /// Use this when the modulus is only known at runtime — driven by parsed
-/// JSON, paper-quoted toy parameters, or fuzz-target inputs. For paper-pinned
+/// JSON, quoted toy parameters, or fuzz-target inputs. For pinned
 /// production paths, prefer [`ConstModulus`] (zero overhead).
 ///
 /// `DynModulus::new` detects power-of-two moduli and switches to mask
@@ -429,13 +429,13 @@ impl Modulus for DynModulus {
     }
 }
 
-/// Compile-time markers for every modulus that appears in
-/// `.docs/primitives.md` Appendix A.
+/// Compile-time markers for every modulus that appears in the
+/// parameter sets.
 ///
 /// These let production code carry the modulus *in its type*, so the
 /// monomorphic call sites get full inlining and const-folding of the Barrett
 /// constants. Each marker is a [`ConstModulus`] or [`PowerOfTwoModulus`] with
-/// the canonical paper value baked in.
+/// the canonical value baked in.
 pub mod paper {
     use super::{ConstModulus, PowerOfTwoModulus};
 
@@ -534,11 +534,11 @@ mod tests {
     /// `reduce_i64(i64::MIN)` exercises the `unsigned_abs → neg` path at its
     /// most adversarial input — `i64::MIN.unsigned_abs() == 2^63`, one bit
     /// above the largest representable signed magnitude. Closes the
-    /// `.docs/review.md` item 8 gap (and verifies the constant-time
+    /// review item 8 gap (and verifies the constant-time
     /// rewrite preserves value semantics on the boundary).
     #[test]
     fn reduce_i64_min_extreme() {
-        // Several moduli to triangulate: a small prime, a paper $q_3$, and
+        // Several moduli to triangulate: a small prime, a $q_3$, and
         // a pow2 (which routes through the mask `reduce_u64` override).
         for q in [17u64, 8380417, 4096] {
             let m = DynModulus::new(q);
@@ -606,7 +606,7 @@ mod tests {
 
     /// `DynModulus::new` for a non-pow2 modulus at-or-above `2^63` must
     /// reject at construction — without this the non-pow2 Barrett path
-    /// would silently break the §0.1 add / mul correctness.
+    /// would silently break add / mul correctness.
     #[test]
     #[should_panic(expected = "q < 2^63")]
     fn dyn_modulus_panics_on_non_pow2_q_at_2_63() {
@@ -677,7 +677,7 @@ mod tests {
         assert_eq!(m.sub(3, 10), 10); // (3 - 10) mod 17 = -7 mod 17 = 10
         assert_eq!(m.sub(0, 1), 16);
         assert_eq!(m.sub(0, 16), 1);
-        // Paper q_3 boundary.
+        // q_3 boundary.
         let m = DynModulus::new(8380417);
         assert_eq!(m.sub(0, 1), 8380416);
         assert_eq!(m.sub(1, 2), 8380416);
@@ -689,7 +689,7 @@ mod tests {
     /// review item 16.
     #[test]
     fn modulus_add_near_u64_sum_boundary() {
-        let q = (1u64 << 63) - 1; // largest non-pow2 q under §0.1 contract.
+        let q = (1u64 << 63) - 1; // largest non-pow2 q under the modulus contract.
         let m = DynModulus::new(q);
         let a = q - 1;
         // 2(q − 1) mod q = q − 2.
@@ -712,7 +712,7 @@ mod tests {
         let _ = m.add(17, 5); // a == q violates the precondition.
     }
 
-    /// `Modulus::mul` for inputs close to `q - 1` at the largest paper prime
+    /// `Modulus::mul` for inputs close to `q - 1` at the largest prime
     /// (VIA-C / VIA-B q_1 second RNS prime, ≈ 2^38). The product `a · b ≈
     /// q^2 ≈ 2^76` exercises Barrett at full u128 width. Closes review item 17.
     #[test]
@@ -746,7 +746,7 @@ mod tests {
         }
     }
 
-    /// CT centred lift at a paper prime, sweeping a handful of
+    /// CT centred lift at a prime, sweeping a handful of
     /// boundary-relevant inputs (0, q/2, q/2+1, q-1, and random
     /// midpoints). Full sweep would be too slow at $q \approx 2^{38}$.
     #[test]

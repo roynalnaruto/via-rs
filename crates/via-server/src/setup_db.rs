@@ -1,4 +1,4 @@
-//! §6.3 Database encoding — [`setup_db`].
+//! Database encoding — [`setup_db`].
 //!
 //! Packs `d = N1 / N_REC` records per `I×J` matrix cell via the interleaved ring
 //! embedding [`RingPoly::embed_at`] at slots `0..d-1`: record `k·I·J + i·J + j`
@@ -9,8 +9,6 @@
 //! records are degree-`N_REC` polynomials over the **plaintext** modulus `p`;
 //! the encoded cells are degree-`N1` over the same `p` (FirstDim lifts `p→q2`
 //! per query — see `via-server::answer`).
-//!
-//! `paper:via_c/params.py:157-208`
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::RingPoly;
@@ -38,8 +36,6 @@ use via_primitives::algebra::ring::RingPoly;
 ///
 /// The database is public (the server holds it in the clear); coefficient
 /// arithmetic is data-independent apart from the public modulus.
-///
-/// `paper:via_c/params.py:157-208`
 pub fn setup_db<
     const N1: usize,
     const N_REC: usize,

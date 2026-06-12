@@ -1,4 +1,4 @@
-//! Toy single-prime **VIA-B batch** client↔server e2e (P5 capstone).
+//! Toy single-prime **VIA-B batch** client↔server e2e capstone.
 //!
 //! Validates the whole VIA-B batch protocol through the real public APIs —
 //! `Client::{setup, batch_query, recover_batch}` and `Server::answer_batch` — at
@@ -13,14 +13,14 @@
 //! mechanics that the minimal n8/T2 tuple leaves as the identity (n8/T2 stays
 //! covered by the `repack_n8_t2` unit tests and the paper batch e2e).
 //!
-//! ## Modulus flow (q1 > q2) — the §3.5 key reuse across moduli
+//! ## Modulus flow (q1 > q2) — the cascade-key reuse across moduli
 //!
-//! The repack reuses the **q1** cascade keys (§3.5) but operates on the post-CRot
-//! ciphertexts, which VIA-C places at **q2** (`.docs/via-b.md` §4); a `key_switch`
+//! The repack reuses the **q1** cascade keys but operates on the post-CRot
+//! ciphertexts, which VIA-C places at **q2**; a `key_switch`
 //! across q1 ≠ q2 is a modulus mismatch. So the server **mod-switches the q1
 //! cascade-key suffix → q2** internally
 //! ([`repack_keys_n64_t8_from_cascade_modswitched`]) before repacking — the client
-//! still ships only the q1 keys, so §3.5's no-new-offline-payload holds. (Toy is
+//! still ships only the q1 keys, so the no-new-offline-payload property holds. (Toy is
 //! single-prime; the paper's RNS-q1 → single-prime-q2 *cross-type* mod-switch is
 //! the remaining extension.)
 #![cfg(feature = "via-b")]
@@ -183,7 +183,7 @@ fn run_batch(h: &mut Harness, idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
         .server
         .answer_batch::<R64, T, _, _>(
             &batch,
-            // Repack closure (§3.5 across q1 ≠ q2): mod-switch the q1 cascade key
+            // Repack closure (cascade-key reuse across q1 ≠ q2): mod-switch the q1 cascade key
             // suffix → q2, then repack the q2 post-CRot ciphertexts at base CK_BASE.
             |rotateds: &[RLWECiphertext<N1, R64>], k: &K| {
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
