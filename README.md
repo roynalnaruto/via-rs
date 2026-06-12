@@ -1,4 +1,4 @@
-# via-rs
+## via-rs
 
 A pure-Rust, `no_std` implementation of the **VIA** family of single-server
 Private Information Retrieval (PIR) schemes — [Liu, Wang & Zhang (2025)](https://eprint.iacr.org/2025/2074).
@@ -8,7 +8,7 @@ Private Information Retrieval (PIR) schemes — [Liu, Wang & Zhang (2025)](https
 > implementation/architecture analysis and audit. This README is the quick
 > path for developers who want to clone, build, and test.
 
-## What this is
+### Overview
 
 PIR lets a client fetch the `i`-th record of a server-held database while
 keeping the index `i` hidden from the server — single-server, with no
@@ -24,7 +24,7 @@ cargo feature (see [Build & test](#build--test)). The crypto core is the focus
 for what is and isn't covered, and known parameter/correctness caveats — note
 that analysis predates the VIA-B merge and currently covers VIA-C.
 
-## Codebase layout
+### Codebase layout
 
 A Cargo workspace of five crates; `via-primitives` is organised as a layered
 primitive stack mirroring the paper.
@@ -37,7 +37,7 @@ primitive stack mirroring the paper.
 | [`crates/via-server`](crates/via-server) | `setup_db` → query decompression → first-dimension → answer → response compression. |
 | [`crates/via-integration`](crates/via-integration) | End-to-end tests, cross-language KATs, and Criterion benchmarks. |
 
-## Build & test
+### Build & test
 
 **Prerequisites:** a Rust toolchain (stable, tested on 1.96). Fuzzing
 additionally needs a nightly toolchain plus `cargo install cargo-fuzz`.
@@ -72,6 +72,3 @@ just fuzz <T>    # run a cargo-fuzz target (needs nightly + cargo-fuzz)
 just             # list every recipe
 ```
 
-## License
-
-See repository.
