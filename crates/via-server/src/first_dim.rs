@@ -76,6 +76,19 @@ where
     );
     assert!(j_len > 0, "first_dim: J must be > 0");
 
+    // === TEMP throwaway (branch temp/throwaway) — DO NOT MERGE ============
+    // Deliberate first_dim regression to exercise the /benchmark RED marker.
+    // Pure waste: recompute the eval transforms eight times and discard them
+    // (output is byte-for-byte unchanged; correctness/tests unaffected).
+    for _ in 0..8 {
+        let waste: Vec<(R2::Eval, R2::Eval)> = switched
+            .iter()
+            .map(|ct| (R2::to_eval(ct.mask), R2::to_eval(ct.body)))
+            .collect();
+        core::hint::black_box(&waste);
+    }
+    // =====================================================================
+
     // Transform the I selection ciphertexts to eval form ONCE (reused across all J).
     let sel: Vec<(R2::Eval, R2::Eval)> = switched
         .iter()
