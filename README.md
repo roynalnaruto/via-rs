@@ -3,7 +3,7 @@
 A pure-Rust, `no_std` implementation of the **VIA** family of single-server
 Private Information Retrieval (PIR) schemes — [Liu, Wang & Zhang (2025)](https://eprint.iacr.org/2025/2074).
 
-> 📖 **[Full documentation →](https://0xalizk.github.io/via-rs/)**
+> 📖 **[Full documentation →](https://roynalnaruto.github.io/via-rs/)**
 > A from-first-principles intro to VIA (no crypto background needed) plus an
 > implementation/architecture analysis and audit. This README is the quick
 > path for developers who want to clone, build, and test.
@@ -14,13 +14,13 @@ PIR lets a client fetch the `i`-th record of a server-held database while
 keeping the index `i` hidden from the server — single-server, with no
 non-collusion assumption. VIA's distinctive moves are a logarithmic-depth
 **DMux tree** for query expansion and (in VIA-C) a low-noise **LWE→RLWE
-conversion** for query compression. See the [intro](https://0xalizk.github.io/via-rs/intro.html)
+conversion** for query compression. See the [intro](https://roynalnaruto.github.io/via-rs/intro.html)
 for how and why it works.
 
 **Status:** **VIA-C** and **VIA-B** (the batch variant) are implemented
 end-to-end; plain VIA is not yet implemented. VIA-B lives behind the `via-b`
 cargo feature (see [Build & test](#build--test)). The crypto core is the focus
-(no HTTP/transport layer). See the [implementation analysis](https://0xalizk.github.io/via-rs/implementation.html)
+(no HTTP/transport layer). See the [implementation analysis](https://roynalnaruto.github.io/via-rs/implementation.html)
 for what is and isn't covered, and known parameter/correctness caveats — note
 that analysis predates the VIA-B merge and currently covers VIA-C.
 
@@ -46,7 +46,7 @@ plain `cargo` works too.
 
 ```sh
 # Clone
-git clone https://github.com/0xalizk/via-rs && cd via-rs
+git clone https://github.com/roynalnaruto/via-rs && cd via-rs
 
 # Test (toy parameters — runs by default, fast)
 cargo test --workspace            # or: just test
