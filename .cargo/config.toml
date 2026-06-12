@@ -1,0 +1,14 @@
+# Workspace-level rustdoc flags.
+#
+# Injects the KaTeX header into rustdoc output so that LaTeX math in doc
+# comments (e.g. `$\mathbb{Z}_q$`) renders correctly when running
+# `cargo doc` / `just doc` from the repo root.
+#
+# `--html-in-header` resolves the path relative to the directory cargo is
+# invoked from. The header file lives under `crates/via-primitives/` and
+# only `via-primitives` is documented locally; on docs.rs the per-crate
+# `[package.metadata.docs.rs].rustdoc-args` entry takes over instead
+# (using a path relative to the crate directory).
+
+[build]
+rustdocflags = ["--html-in-header", "katex-header.html"]
