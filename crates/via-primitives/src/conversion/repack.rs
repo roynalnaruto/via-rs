@@ -189,7 +189,7 @@ pub fn mlwes_to_mlwe<
 /// One recursion level of `mlwes_to_rlwe`: pair up `inputs` (length a power of
 /// two) and convert each pair via [`mlwes_to_mlwe`] at this level's shape,
 /// halving the count and doubling the degree. The level helper the
-/// [`repack_cascade!`] macro threads through.
+/// `repack_cascade!` macro threads through.
 #[allow(non_camel_case_types)]
 pub(crate) fn pair_convert<
     const RANK_IN: usize,
@@ -214,8 +214,8 @@ pub(crate) fn pair_convert<
 
 /// Bit-reverse the low `bits` bits of `i`.
 ///
-/// The adjacent-pairing binary-tree recursion in [`mlwes_to_rlwe`] (built by the
-/// [`repack_cascade!`] macro) interleaves input `i` into output slot
+/// The adjacent-pairing binary-tree recursion in `mlwes_to_rlwe` (built by the
+/// `repack_cascade!` macro) interleaves input `i` into output slot
 /// `bit_reverse(i)`; reordering the `T` inputs by this map first makes the
 /// output emerge in the paper's natural order `ι^{k/d→k}(M_0,…,M_{T-1})`
 /// (`M_t` at slot `t`). For `T = 2` it is the identity.
@@ -234,7 +234,7 @@ pub(crate) fn bit_reverse_index(i: usize, bits: u32) -> usize {
 /// generator, and the `Repack` function — for a fixed `(n1, K, T)`, mirroring
 /// the [`lwe_to_rlwe_cascade!`](crate::lwe_to_rlwe_cascade) pattern.
 ///
-/// Split out from the borrowing-view half ([`repack_view!`]) so a preset whose
+/// Split out from the borrowing-view half (`repack_view!`) so a preset whose
 /// cascade key has a *different ring type* (e.g. the single-prime
 /// `Poly<2048,q2>` repack derived by cross-type mod-switch from the RNS-`q1`
 /// cascade) can take the engine **without** the same-ring view machinery — the
@@ -243,7 +243,7 @@ pub(crate) fn bit_reverse_index(i: usize, bits: u32) -> usize {
 /// `steps` is the contiguous SUFFIX of the cascade's step list the repack
 /// reuses, each `(field, RANK_IN, N_IN, RANK_OUT, N_OUT)`; the generated key
 /// fields are degree-`N_OUT` RLev arrays whose types match a suffix of the
-/// matching `LweToRlweKey*` — so [`repack_view!`] borrows them zero-copy.
+/// matching `LweToRlweKey*` — so `repack_view!` borrows them zero-copy.
 /// `extr_degree` is `G = K/T` (the `Extr` output degree) and `input_count` is
 /// `D = T·n1/K` (the padded MLWE count = `2^depth`).
 macro_rules! repack_engine {
@@ -671,8 +671,8 @@ repack_engine! {
 /// The production paper-scale realization of the cascade-key reuse: the repack runs
 /// at the single-prime post-CRot modulus `q2`, but the cascade ships at the
 /// 2-prime RNS `q1`; the server derives the `q2` repack key internally — no new
-/// offline payload. The same-ring [`from_cascade_modswitched`](repack_view!) of
-/// the macro cannot express this (its source and target are one ring type), and
+/// offline payload. The same-ring `from_cascade_modswitched` of `repack_view!`
+/// cannot express this (its source and target are one ring type), and
 /// returning the ~11.25 MiB key by value would overflow the stack, so this is
 /// hand-written to mirror the cascade's own boxed builder.
 ///
