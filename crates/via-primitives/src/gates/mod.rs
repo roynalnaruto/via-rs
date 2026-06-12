@@ -22,9 +22,9 @@
 //! These gates add **no** new [`crate::algebra::ring::RingPoly`] trait items —
 //! `RingPoly::mul_x_pow` and `RingPoly::project_at` suffice.
 
-pub mod rotate;
-pub mod mux;
 pub mod convert;
+pub mod mux;
+pub mod rotate;
 
 // Atomic gates.
 pub use mux::{cmux, dmux};

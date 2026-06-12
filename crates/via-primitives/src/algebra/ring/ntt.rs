@@ -584,11 +584,7 @@ mod tests {
             34_359_214_081,     // ViaQ2
             2_147_352_577,      // ViaQ3
         ] {
-            assert_eq!(
-                q % 4096,
-                1,
-                "coeff modulus {q} must be ≡ 1 mod 2N=4096"
-            );
+            assert_eq!(q % 4096, 1, "coeff modulus {q} must be ≡ 1 mod 2N=4096");
         }
 
         // q₄ (2¹² / 2¹⁵) and p (16 / 256) are power-of-two ⇒ q ≡ 0 mod 2N, so
