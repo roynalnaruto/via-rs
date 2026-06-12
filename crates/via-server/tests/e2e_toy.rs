@@ -21,7 +21,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN8, encrypt_lwe_raw, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+    LweToRlweKeyN8, encrypt_lwe_raw, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
 };
 use via_primitives::encryption::gadget_vector_values;
 use via_primitives::encryption::types::SecretKey;
@@ -31,7 +31,7 @@ use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams, QueryCompressionKey};
-use via_server::{PreparedDb, ViaCServer, answer_one_query, setup_db};
+use via_server::{PreparedDb, PreparedKeys, ViaCServer, answer_one_query, setup_db};
 
 const N1: usize = 8;
 const N2: usize = 4;
@@ -145,19 +145,21 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize, via_server: bool) 
             R4,
         >(&records, pp, q1, q2, q3, q4, p);
         server
-            .answer::<R8, _>(&query, lwe_to_rlwe_n8::<DynModulus, L_CK>)
+            .answer::<R8, _>(&query, lwe_to_rlwe_n8_eval::<DynModulus, L_CK>)
             .expect("server answer")
     } else {
         let prepared = PreparedDb::<N1, R8>::from_encoded(&db, q2);
+        let prepared_keys = PreparedKeys::from_public_params(&pp);
         answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
             &query,
             &pp,
             &prepared,
+            &prepared_keys,
             q1,
             q2,
             q3,
             q4,
-            lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
         )
         .expect("answer")
     };

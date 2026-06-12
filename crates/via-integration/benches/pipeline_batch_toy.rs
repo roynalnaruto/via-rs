@@ -21,7 +21,7 @@ mod b {
     use via_primitives::algebra::ring::form::Coefficient;
     use via_primitives::algebra::zq::modulus::DynModulus;
     use via_primitives::conversion::{
-        LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64,
+        LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64_eval,
         repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
     };
     use via_primitives::encryption::types::RLWECiphertext;
@@ -30,7 +30,7 @@ mod b {
     use via_primitives::switching::gen_rsk;
     use via_primitives::switching::rekey::rekey_secret_key;
     use via_protocol::{BatchedQuery, KeyDist, PIRParams, PublicParams};
-    use via_server::{PreparedDb, answer_batch, answer_through_crot};
+    use via_server::{PreparedDb, PreparedKeys, answer_batch, answer_through_crot};
 
     const N1: usize = 64;
     const N2: usize = 16;
@@ -168,7 +168,8 @@ mod b {
         let fx = build_fixture();
         let q2 = DynModulus::new(Q2); // the real q2 < q1 (keys mod-switched q1→q2)
         let prepared_db = PreparedDb::<N1, R64>::from_encoded(&fx.encoded_db, q2);
-        let cascade = lwe_to_rlwe_n64::<DynModulus, L_CK>;
+        let prepared_keys = PreparedKeys::from_public_params(&fx.pp);
+        let cascade = lwe_to_rlwe_n64_eval::<DynModulus, L_CK>;
         let cascade_key: &K = &fx.pp.query_comp_key.lwe_to_rlwe_key;
 
         // Run answer_batch once (untimed) to obtain the answer for recover_batch.
@@ -194,6 +195,7 @@ mod b {
                 &fx.batch,
                 &fx.pp,
                 &prepared_db,
+                &prepared_keys,
                 fx.q1,
                 q2,
                 fx.q3,
@@ -215,6 +217,7 @@ mod b {
                     q,
                     &fx.pp,
                     &prepared_db,
+                    &prepared_keys,
                     fx.q1,
                     q2,
                     cascade,
@@ -272,6 +275,7 @@ mod b {
                         &batch,
                         &fx.pp,
                         &prepared_db,
+                        &prepared_keys,
                         fx.q1,
                         q2,
                         fx.q3,

@@ -12,6 +12,7 @@
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
+use via_primitives::conversion::CascadeKey;
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
 use via_protocol::{BatchedQuery, PublicParams, ViaError};
@@ -19,6 +20,7 @@ use zeroize::Zeroize;
 
 use crate::answer::answer_through_crot;
 use crate::prepared_db::PreparedDb;
+use crate::prepared_keys::PreparedKeys;
 use crate::resp_comp::resp_comp;
 
 /// VIA-B answer pipeline for a batch of `T` queries:
@@ -79,7 +81,7 @@ pub fn answer_batch<
     R3L: RingPoly<N1, Projected<N2> = R3>,
     R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
@@ -90,6 +92,7 @@ pub fn answer_batch<
     batch: &BatchedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
     prepared_db: &PreparedDb<N1, R2>,
+    prepared_keys: &PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3L::Modulus,
@@ -99,7 +102,8 @@ pub fn answer_batch<
 ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
 where
     RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
-    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    CascadeFn:
+        Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
 {
     const {
         assert!(N1 >= N3, "answer_batch: N1 must be >= N3");
@@ -133,6 +137,7 @@ where
             query,
             pp,
             prepared_db,
+            prepared_keys,
             q1_mod,
             q2_mod,
             &cascade,
@@ -148,7 +153,7 @@ where
     let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
         resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
             &repacked,
-            &pp.ring_switch_key,
+            &prepared_keys.rsk,
             q3_mod,
             q4_mod,
             pp.params.gadget_base_rsk,

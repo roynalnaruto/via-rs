@@ -26,7 +26,7 @@ use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
-use super::types::{RLWECiphertext, RLevCiphertext, SecretKey};
+use super::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 
 /// §2.4 — Generate a key-switching key `ksk = RLev_{dst_sk}(src_sk.poly)`:
 /// an RLev encryption of the **source** secret-key polynomial under the
@@ -86,6 +86,17 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
     where
         R: RingPolyEval<N>,
     {
+        let product = self.gadget_product(&ct.mask, base);
+        RLWECiphertext::new(-product.mask, ct.body - product.body)
+    }
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevEval<N, R, L> {
+    /// Eval-key variant of [`RLevCiphertext::key_switch`] (T7): `self` is the
+    /// **pre-transformed** key-switching key, so the per-call `to_eval` of its
+    /// samples is skipped. Bit-identical to the coefficient-form `key_switch`
+    /// (the NTT is exact). Used by the eval-form conversion cascade.
+    pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R> {
         let product = self.gadget_product(&ct.mask, base);
         RLWECiphertext::new(-product.mask, ct.body - product.body)
     }

@@ -28,7 +28,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
     repack_keys_poly_2048_t8_from_rns_cascade_boxed, repack_poly_2048_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -150,7 +150,7 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
                 repack_poly_2048_t8(arr, &*q2_key, CK_BASE)
             },
-            lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>,
+            lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<Rec> = client

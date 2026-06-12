@@ -62,6 +62,22 @@ macro_rules! lwe_to_rlwe_cascade {
             ; $($rest)*)
     };
 
+    // ===== @chain_eval: like @chain but eval-form step keys (conv_step_eval) =====
+    (@chain_eval ($ring:ident, $modp:ident, $lev:ident, $base:expr, $key:ident) $input:expr ;) => {
+        $crate::conversion::mlwe_to_rlwe($input)
+    };
+    (@chain_eval ($ring:ident, $modp:ident, $lev:ident, $base:expr, $key:ident) $input:expr ;
+        ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) $($rest:tt)*) => {
+        $crate::lwe_to_rlwe_cascade!(@chain_eval ($ring, $modp, $lev, $base, $key)
+            &$crate::conversion::conv_step_eval::<
+                $rin, $nin, $rout, $nout,
+                $ring<$nin, $modp, $crate::algebra::ring::form::Coefficient>,
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>,
+                $lev,
+            >($input, &$key.$field, $base)
+            ; $($rest)*)
+    };
+
     // ===== main entry: emit key struct + generator + cascade fn =====
     (
         n = $n:literal,
@@ -73,6 +89,8 @@ macro_rules! lwe_to_rlwe_cascade {
         gen = $gen:ident,
         gen_boxed = $genb:ident,
         cast = $cast:ident,
+        eval_key = $ekey:ident,
+        cast_eval = $casteval:ident,
         steps = [ $( ($field:ident, $rin:literal, $nin:literal, $rout:literal, $nout:literal) ),+ $(,)? ],
     ) => {
         #[doc = concat!(
@@ -242,6 +260,150 @@ macro_rules! lwe_to_rlwe_cascade {
             $crate::lwe_to_rlwe_cascade!(@chain ($ring, $modp, $lev, base, key) ct ;
                 $( ($field, $rin, $nin, $rout, $nout) )+)
         }
+
+        // ===== T7 eval-key mirror: pre-transformed step keys + eval cascade =====
+
+        #[doc = concat!(
+            "Evaluation-form mirror of [`", stringify!($key), "`] (T7): every step key ",
+            "pre-transformed to [`RLevEval`](crate::encryption::RLevEval). Built once via ",
+            "[`CascadeKey::to_eval_boxed`](crate::conversion::CascadeKey::to_eval_boxed); ",
+            "consumed by [`", stringify!($casteval), "`]. `ZeroizeOnDrop` (secret-derived)."
+        )]
+        pub struct $ekey<$modp: $modbound, const $lev: usize>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            $(
+                pub(crate) $field: [
+                    $crate::encryption::RLevEval<
+                        $nout,
+                        $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>,
+                        $lev,
+                    >;
+                    $rin
+                ],
+            )+
+        }
+
+        impl<$modp: $modbound, const $lev: usize> ::zeroize::Zeroize for $ekey<$modp, $lev>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            fn zeroize(&mut self) {
+                $( for s in &mut self.$field { ::zeroize::Zeroize::zeroize(s); } )+
+            }
+        }
+
+        impl<$modp: $modbound, const $lev: usize> ::core::ops::Drop for $ekey<$modp, $lev>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            fn drop(&mut self) {
+                ::zeroize::Zeroize::zeroize(self);
+            }
+        }
+
+        impl<$modp: $modbound, const $lev: usize> ::zeroize::ZeroizeOnDrop for $ekey<$modp, $lev>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+        }
+
+        impl<$modp: $modbound, const $lev: usize> ::core::fmt::Debug for $ekey<$modp, $lev>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.debug_struct(stringify!($ekey))
+                    .field("n", &$n)
+                    .field("L", &$lev)
+                    .finish_non_exhaustive()
+            }
+        }
+
+        #[cfg(feature = "alloc")]
+        #[allow(clippy::macro_metavars_in_unsafe)]
+        impl<$modp: $modbound, const $lev: usize> $crate::conversion::CascadeKey
+            for $key<$modp, $lev>
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            type Eval = $ekey<$modp, $lev>;
+            fn to_eval_boxed(&self) -> ::alloc::boxed::Box<$ekey<$modp, $lev>> {
+                let mut boxed = ::alloc::boxed::Box::<$ekey<$modp, $lev>>::new_uninit();
+                let ptr = boxed.as_mut_ptr();
+                // SAFETY: every `(mask, body)` slot of every RLev of every field is
+                // written exactly once via `addr_of_mut!`, one **transformed sample
+                // pair** at a time — peak stack stays one eval poly-pair (~64 KB at
+                // n=2048), never a whole RLevEval (~1.15 MB) or the whole ~24.75 MB
+                // key (which would overflow an 8 MB thread). Mirrors the coeff key's
+                // `gen_conv_step_key_element_into` per-sample heap builder.
+                unsafe {
+                    $(
+                        for i in 0..$rin {
+                            for k in 0..$lev {
+                                let sample = &self.$field[i].samples[k];
+                                let pair = (
+                                    <$ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>
+                                        as $crate::algebra::ring::RingPolyEval<$nout>>::to_eval(
+                                        sample.mask,
+                                    ),
+                                    <$ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>
+                                        as $crate::algebra::ring::RingPolyEval<$nout>>::to_eval(
+                                        sample.body,
+                                    ),
+                                );
+                                ::core::ptr::addr_of_mut!((*ptr).$field[i].samples[k]).write(pair);
+                            }
+                        }
+                    )+
+                    boxed.assume_init()
+                }
+            }
+        }
+
+        #[doc = concat!(
+            "Eval-key variant of [`", stringify!($cast), "`] (T7): the cascade key is ",
+            "supplied **pre-transformed** ([`", stringify!($ekey), "`]), so each step's ",
+            "`conv_step` runs without re-transforming the static step-key samples. ",
+            "**Bit-identical** to [`", stringify!($cast), "`] (the NTT is exact)."
+        )]
+        pub fn $casteval<$modp: $modbound, const $lev: usize>(
+            ct: &$crate::encryption::MLWECiphertext<
+                $n, 1, $ring<1, $modp, $crate::algebra::ring::form::Coefficient>,
+            >,
+            key: &$ekey<$modp, $lev>,
+            base: u64,
+        ) -> $crate::encryption::RLWECiphertext<
+            $n, $ring<$n, $modp, $crate::algebra::ring::form::Coefficient>,
+        >
+        where
+            $(
+                $ring<$nout, $modp, $crate::algebra::ring::form::Coefficient>:
+                    $crate::algebra::ring::RingPolyEval<$nout>,
+            )+
+        {
+            $crate::lwe_to_rlwe_cascade!(@chain_eval ($ring, $modp, $lev, base, key) ct ;
+                $( ($field, $rin, $nin, $rout, $nout) )+)
+        }
     };
 }
 
@@ -261,6 +423,8 @@ lwe_to_rlwe_cascade! {
     gen = gen_lwe_to_rlwe_key_n8,
     gen_boxed = gen_lwe_to_rlwe_key_n8_boxed,
     cast = lwe_to_rlwe_n8,
+    eval_key = LweToRlweKeyN8Eval,
+    cast_eval = lwe_to_rlwe_n8_eval,
     steps = [
         (keys_2, 8, 1, 4, 2),
         (keys_4, 4, 2, 2, 4),
@@ -278,6 +442,8 @@ lwe_to_rlwe_cascade! {
     gen = gen_lwe_to_rlwe_key_n4,
     gen_boxed = gen_lwe_to_rlwe_key_n4_boxed,
     cast = lwe_to_rlwe_n4,
+    eval_key = LweToRlweKeyN4Eval,
+    cast_eval = lwe_to_rlwe_n4_eval,
     steps = [
         (keys_2, 4, 1, 2, 2),
         (keys_4, 2, 2, 1, 4),
@@ -299,6 +465,8 @@ lwe_to_rlwe_cascade! {
     gen = gen_lwe_to_rlwe_key_n64,
     gen_boxed = gen_lwe_to_rlwe_key_n64_boxed,
     cast = lwe_to_rlwe_n64,
+    eval_key = LweToRlweKeyN64Eval,
+    cast_eval = lwe_to_rlwe_n64_eval,
     steps = [
         (keys_2, 64, 1, 32, 2),
         (keys_4, 32, 2, 16, 4),
@@ -321,6 +489,8 @@ lwe_to_rlwe_cascade! {
     gen = gen_lwe_to_rlwe_key_rns_n8,
     gen_boxed = gen_lwe_to_rlwe_key_rns_n8_boxed,
     cast = lwe_to_rlwe_rns_n8,
+    eval_key = LweToRlweKeyRnsN8Eval,
+    cast_eval = lwe_to_rlwe_rns_n8_eval,
     steps = [
         (keys_2, 8, 1, 4, 2),
         (keys_4, 4, 2, 2, 4),
@@ -347,6 +517,8 @@ lwe_to_rlwe_cascade! {
     gen = gen_lwe_to_rlwe_key_rns_n2048,
     gen_boxed = gen_lwe_to_rlwe_key_rns_n2048_boxed,
     cast = lwe_to_rlwe_rns_n2048,
+    eval_key = LweToRlweKeyRnsN2048Eval,
+    cast_eval = lwe_to_rlwe_rns_n2048_eval,
     steps = [
         (keys_2, 2048, 1, 1024, 2),
         (keys_4, 1024, 2, 512, 4),
@@ -651,6 +823,8 @@ mod spike {
         gen = gen_lwe_to_rlwe_key_rns_n512,
         gen_boxed = gen_lwe_to_rlwe_key_rns_n512_boxed,
         cast = lwe_to_rlwe_rns_n512,
+        eval_key = LweToRlweKeyRnsN512Eval,
+        cast_eval = lwe_to_rlwe_rns_n512_eval,
         steps = [
             (keys_2, 512, 1, 256, 2),
             (keys_4, 256, 2, 128, 4),
@@ -667,6 +841,30 @@ mod spike {
     const BASE: u64 = 18;
     const LV: usize = 18;
     const STACK: usize = 8 << 20; // 8 MB ≪ 24.75 MB whole key — boxing must hold.
+
+    /// T7: the eval-key cascade `lwe_to_rlwe_n8_eval` (key pre-transformed via
+    /// [`CascadeKey::to_eval_boxed`]) equals the coefficient-form `lwe_to_rlwe_n8`
+    /// **exactly** — bit-identical, so storing the cascade key in eval form is a
+    /// no-op on the result. NTT-friendly `q = 17` (≡ 1 mod 16) drives the real NTT
+    /// at every step degree (2, 4, 8). Asserts ciphertext equality, not
+    /// decrypt-correctness (`q` is too small to close noise — irrelevant here).
+    #[test]
+    fn lwe_to_rlwe_eval_matches_coeff_n8() {
+        use super::{gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8, lwe_to_rlwe_n8_eval};
+        use crate::conversion::CascadeKey;
+        type Q = Poly<8, ConstModulus<17>, Coefficient>;
+        const L: usize = 4;
+        let q = ConstModulus::<17>;
+        let mut prg = Shake256Prg::new(b"cascade-eval-n8");
+        let sk = SecretKey::<8, Q>::keygen(q, Distribution::Ternary, &mut prg);
+        let key = gen_lwe_to_rlwe_key_n8::<_, L>(&sk, 2, Distribution::Ternary, &mut prg);
+        let key_eval = key.to_eval_boxed();
+        let lwe = encrypt_lwe(&sk, 5u64, 16, Distribution::Ternary, &mut prg);
+        let coeff = lwe_to_rlwe_n8::<_, L>(&lwe, &key, 2);
+        let eval = lwe_to_rlwe_n8_eval::<_, L>(&lwe, &key_eval, 2);
+        assert_eq!(coeff.mask, eval.mask, "cascade eval mask mismatch");
+        assert_eq!(coeff.body, eval.body, "cascade eval body mismatch");
+    }
 
     /// Depth-18 noise closure at the paper q₁ basis, degree 512 (¼ paper degree).
     /// Builds the key with the **boxed** builder on an 8 MB thread, then

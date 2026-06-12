@@ -23,7 +23,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::algebra::ring::RingPolyEval;
 use crate::algebra::ring::abstraction::RingPoly;
-use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
+use crate::encryption::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
@@ -121,6 +121,76 @@ impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D
 impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D: usize>
     ZeroizeOnDrop for RingSwitchKey<N1, N2, R2, L, D>
 {
+}
+
+/// Evaluation-form [`RingSwitchKey`] (T7 eval-key storage): the `D` RLev samples
+/// pre-transformed to [`RLevEval`], so [`ring_switch_eval`] runs without
+/// re-transforming the (static) key samples on every call. Built once from a
+/// [`RingSwitchKey`] via [`RingSwitchKey::to_eval`]. `ZeroizeOnDrop` — the NTT
+/// image of the key is secret-derived.
+pub struct RingSwitchKeyEval<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> {
+    pub(crate) samples: [RLevEval<N2, R2, L>; D],
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> Zeroize for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+    fn zeroize(&mut self) {
+        for s in &mut self.samples {
+            s.zeroize();
+        }
+    }
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> Drop for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> ZeroizeOnDrop for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> RingSwitchKey<N1, N2, R2, L, D>
+{
+    /// Pre-transform the `D` RLev samples to evaluation form once (T7;
+    /// deterministic, no PRG). The result drives [`ring_switch_eval`].
+    pub fn to_eval(&self) -> RingSwitchKeyEval<N1, N2, R2, L, D> {
+        RingSwitchKeyEval {
+            samples: core::array::from_fn(|j| self.samples[j].to_eval()),
+        }
+    }
 }
 
 impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D: usize>
@@ -263,6 +333,40 @@ pub fn ring_switch<
     // Re-evaluate _CHECK at the entry point to defend against an RSK built
     // by struct literal (bypassing `RingSwitchKey::new`, the only other path
     // that forces it).
+    let () = RingSwitchKey::<N1, N2, R::Projected<N2>, L, D>::_CHECK;
+    let modulus = ct.mask.modulus();
+    let body_proj_0 = ct.body.project_at::<N2>(0);
+    let mut acc_mask = <R::Projected<N2>>::zero(modulus);
+    let mut acc_body = body_proj_0;
+    for j in 0..D {
+        let mask_proj_j = if j == 0 {
+            ct.mask.project_at::<N2>(0)
+        } else {
+            ct.mask.mul_x_pow(j).project_at::<N2>(0)
+        };
+        let gp = rsk.samples[j].gadget_product(&mask_proj_j, base);
+        acc_mask -= gp.mask;
+        acc_body -= gp.body;
+    }
+    RLWECiphertext::new(acc_mask, acc_body)
+}
+
+/// Eval-key variant of [`ring_switch`] (T7): the ring-switch key is supplied
+/// **pre-transformed** ([`RingSwitchKeyEval`] via [`RingSwitchKey::to_eval`]), so
+/// the `D` per-sample gadget products skip the per-call `to_eval` of the static
+/// key samples. **Bit-identical** to [`ring_switch`] (the NTT is exact).
+#[allow(non_camel_case_types)]
+pub fn ring_switch_eval<
+    const N1: usize,
+    const N2: usize,
+    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus> + RingPolyEval<N2>>,
+    const L: usize,
+    const D: usize,
+>(
+    ct: &RLWECiphertext<N1, R>,
+    rsk: &RingSwitchKeyEval<N1, N2, R::Projected<N2>, L, D>,
+    base: u64,
+) -> RLWECiphertext<N2, R::Projected<N2>> {
     let () = RingSwitchKey::<N1, N2, R::Projected<N2>, L, D>::_CHECK;
     let modulus = ct.mask.modulus();
     let body_proj_0 = ct.body.project_at::<N2>(0);

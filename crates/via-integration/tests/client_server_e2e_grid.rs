@@ -28,7 +28,7 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
-use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8};
+use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval};
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
@@ -158,7 +158,7 @@ fn run_query(h: &mut Harness, index: usize) -> (R4, R4) {
     let query = h.client.query(index, &mut h.prg).expect("client query");
     let answer = h
         .server
-        .answer::<R8, _>(&query, lwe_to_rlwe_n8::<DynModulus, L_CK>)
+        .answer::<R8, _>(&query, lwe_to_rlwe_n8_eval::<DynModulus, L_CK>)
         .expect("server answer");
     let recovered: R4 = h
         .client

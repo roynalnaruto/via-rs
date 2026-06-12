@@ -109,7 +109,9 @@ pub use gadget::{
 };
 pub use mlwe::MLWECiphertext;
 pub use rlwe::{decode, encode};
-pub use types::{ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
+pub use types::{
+    ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext, RLevCiphertext, RLevEval, SecretKey,
+};
 
 /// Backward-compatible re-export: `encryption::aliases` still resolves to the
 /// top-level [`crate::params`] module (relocated there so the paper-parameter

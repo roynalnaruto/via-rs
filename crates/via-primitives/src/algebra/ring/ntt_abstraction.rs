@@ -35,6 +35,8 @@
 
 use core::ops::{AddAssign, Mul};
 
+use zeroize::Zeroize;
+
 use super::element::Poly;
 use super::form::{Coefficient, Evaluation};
 use super::ntt::NttFriendly;
@@ -58,8 +60,12 @@ use crate::algebra::zq::modulus::{DynModulus, PowerOfTwoModulus};
 /// (both `O(N)` for the NTT backing). See the module docs for the two backings.
 pub trait RingPolyEval<const N: usize> {
     /// The evaluation-form image type. Pointwise `Mul` = ring mul; `AddAssign`
-    /// = ring add.
-    type Eval: Copy + AddAssign + Mul<Output = Self::Eval>;
+    /// = ring add. `Zeroize` so eval-form **key** material (e.g.
+    /// [`RLevEval`](crate::encryption::RLevEval), the pre-transformed static
+    /// keys) can be wiped on drop — the NTT image of a secret key is itself
+    /// secret. All backings satisfy it (`Poly`/`PolyRns` are `Zeroize` for every
+    /// form).
+    type Eval: Copy + AddAssign + Mul<Output = Self::Eval> + Zeroize;
 
     /// Coefficient form → evaluation form (forward NTT for NTT-friendly moduli;
     /// the identity otherwise). Consumes `self` (callers, which also bound

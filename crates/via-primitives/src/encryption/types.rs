@@ -12,7 +12,7 @@ use core::marker::PhantomData;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 
 // ---------------------------------------------------------------------------
 // SecretKey — §2.1
@@ -172,6 +172,53 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> Zeroize for RLevCiphertext<
 impl<const N: usize, R: RingPoly<N>, const L: usize> fmt::Debug for RLevCiphertext<N, R, L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RLevCiphertext")
+            .field("N", &N)
+            .field("L", &L)
+            .finish_non_exhaustive()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RLevEval — evaluation-form RLev key (T7 eval-key storage)
+// ---------------------------------------------------------------------------
+
+/// An RLev whose `L` samples are stored in **evaluation form** — each
+/// `(mask, body)` pre-transformed via the negacyclic NTT.
+///
+/// Derived once from a coefficient-form [`RLevCiphertext`] via
+/// [`RLevCiphertext::to_eval`](crate::encryption::RLevCiphertext::to_eval) so
+/// [`RLevEval::gadget_product`](crate::encryption::RLevEval::gadget_product) can
+/// skip the per-call `to_eval` of the (already-transformed) samples. This is the
+/// storage form for **static** keys — the conversion key, ring-switch key, and
+/// (T7 Phase B) the LWE→RLWE cascade keys — reused on every query.
+///
+/// `Copy` like [`RLevCiphertext`]. The NTT image of a secret key is itself
+/// secret, so it is `Zeroize`; owners that store it (e.g. `PreparedKeys`,
+/// [`RingSwitchKeyEval`](crate::switching::RingSwitchKeyEval)) are
+/// `ZeroizeOnDrop`.
+#[derive(Clone, Copy)]
+pub struct RLevEval<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> {
+    /// The `L` eval-form `(mask, body)` samples, MSB-first (same ordering as
+    /// [`RLevCiphertext::samples`]).
+    pub(crate) samples: [(R::Eval, R::Eval); L],
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> Zeroize
+    for RLevEval<N, R, L>
+{
+    fn zeroize(&mut self) {
+        for (mask, body) in &mut self.samples {
+            mask.zeroize();
+            body.zeroize();
+        }
+    }
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> fmt::Debug
+    for RLevEval<N, R, L>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RLevEval")
             .field("N", &N)
             .field("L", &L)
             .finish_non_exhaustive()

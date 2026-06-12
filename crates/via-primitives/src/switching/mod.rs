@@ -22,6 +22,6 @@ pub mod ring_switch;
 pub use kernels::RescaleConsts;
 pub use mod_switch::{mod_switch_asym, mod_switch_sym};
 pub use rekey::rekey_secret_key;
-pub use ring_switch::{RingSwitchKey, gen_rsk, ring_switch};
+pub use ring_switch::{RingSwitchKey, RingSwitchKeyEval, gen_rsk, ring_switch, ring_switch_eval};
 // Kernels are reachable via `switching::kernels::rekey::*` but intentionally
 // not re-exported here (the orchestrator is the public entry point).

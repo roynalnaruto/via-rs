@@ -21,7 +21,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
 };
 use via_primitives::params::{ViaCPolyP, ViaCPolyQ1Rns, ViaCPolyQ2, ViaCPolyQ3, ViaCPolyQ4};
 use via_primitives::sampling::distribution::Distribution;
@@ -131,7 +131,7 @@ fn round_trip(index: usize) -> (Rec, Rec) {
     // --- Query → Answer → Recover ----------------------------------------
     let query = client.query(index, &mut prg).expect("client query");
     let answer = server
-        .answer::<R3N1, _>(&query, lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>)
+        .answer::<R3N1, _>(&query, lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>)
         .expect("server answer");
     let recovered: Rec = client
         .recover::<R3N2, R4N2, Rec>(&answer, q3, q4, p)

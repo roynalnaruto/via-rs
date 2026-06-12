@@ -16,7 +16,9 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
-use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8};
+use via_primitives::conversion::{
+    CascadeKey, LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
+};
 use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext};
 use via_primitives::gates::{CRotDir, cmux_tree, crot, dmux_tree, mod_switch_rgsw};
 use via_primitives::sampling::distribution::Distribution;
@@ -25,7 +27,9 @@ use via_primitives::switching::gen_rsk;
 use via_primitives::switching::mod_switch::mod_switch_sym;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams};
-use via_server::{PreparedDb, answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
+use via_server::{
+    PreparedDb, PreparedKeys, answer_one_query, first_dim, query_decomp, resp_comp, setup_db,
+};
 
 // ── Toy params (mirror crates/via-integration/tests/client_server_e2e.rs) ──
 const N1: usize = 8;
@@ -164,7 +168,7 @@ fn build_fixture() -> Fixture {
 
 fn toy_benches(c: &mut Criterion) {
     let fx = build_fixture();
-    let cascade = lwe_to_rlwe_n8::<DynModulus, L_CK>;
+    let cascade = lwe_to_rlwe_n8_eval::<DynModulus, L_CK>;
     let b1 = fx.pp.params.gadget_base_1;
     let b2 = fx.pp.params.gadget_base_2;
     let b_rsk = fx.pp.params.gadget_base_rsk;
@@ -172,13 +176,20 @@ fn toy_benches(c: &mut Criterion) {
     // Toy: I=J=d=2 → one bit each.
     let (num_dmux, num_cmux, num_crot) = (1usize, 1usize, 1usize);
 
+    // T7: pre-transform the static keys once (the answer path does this at setup).
+    let conv_key_eval = fx.pp.query_comp_key.rlwe_to_rgsw_key.to_eval();
+    let cascade_eval = fx.pp.query_comp_key.lwe_to_rlwe_key.to_eval_boxed();
+    let rsk_eval = fx.pp.ring_switch_key.to_eval();
+    let prepared_keys = PreparedKeys::from_public_params(&fx.pp);
+
     // ── per-step "run" helpers: each = exactly what answer_one_query's
     // stepN debug_span scopes (used for both the untimed chain build and the
     // timed bench body). ──────────────────────────────────────────────────
     let run_qd = || {
-        query_decomp::<N1, R8, K, L_QUERY, L_CK, _>(
+        query_decomp::<N1, R8, _, L_QUERY, L_CK, _>(
             &fx.query.ciphertexts,
-            &fx.pp.query_comp_key,
+            &conv_key_eval,
+            &*cascade_eval,
             num_dmux,
             num_cmux,
             num_crot,
@@ -223,13 +234,7 @@ fn toy_benches(c: &mut Criterion) {
         crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
     };
     let run_resp_comp = |rotated: &RLWECiphertext<N1, R8>| {
-        resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(
-            rotated,
-            &fx.pp.ring_switch_key,
-            fx.q3,
-            fx.q4,
-            b_rsk,
-        )
+        resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(rotated, &rsk_eval, fx.q3, fx.q4, b_rsk)
     };
 
     // ── Build the chain ONCE (untimed) to obtain each step's input. ───────
@@ -316,6 +321,7 @@ fn toy_benches(c: &mut Criterion) {
                         &query,
                         &fx.pp,
                         &fx.prepared_db,
+                        &prepared_keys,
                         fx.q1,
                         fx.q2,
                         fx.q3,

@@ -32,7 +32,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64,
+    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64_eval,
     repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -180,7 +180,7 @@ fn run_batch(h: &mut Harness, idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
                 let keys_q2 = repack_keys_n64_t8_from_cascade_modswitched(k, q2);
                 repack_n64_t8(arr, &keys_q2, CK_BASE)
             },
-            lwe_to_rlwe_n64::<DynModulus, L_CK>,
+            lwe_to_rlwe_n64_eval::<DynModulus, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<R2> = h

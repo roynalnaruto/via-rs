@@ -10,9 +10,25 @@
 
 use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::MLWECiphertext;
-use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
+use crate::encryption::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
+
+/// A static LWE→RLWE cascade key that can be pre-transformed to its
+/// **evaluation-form mirror** once at setup (T7 eval-key storage). Implemented by
+/// every [`lwe_to_rlwe_cascade!`](crate::lwe_to_rlwe_cascade)-generated key, so the
+/// generic server can derive the eval key without naming the concrete preset.
+#[cfg(feature = "alloc")]
+pub trait CascadeKey {
+    /// The evaluation-form mirror (the macro-generated `*Eval` struct).
+    /// `Zeroize` — the NTT image of the cascade key is secret-derived.
+    type Eval: ::zeroize::Zeroize;
+    /// Transform every step key to eval form, **heap-built** (the paper key is
+    /// ~24.75 MB — never assembled on the stack; peak stack stays one `RLevEval`).
+    /// Deterministic (forward NTT, no PRG); the coeff key stays canonical for the
+    /// KAT-parity contract.
+    fn to_eval_boxed(&self) -> alloc::boxed::Box<Self::Eval>;
+}
 
 /// Compile-time degree/rank relationship for a single Conv₂ step:
 /// $\mathrm{RANK\_IN} = 2 \cdot \mathrm{RANK\_OUT}$ and
@@ -91,6 +107,41 @@ pub fn conv_step<
             let rlwe = RLWECiphertext::new(embedded, R_OUT::zero(modulus));
             let switched = step_keys[idx].key_switch(&rlwe, base);
             // REDUCE: accumulate into output slot j and the body.
+            result_masks[j] += switched.mask;
+            result_body += switched.body;
+        }
+    }
+    MLWECiphertext::new(result_masks, result_body)
+}
+
+/// Eval-key variant of [`conv_step`] (T7): the `RANK_IN` step keys are supplied
+/// **pre-transformed** ([`RLevEval`]), so each per-component `key_switch` skips
+/// the `2·L` sample transforms. Identical otherwise — the cascade's static step
+/// keys are transformed once at setup. **Bit-identical** output.
+#[allow(non_camel_case_types, clippy::needless_range_loop)]
+pub fn conv_step_eval<
+    const RANK_IN: usize,
+    const N_IN: usize,
+    const RANK_OUT: usize,
+    const N_OUT: usize,
+    R_IN: RingPoly<N_IN, Embedded<N_OUT> = R_OUT, Modulus = <R_OUT as RingPoly<N_OUT>>::Modulus>,
+    R_OUT: RingPoly<N_OUT> + RingPolyEval<N_OUT>,
+    const L: usize,
+>(
+    ct: &MLWECiphertext<RANK_IN, N_IN, R_IN>,
+    step_keys: &[RLevEval<N_OUT, R_OUT, L>; RANK_IN],
+    base: u64,
+) -> MLWECiphertext<RANK_OUT, N_OUT, R_OUT> {
+    let () = ConvDims::<RANK_IN, N_IN, RANK_OUT, N_OUT>::_CHECK;
+    let modulus = RingPoly::modulus(&ct.body);
+    let mut result_masks: [R_OUT; RANK_OUT] = core::array::from_fn(|_| R_OUT::zero(modulus));
+    let mut result_body = ct.body.embed_at::<N_OUT>(0);
+    for group in 0..2 {
+        for j in 0..RANK_OUT {
+            let idx = RANK_OUT * group + j;
+            let embedded = ct.masks[idx].embed_at::<N_OUT>(0);
+            let rlwe = RLWECiphertext::new(embedded, R_OUT::zero(modulus));
+            let switched = step_keys[idx].key_switch(&rlwe, base);
             result_masks[j] += switched.mask;
             result_body += switched.body;
         }

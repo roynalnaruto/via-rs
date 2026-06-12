@@ -15,7 +15,8 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    CascadeKey, LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed,
+    lwe_to_rlwe_rns_n2048_eval,
 };
 use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext};
 use via_primitives::gates::{CRotDir, cmux_tree, crot, dmux_tree, mod_switch_rgsw};
@@ -26,7 +27,9 @@ use via_primitives::switching::gen_rsk;
 use via_primitives::switching::mod_switch::mod_switch_sym;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams};
-use via_server::{PreparedDb, answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
+use via_server::{
+    PreparedDb, PreparedKeys, answer_one_query, first_dim, query_decomp, resp_comp, setup_db,
+};
 
 // ── Paper params (mirror crates/via-integration/tests/client_server_e2e_paper.rs) ──
 const N1: usize = 2048;
@@ -150,7 +153,7 @@ fn build_fixture() -> Fixture {
 
 fn paper_benches(c: &mut Criterion) {
     let fx = build_fixture();
-    let cascade = lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>;
+    let cascade = lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>;
     let b1 = fx.pp.params.gadget_base_1;
     let b2 = fx.pp.params.gadget_base_2;
     let b_rsk = fx.pp.params.gadget_base_rsk;
@@ -158,10 +161,17 @@ fn paper_benches(c: &mut Criterion) {
     // Paper: I=J=2 (1 bit each), d=4 (2 bits).
     let (num_dmux, num_cmux, num_crot) = (1usize, 1usize, 2usize);
 
+    // T7: the static keys are pre-transformed once (the answer path does this at setup).
+    let conv_key_eval = fx.pp.query_comp_key.rlwe_to_rgsw_key.to_eval();
+    let cascade_eval = fx.pp.query_comp_key.lwe_to_rlwe_key.to_eval_boxed();
+    let rsk_eval = fx.pp.ring_switch_key.to_eval();
+    let prepared_keys = PreparedKeys::from_public_params(&fx.pp);
+
     let run_qd = || {
-        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
+        query_decomp::<N1, R1, _, L_QUERY, L_CK, _>(
             &fx.query.ciphertexts,
-            &fx.pp.query_comp_key,
+            &conv_key_eval,
+            &*cascade_eval,
             num_dmux,
             num_cmux,
             num_crot,
@@ -207,11 +217,7 @@ fn paper_benches(c: &mut Criterion) {
     };
     let run_resp_comp = |rotated: &RLWECiphertext<N1, R2N1>| {
         resp_comp::<N1, N2, R2N1, R3N1, R3N2, R4N2, L_RSK, D>(
-            rotated,
-            &fx.pp.ring_switch_key,
-            fx.q3,
-            fx.q4,
-            b_rsk,
+            rotated, &rsk_eval, fx.q3, fx.q4, b_rsk,
         )
     };
 
@@ -315,6 +321,7 @@ fn paper_benches(c: &mut Criterion) {
                     &query,
                     &fx.pp,
                     &fx.prepared_db,
+                    &prepared_keys,
                     fx.q1,
                     fx.q2,
                     fx.q3,

@@ -34,6 +34,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
+use via_primitives::conversion::CascadeKey;
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext};
 use via_primitives::gates::{CRotDir, cmux_tree, crot, dmux_tree, mod_switch_rgsw};
@@ -43,6 +44,7 @@ use zeroize::Zeroize;
 
 use crate::first_dim::first_dim;
 use crate::prepared_db::PreparedDb;
+use crate::prepared_keys::PreparedKeys;
 use crate::query_decomp::query_decomp;
 use crate::resp_comp::resp_comp;
 
@@ -88,7 +90,7 @@ pub fn answer_through_crot<
     R1: RingPoly<N1> + RingPolyEval<N1>,
     R2: RingPoly<N1> + RingPolyEval<N1>,
     R3: RingPoly<N2> + RingPolyEval<N2>,
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
@@ -98,12 +100,14 @@ pub fn answer_through_crot<
     query: &CompressedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
     prepared_db: &PreparedDb<N1, R2>,
+    prepared_keys: &PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     cascade: CascadeFn,
 ) -> Result<RLWECiphertext<N1, R2>, ViaError>
 where
-    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    CascadeFn:
+        Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
 {
     const {
         assert!(N1 >= N_REC, "answer_through_crot: N1 must be >= N_REC");
@@ -162,9 +166,10 @@ where
 
     // --- Step 1: QueryDecomp — LWEs → 3 RGSW groups @ q1 ------------------
     let dq = tracing::debug_span!("step1_query_decomp").in_scope(|| {
-        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
+        query_decomp::<N1, R1, _, L_QUERY, L_CK, _>(
             &query.ciphertexts,
-            &pp.query_comp_key,
+            &prepared_keys.conv_key,
+            &*prepared_keys.cascade,
             num_dmux,
             num_cmux,
             num_crot,
@@ -293,7 +298,7 @@ pub fn answer_one_query<
     R3L: RingPoly<N1, Projected<N2> = R3>,
     R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
@@ -303,6 +308,7 @@ pub fn answer_one_query<
     query: &CompressedQuery<N1, 1, R1::Projected<1>>,
     pp: &PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
     prepared_db: &PreparedDb<N1, R2>,
+    prepared_keys: &PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3L::Modulus,
@@ -310,7 +316,8 @@ pub fn answer_one_query<
     cascade: CascadeFn,
 ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
 where
-    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    CascadeFn:
+        Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
 {
     // Parent span; the prefix's step spans nest under `answer_through_crot` and
     // step 7 nests directly here (held for the whole call, dropped on every
@@ -328,6 +335,7 @@ where
         query,
         pp,
         prepared_db,
+        prepared_keys,
         q1_mod,
         q2_mod,
         cascade,
@@ -337,7 +345,7 @@ where
     let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
         resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
             &rotated,
-            &pp.ring_switch_key,
+            &prepared_keys.rsk,
             q3_mod,
             q4_mod,
             pp.params.gadget_base_rsk,
@@ -369,7 +377,7 @@ where
 /// Answering branches only on public data (query ciphertexts, the cleartext
 /// database); see [`answer_one_query`].
 pub struct Server<
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const N1: usize,
     const N2: usize,
     // Record degree: VIA-C packs `N_REC = N2`; VIA-B the finer `N_REC = N3 ≤ N2`
@@ -386,6 +394,7 @@ pub struct Server<
 > {
     public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
     prepared_db: PreparedDb<N1, R2>,
+    prepared_keys: PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
     q3_mod: R3::Modulus,
@@ -393,7 +402,7 @@ pub struct Server<
 }
 
 impl<
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const N1: usize,
     const N2: usize,
     const N_REC: usize,
@@ -455,9 +464,12 @@ impl<
         );
         // Pre-transform to eval form at q2 (the `p→q2` lift + forward NTT), once.
         let prepared_db = PreparedDb::<N1, R2>::from_encoded(&encoded_db, q2_mod);
+        // Pre-transform the static answer keys (conv key + RSK) to eval form, once (T7).
+        let prepared_keys = PreparedKeys::from_public_params(&public_params);
         Self {
             public_params,
             prepared_db,
+            prepared_keys,
             q1_mod,
             q2_mod,
             q3_mod,
@@ -478,12 +490,14 @@ impl<
     ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
     where
         R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
-        CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+        CascadeFn:
+            Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
     {
         answer_one_query::<N1, N2, R1, R2, R3L, R3, R4, K, L_QUERY, L_CK, L_RSK, D, CascadeFn>(
             query,
             &self.public_params,
             &self.prepared_db,
+            &self.prepared_keys,
             self.q1_mod,
             self.q2_mod,
             self.q3_mod,
@@ -509,7 +523,8 @@ impl<
     where
         R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
         RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
-        CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+        CascadeFn:
+            Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
     {
         crate::batch::answer_batch::<
             N1,
@@ -532,6 +547,7 @@ impl<
             batch,
             &self.public_params,
             &self.prepared_db,
+            &self.prepared_keys,
             self.q1_mod,
             self.q2_mod,
             self.q3_mod,
@@ -548,7 +564,7 @@ impl<
 /// varies; `ViaCServer<K, N1, N2, …>` ≡ `Server<K, N1, N2, N2, …>`.
 #[allow(type_alias_bounds)]
 pub type ViaCServer<
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const N1: usize,
     const N2: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
@@ -568,7 +584,7 @@ pub type ViaCServer<
 #[cfg(feature = "via-b")]
 #[allow(type_alias_bounds)]
 pub type ViaBServer<
-    K: Zeroize,
+    K: Zeroize + CascadeKey,
     const N1: usize,
     const N2: usize,
     const N3: usize,
@@ -589,7 +605,7 @@ mod tests {
     use via_primitives::algebra::ring::form::Coefficient;
     use via_primitives::algebra::zq::modulus::DynModulus;
     use via_primitives::conversion::{
-        LweToRlweKeyN8, encrypt_lwe_raw, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+        LweToRlweKeyN8, encrypt_lwe_raw, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
     };
     use via_primitives::encryption::types::SecretKey;
     use via_primitives::gates::gen_rlwe_to_rgsw_key;
@@ -621,6 +637,7 @@ mod tests {
     ) -> (
         PublicParams<Cascade, N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>,
         PreparedDb<N1, R8>,
+        PreparedKeys<N1, N2, R8, R4, Cascade, L_CK, L_RSK, D>,
         SecretKey<N1, R8>,
         SecretKey<N2, R4>,
         DynModulus,
@@ -690,7 +707,8 @@ mod tests {
         let encoded_db =
             crate::setup_db::setup_db::<N1, N2, R8, R4>(records, num_rows, num_cols, p);
         let prepared_db = PreparedDb::<N1, R8>::from_encoded(&encoded_db, q2);
-        (pp, prepared_db, s1, s2, q1, q2, q3, q4, p)
+        let prepared_keys = PreparedKeys::from_public_params(&pp);
+        (pp, prepared_db, prepared_keys, s1, s2, q1, q2, q3, q4, p)
     }
 
     /// Build a length-`n` all-zero query (gadget-level LWEs of bit 0).
@@ -718,7 +736,7 @@ mod tests {
         let mut records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
         records[0] = Poly::new(DynModulus::new(16), [1, 2, 3, 4]);
 
-        let (pp, db, s1, s2, q1, q2, q3, q4, p) = toy_setup(2, 2, &records, &mut prg);
+        let (pp, db, pk, s1, s2, q1, q2, q3, q4, p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let answer =
@@ -726,11 +744,12 @@ mod tests {
                 &query,
                 &pp,
                 &db,
+                &pk,
                 q1,
                 q2,
                 q3,
                 q4,
-                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
             )
             .expect("pipeline must produce an answer");
 
@@ -746,7 +765,7 @@ mod tests {
     fn answer_one_query_rejects_wrong_query_length() {
         let mut prg = Shake256Prg::new(b"answer-bad-len");
         let records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
-        let (pp, db, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let (pp, db, pk, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 5, &mut prg); // expected 3·2 = 6
 
         let err =
@@ -754,11 +773,12 @@ mod tests {
                 &query,
                 &pp,
                 &db,
+                &pk,
                 q1,
                 q2,
                 q3,
                 q4,
-                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
             )
             .unwrap_err();
         assert_eq!(
@@ -776,7 +796,7 @@ mod tests {
         let mut prg = Shake256Prg::new(b"answer-bad-dims");
         let records = alloc::vec![R4::zero(DynModulus::new(16)); 12];
         // 3 rows × 2 cols — 3 is not a power of two.
-        let (pp, db, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(3, 2, &records, &mut prg);
+        let (pp, db, pk, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(3, 2, &records, &mut prg);
         let query = zero_query(&s1, 6, &mut prg);
 
         let err =
@@ -784,11 +804,12 @@ mod tests {
                 &query,
                 &pp,
                 &db,
+                &pk,
                 q1,
                 q2,
                 q3,
                 q4,
-                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
             )
             .unwrap_err();
         assert!(matches!(err, ViaError::DimMismatch(_)));
@@ -802,7 +823,7 @@ mod tests {
         let mut prg = Shake256Prg::new(b"atc-nrec-n2");
         let mut records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
         records[0] = Poly::new(DynModulus::new(16), [1, 2, 3, 4]);
-        let (pp, db, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let (pp, db, pk, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let rotated =
@@ -810,9 +831,10 @@ mod tests {
                 &query,
                 &pp,
                 &db,
+                &pk,
                 q1,
                 q2,
-                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
             )
             .expect("answer_through_crot must return Ok(RLWECiphertext)");
         // Returns an RLWE @ q2 over R8 (n1); shape only — value is the e2e gate's job.
@@ -828,7 +850,7 @@ mod tests {
     fn answer_through_crot_nrec_smaller_requests_more_crot_bits() {
         let mut prg = Shake256Prg::new(b"atc-nrec-smaller");
         let records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
-        let (pp, db, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let (pp, db, pk, s1, _s2, q1, q2, _q3, _q4, _p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let err =
@@ -836,9 +858,10 @@ mod tests {
                 &query,
                 &pp,
                 &db,
+                &pk,
                 q1,
                 q2,
-                lwe_to_rlwe_n8::<DynModulus, L_CK>,
+                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
             )
             .unwrap_err();
 
@@ -866,7 +889,7 @@ mod tests {
         const T: usize = 2;
         let mut prg = Shake256Prg::new(b"answer-batch-len");
         let records = alloc::vec![R4::zero(DynModulus::new(16)); 8];
-        let (pp, db, _s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
+        let (pp, db, pk, _s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
 
         // T=2 inner queries, each empty (wrong length → QueryLengthMismatch).
         let batch = BatchedQuery::new(alloc::vec![
@@ -895,6 +918,7 @@ mod tests {
             &batch,
             &pp,
             &db,
+            &pk,
             q1,
             q2,
             q3,
@@ -903,7 +927,7 @@ mod tests {
                 let arr: &[_; T] = rotateds.try_into().unwrap();
                 repack_n8_t2(arr, &repack_keys_n8_t2_from_cascade(k), 8u64)
             },
-            lwe_to_rlwe_n8::<DynModulus, L_CK>,
+            lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
         )
         .unwrap_err();
         assert!(
