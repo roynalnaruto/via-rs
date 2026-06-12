@@ -17,10 +17,12 @@ non-collusion assumption. VIA's distinctive moves are a logarithmic-depth
 conversion** for query compression. See the [intro](https://0xalizk.github.io/via-rs/intro.html)
 for how and why it works.
 
-**Status:** the **VIA-C** variant is implemented end-to-end; plain VIA and the
-batch variant VIA-B are not yet implemented. The crypto core is the focus (no
-HTTP/transport layer). See the [implementation analysis](https://0xalizk.github.io/via-rs/implementation.html)
-for what is and isn't covered, and known parameter/correctness caveats.
+**Status:** **VIA-C** and **VIA-B** (the batch variant) are implemented
+end-to-end; plain VIA is not yet implemented. VIA-B lives behind the `via-b`
+cargo feature (see [Build & test](#build--test)). The crypto core is the focus
+(no HTTP/transport layer). See the [implementation analysis](https://0xalizk.github.io/via-rs/implementation.html)
+for what is and isn't covered, and known parameter/correctness caveats — note
+that analysis predates the VIA-B merge and currently covers VIA-C.
 
 ## Codebase layout
 
@@ -48,13 +50,17 @@ git clone https://github.com/0xalizk/via-rs && cd via-rs
 
 # Test (toy parameters — runs by default, fast)
 cargo test --workspace            # or: just test
+
+# VIA-B (batch) lives behind a feature; its tests need it enabled
+cargo test -p via-integration --features via-b
 ```
 
-The heavy **paper-scale** end-to-end test (n=2048 RNS pipeline) is `#[ignore]`d
-because it is slow in debug; run it in release:
+The heavy **paper-scale** end-to-end tests (n=2048 RNS pipeline) are `#[ignore]`d
+because they are slow in debug; run them in release:
 
 ```sh
 cargo test --release -p via-integration --test client_server_e2e_paper -- --ignored
+cargo test --release -p via-integration --features via-b --test batch_e2e_paper -- --ignored
 ```
 
 Other common workflows:
