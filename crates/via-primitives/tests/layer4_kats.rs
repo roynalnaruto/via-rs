@@ -1,7 +1,7 @@
-//! Cross-language KAT parity for Layer-4 homomorphic gates (§4.1–§4.7).
+//! Cross-language KAT parity for the homomorphic gates.
 //!
 //! Each test reproduces — in Rust, with the same seed and PRG draw order — a
-//! setup that `.references/via-spec/scripts/gen_layer4_kats.py` ran in Python,
+//! setup that the reference implementation ran,
 //! then asserts byte-for-byte equality against the generated `data::*`
 //! constants. `kat_crot_forward` / `kat_crot_slot_extract` (plus the data-level
 //! `kat_crot_directions_differ`) are the direction-locking tests: identical key
@@ -26,7 +26,7 @@ mod data {
     include!("data/layer4_kats.rs");
 }
 
-// TOY parameters, matching gen_layer4_kats.py.
+// TOY parameters, matching the reference generator.
 const N: usize = 64;
 const Q: u64 = 65537;
 const P: u64 = 2;

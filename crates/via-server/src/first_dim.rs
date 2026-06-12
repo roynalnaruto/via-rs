@@ -1,4 +1,4 @@
-//! §6.4 FirstDim — the plaintext×ciphertext inner product (Answer step 4).
+//! FirstDim — the plaintext×ciphertext inner product (Answer step 4).
 //!
 //! For each column `j ∈ [J]`:  `c_j = Σ_{i∈[I]} c_i · db[i][j]`, where `c_i` is
 //! the mod-switched RLWE of row `i` (already at `q2`) and `db[i][j]` is the
@@ -16,8 +16,6 @@
 //! transforms are the identity, and the pointwise `Mul` degenerates to the
 //! existing schoolbook `negacyclic_mul_slice` — same result, same cost. A future
 //! *batched* GPU FirstDim would wrap this whole function.
-//!
-//! `paper:via_c/server.py:174-186`
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
@@ -58,8 +56,6 @@ use crate::prepared_db::PreparedDb;
 ///
 /// Operates on RLWE-uniform ciphertext and public database coefficients; no
 /// secret data is branched on.
-///
-/// `paper:via_c/server.py:174-186`
 pub fn first_dim<const N1: usize, R2>(
     switched: &[RLWECiphertext<N1, R2>],
     prepared: &PreparedDb<N1, R2>,

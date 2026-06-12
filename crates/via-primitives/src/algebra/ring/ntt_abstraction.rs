@@ -1,4 +1,4 @@
-//! Evaluation-form multiply interface — `.docs/primitives.md` §0.4.
+//! Evaluation-form multiply interface.
 //!
 //! [`RingPolyEval`] is the form-neutral interface a caller needs to run a
 //! sequence of ring multiplications through an evaluation form: convert the
@@ -18,8 +18,8 @@
 //!   bijection, pointwise `Mul` on it **is** ring multiplication and `AddAssign`
 //!   is ring addition, so a length-`L` multiply-accumulate costs `O(N log N)`
 //!   transforms + `O(N)` pointwise muls instead of `O(N²)` schoolbook muls. This
-//!   is the paper coefficient moduli ($q_1$ RNS, $q_2$, $q_3$).
-//! - **Non-NTT moduli** ([`DynModulus`], [`PowerOfTwoModulus`] — the paper
+//!   is the coefficient moduli ($q_1$ RNS, $q_2$, $q_3$).
+//! - **Non-NTT moduli** ([`DynModulus`], [`PowerOfTwoModulus`] — the
 //!   $q_4$/$p$, runtime-parsed params, and toy test params): there is no NTT, so
 //!   `Eval = Self` (the coefficient form), `to_eval`/`from_eval` are the
 //!   **identity**, and "pointwise `Mul`" is just the existing **schoolbook**

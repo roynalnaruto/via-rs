@@ -1,4 +1,4 @@
-//! §6.1 QueryDecomp — decompress a compressed query into the RGSW groups that
+//! QueryDecomp — decompress a compressed query into the RGSW groups that
 //! drive DMux / CMux / CRot.
 //!
 //! For each of `total_bits = log₂I + log₂J + log₂d` query bits, the `L_QUERY`
@@ -7,8 +7,6 @@
 //!   then `rlwe_to_rgsw` → one RGSW @ q1.
 //! The RGSW are sliced into the dmux / cmux / crot groups. All bits stay at q1;
 //! the caller (`answer_one_query`) mod-switches the cmux/crot bits to q2.
-//!
-//! `paper:primitives/query_comp.py:263-353`, `via_c/server.py:136-142`
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
@@ -37,8 +35,6 @@ use via_protocol::DecompressedQuery;
 ///
 /// Operates on the (public) compressed query and conversion keys; no
 /// secret-dependent branching. Timing varies only on the public modulus/depth.
-///
-/// `paper:primitives/query_comp.py:263-353`
 #[allow(clippy::too_many_arguments)]
 pub fn query_decomp<
     const N1: usize,

@@ -1,4 +1,4 @@
-//! MLWE ciphertext type — `.docs/primitives.md §2.1`.
+//! MLWE ciphertext type.
 //!
 //! `MLWECiphertext<RANK, N, R>` is the rank-$m$ generalisation of RLWE:
 //!
@@ -6,13 +6,12 @@
 //! - `RANK = N` with a degree-1 polynomial ring corresponds to **LWE** —
 //!   each "mask polynomial" holds a single scalar. This case is realised
 //!   by instantiating `R` at `N = 1`, but currently the polynomial backends
-//!   require `N >= 2` (see `Poly::_CHECK`); the LWE path will be unlocked
-//!   once Layer 5 needs it.
+//!   require `N >= 2` (see `Poly::_CHECK`); the LWE path is unlocked by
+//!   the conversion cascade in [`crate::conversion`].
 //!
-//! Layer 2 here defines only the type, its constructors, and `Zeroize` /
-//! `Debug` impls. Operations on MLWEs (the §2.2.5 polynomial-times-MLWE
-//! mul) land in Phase 4 of the Layer-2 plan, and the full LWE-to-RLWE
-//! cascade in Layer 5.
+//! This file defines only the type, its constructors, and `Zeroize` /
+//! `Debug` impls. The polynomial-times-MLWE multiplication is the `Mul<R>`
+//! impl below; the full LWE-to-RLWE cascade lives in [`crate::conversion`].
 
 use core::fmt;
 
@@ -59,11 +58,11 @@ impl<const RANK: usize, const N: usize, R: RingPoly<N>> fmt::Debug for MLWECiphe
 }
 
 // ---------------------------------------------------------------------------
-// Polynomial × MLWE multiplication — §2.2.5.
+// Polynomial × MLWE multiplication.
 //
-// "Polynomial × MLWE multiplication. Same idea [as plaintext × RLWE],
+// Same idea as plaintext × RLWE,
 // componentwise on every mask and on the body. Useful for symbolic
-// manipulations like multiplying an MLWE by `X^k` during `Extr` (§5.5)."
+// manipulations like multiplying an MLWE by `X^k` during `Extr`.
 // ---------------------------------------------------------------------------
 
 impl<const RANK: usize, const N: usize, R: RingPoly<N>> core::ops::Mul<R>
@@ -73,7 +72,7 @@ impl<const RANK: usize, const N: usize, R: RingPoly<N>> core::ops::Mul<R>
 
     /// $\text{ct} \cdot f = ((f \cdot A_0, \ldots, f \cdot A_{m-1}),
     /// \; f \cdot B)$ — componentwise polynomial multiplication on every
-    /// mask and on the body. Decrypts (once the §5 cascade machinery
+    /// mask and on the body. Decrypts (once the cascade machinery
     /// exists) to $f \cdot M \bmod p$.
     ///
     /// As with [`RLWECiphertext`'s polynomial-times-ciphertext
@@ -117,10 +116,9 @@ mod tests {
         ct.zeroize();
     }
 
-    /// Phase-4 §2.2.5 polynomial-times-MLWE: every mask becomes `f · mask_i`
-    /// and the body becomes `f · body`. Tested structurally because Phase 2
-    /// gives MLWE no decryption path; that lands when Layer 5's cascade
-    /// arrives.
+    /// Polynomial-times-MLWE: every mask becomes `f · mask_i`
+    /// and the body becomes `f · body`. Tested structurally (no decryption
+    /// path for MLWE in isolation; that requires the conversion cascade).
     #[test]
     fn mlwe_mul_polynomial_is_componentwise() {
         let m = ConstModulus::<17>;

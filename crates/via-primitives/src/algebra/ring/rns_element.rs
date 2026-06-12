@@ -1,15 +1,15 @@
 //! RNS polynomial wrapper [`PolyRns<N, B, F>`].
 //!
-//! [`PolyRns`] is the §0.3 analogue of [`crate::algebra::rns::element::RnsZq`]
+//! [`PolyRns`] is the analogue of [`crate::algebra::rns::element::RnsZq`]
 //! at the polynomial scale: two parallel `[u64; N]` lane buffers — one per
 //! RNS slot of the basis $B$ — paired with the basis context and the
 //! typestate marker `F: Form`. Used when the modulus is composite, which
-//! at paper params means **only $q_1$** for VIA / VIA-C / VIA-B.
+//! at realistic params means **only $q_1$** for VIA / VIA-C / VIA-B.
 //!
 //! Storage is SoA (struct-of-arrays): one contiguous `[u64; N]` per prime
 //! slot, side-by-side. This matches the layout `crate::algebra::rns::ops`
 //! and `super::rns_ops` consume — each kernel calls into its single-prime
-//! counterpart twice — and lines up naturally with per-prime NTT (§0.4).
+//! counterpart twice — and lines up naturally with per-prime NTT.
 //!
 //! All invariants (and the form-neutral `values0` / `values1` field naming)
 //! mirror [`super::element::Poly`].
@@ -58,7 +58,7 @@ pub struct PolyRns<const N: usize, B: RnsBasis, F: Form> {
 
 impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
     // $N = 1$ realises $R_{1, Q} \cong \mathbb{Z}_Q$ — the LWE-form component
-    // ring of an $(n, 1)$-MLWE at the composite $q_1$ (§5.1), coefficient-form
+    // ring of an $(n, 1)$-MLWE at the composite $q_1$, coefficient-form
     // only (the NTT path is gated separately by `NttFriendly<N>`, $N \ge 2$).
     const _CHECK: () = {
         assert!(N >= 1, "PolyRns: N >= 1");
@@ -185,11 +185,10 @@ impl<const N: usize, B: RnsBasis, F: Form> PolyRns<N, B, F> {
     /// for each coefficient index $i$ in turn we draw from slot 0 then
     /// slot 1. The alternative — slot-major (`m0[0..N]` then
     /// `m1[0..N]`) — would produce a different SHAKE-256 byte
-    /// alignment, so this order is part of the cross-language
-    /// reproducibility contract (`.docs/primitives.md` §1.1). Pin
-    /// this convention when the §1.1 SHAKE-256 PRG lands; deviating
-    /// from it will silently desynchronise test vectors against the
-    /// Python reference.
+    /// alignment, so this order is part of the
+    /// SHAKE-256 PRG reproducibility contract. Pin
+    /// this convention when the SHAKE-256 PRG lands; deviating
+    /// from it will silently desynchronise test vectors.
     ///
     /// # Evaluation form on non-NTT-friendly bases
     ///
@@ -272,7 +271,7 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
     /// Inherits the same constraint as the single-prime
     /// [`super::element::Poly::mul_x_pow`]: `k` is a **public**
     /// parameter and the implementation branches on it. Encrypted-
-    /// exponent rotation belongs to the §4.4 `CRot` composite; this
+    /// exponent rotation belongs to the `CRot` composite; this
     /// kernel is the building block, not the protocol-facing entry
     /// point.
     pub fn mul_x_pow(&self, k: usize) -> Self {
@@ -292,7 +291,7 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
 
     /// Lift every coefficient to its centred representation
     /// $\tilde c_i \in (-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$ in
-    /// `i128` — see §0.6 RNS variant. **Not constant-time** over the
+    /// `i128` — RNS centred-lift variant. **Not constant-time** over the
     /// input values; for secret-data inputs use
     /// [`Self::to_centered_coeffs_ct`].
     pub fn to_centered_coeffs(&self, dst: &mut [i128; N]) {
@@ -300,7 +299,7 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
     }
 
     /// Constant-time variant of [`Self::to_centered_coeffs`]. Use when
-    /// the polynomial is a secret (e.g. §3.4 secret-key rekeying, RNS
+    /// the polynomial is a secret (e.g. secret-key rekeying, RNS
     /// variant).
     pub fn to_centered_coeffs_ct(&self, dst: &mut [i128; N]) {
         rns_ops::to_centered_i128_ct_slice(self.basis, dst, &self.values0, &self.values1);
@@ -314,8 +313,8 @@ where
     B::M0: NttFriendly<N>,
     B::M1: NttFriendly<N>,
 {
-    /// Convert to evaluation form via per-slot forward negacyclic NTT
-    /// (§0.4). Each slot is transformed independently. The eval-form
+    /// Convert to evaluation form via per-slot forward negacyclic NTT.
+    /// Each slot is transformed independently. The eval-form
     /// buffer is in **bit-reversed** order — see
     /// [`super::element::Poly::into_eval`].
     ///
@@ -328,8 +327,7 @@ where
     /// ring-switch key sample, or any intermediate carrying
     /// coefficient statistics of $S_1$) must be routed through a
     /// `_zeroizing` wrapper rather than this method directly.
-    /// Current call sites are non-secret; the wrapper lands with
-    /// §2.1 / §3.3.
+    /// Current call sites are non-secret.
     #[inline]
     pub fn into_eval(self) -> PolyRns<N, B, Evaluation> {
         let mut b0 = self.values0;
@@ -342,7 +340,7 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// §0.5 ring embedding / projection — RNS, coefficient-form only.
+// ring embedding / projection — RNS, coefficient-form only.
 // ---------------------------------------------------------------------------
 
 /// Single-slot embed, single-slot project, $d$-fold pack, $d$-fold
@@ -453,7 +451,7 @@ impl<const N: usize, B: RnsBasis> PolyRns<N, B, Coefficient> {
         // Direct scatter onto both RNS rails: `packed_k[d*i + j] =
         // slots[j].values_k[i]` for $k \in \{0, 1\}$. Inlining the
         // permutation removes the two `[u64; N_LARGE]` concatenation
-        // scratch buffers (32 KiB at paper $N_\mathrm{large} = 2048$).
+        // scratch buffers (32 KiB at paper-scale $N_\mathrm{large} = 2048$).
         let mut packed0 = [0u64; N_LARGE];
         let mut packed1 = [0u64; N_LARGE];
         for (j, slot_poly) in slots.iter().enumerate() {
@@ -554,7 +552,7 @@ where
     B::M0: NttFriendly<N>,
     B::M1: NttFriendly<N>,
 {
-    /// Convert back to coefficient form via per-slot inverse NTT (§0.4).
+    /// Convert back to coefficient form via per-slot inverse NTT.
     /// Consumes bit-reversed eval-form input per slot; produces
     /// natural-coefficient output per slot.
     ///
@@ -564,8 +562,8 @@ where
     /// [`PolyRns::<N, B, Coefficient>::into_eval`]: `self` is
     /// consumed by value and neither slot's source buffer is
     /// guaranteed zeroed after the move. Wrap secret-bearing
-    /// inputs through a `_zeroizing` variant when those types land
-    /// at §2.1 / §3.3; non-secret current call sites use this
+    /// inputs through a `_zeroizing` variant when those types land;
+    /// non-secret current call sites use this
     /// method directly.
     #[inline]
     pub fn into_coeff(self) -> PolyRns<N, B, Coefficient> {
@@ -1025,7 +1023,7 @@ mod tests {
 
     #[test]
     fn rns_poly_negacyclic_mul_at_paper_basis() {
-        // Same shape, but at the paper q_1 RNS (≈ 2^57). Reference is u128
+        // Same shape, but at the q_1 RNS (≈ 2^57). Reference is u128
         // schoolbook; inputs are small to keep products well below 2^126.
         let b = paper::ViaQ1Rns::default();
         let f_u: [u128; 4] = [1234, 5678, 9012, 3456];
@@ -1188,9 +1186,9 @@ mod tests {
         }
     }
 
-    /// NTT round-trip identity on `PolyRns` at the VIA q_1 paper basis,
+    /// NTT round-trip identity on `PolyRns` at the VIA q_1 basis,
     /// small $N = 4$. Both RNS slot primes are NTT-friendly at $N = 2048$
-    /// per paper §A.1 (and hence at any $N$ dividing that), so $N = 4$
+    /// (and hence at any $N$ dividing that), so $N = 4$
     /// works.
     #[test]
     fn rns_ntt_roundtrip_at_paper_q1_small_n() {
@@ -1263,7 +1261,7 @@ mod tests {
         }
     }
 
-    /// Round-trip at paper $N = 2048$, VIA-C q_1 RNS basis. Locks the
+    /// Round-trip at $N = 2048$, VIA-C q_1 RNS basis. Locks the
     /// realistic-size code path through both RNS slots.
     #[test]
     fn rns_ntt_roundtrip_at_paper_via_c_q1_n2048() {
@@ -1278,7 +1276,7 @@ mod tests {
         assert_eq!(back, p);
     }
 
-    // ----- §0.5 RNS ring embedding / projection tests -----
+    // ----- RNS ring embedding / projection tests -----
 
     /// Round-trip $\pi_j \circ \iota_j = \mathrm{id}$ on `PolyRns`, every slot.
     #[test]
@@ -1351,7 +1349,7 @@ mod tests {
         }
     }
 
-    // ----- §0.6 RNS centred-coeffs tests -----
+    // ----- RNS centred-coeffs tests -----
 
     /// Zero polynomial centred-lifts to all-zeros.
     #[test]
@@ -1395,7 +1393,7 @@ mod tests {
         assert_eq!(non_ct, ct);
     }
 
-    /// Round-trip identity at paper VIA-C q_1 basis ($Q \approx 2^{75}$):
+    /// Round-trip identity at VIA-C q_1 basis ($Q \approx 2^{75}$):
     /// `to_centered_coeffs` then `from_u128_array((c + Q) as u128 % Q)`
     /// recovers the original polynomial.
     #[test]
@@ -1418,7 +1416,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // N = 1 audit (§5 LWE form at the composite q1): R_{1,Q} ≅ Z_Q,
+    // N = 1 audit (LWE form at composite q1): R_{1,Q} ≅ Z_Q,
     // coefficient-form only. Q = 5·11 = 55 here.
     // -----------------------------------------------------------------------
 

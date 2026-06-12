@@ -1,14 +1,12 @@
-//! §7 — the VIA-B batch answer pipeline ([`answer_batch`]).
+//! The VIA-B batch answer pipeline ([`answer_batch`]).
 //!
 //! VIA-B answers a batch of `T` queries by running the variant-common prefix
 //! [`answer_through_crot`] (steps 1–6) once per query, **repacking** the `T`
-//! CRot outputs into a single ciphertext (the one new VIA-B step, §3.4), and
+//! CRot outputs into a single ciphertext (the one new VIA-B step), and
 //! then running [`resp_comp`] (step 7) exactly once. So the per-query cost is the
 //! VIA-C prefix and only the cheap tail is shared — `T` records for ~one answer.
 //!
 //! Gated `#[cfg(feature = "via-b")]` at the [`crate`] re-export boundary.
-//!
-//! `paper:via.pdf §4.5–4.7 (VIA-B answer)`
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
@@ -27,8 +25,8 @@ use crate::resp_comp::resp_comp;
 ///
 /// 1. [`answer_through_crot`] × `T` (steps 1–6 at record degree `N3`) → `T`
 ///    `RLWECiphertext<N1, R2>` @ q2.
-/// 2. `Repack_{N2}` the `T` rotateds into one `RLWECiphertext<N1, R2>` (§3.4),
-///    via the injected `repack` closure.
+/// 2. `Repack_{N2}` the `T` rotateds into one `RLWECiphertext<N1, R2>` (the
+///    VIA-B repacking step), via the injected `repack` closure.
 /// 3. [`resp_comp`] once → `ModSwitchedCiphertext<N2, R3, R4>`.
 ///
 /// # Why `repack` is injected (not a generic call)
@@ -39,13 +37,15 @@ use crate::resp_comp::resp_comp;
 /// engine cannot field-access those keys. The caller therefore injects a closure
 /// that bakes in the preset + base, e.g.
 /// `|rotateds, k| repack_n64_t8(rotateds.try_into().unwrap(), &repack_keys_n64_t8_from_cascade(k), base)`
-/// — exactly the `cascade: CascadeFn` injection [`answer_one_query`] already uses.
-/// Its `&K` is `&pp.query_comp_key.lwe_to_rlwe_key` (the §3.5 key reuse: the
+/// — exactly the `cascade: CascadeFn` injection
+/// [`answer_one_query`](crate::answer::answer_one_query) already uses.
+/// Its `&K` is `&pp.query_comp_key.lwe_to_rlwe_key` (the cascade-key reuse: the
 /// repack borrows the query-compression cascade key — no new offline payload).
 ///
 /// # Type parameters
 ///
-/// As [`answer_one_query`] plus `N3` (record degree, = the server's `N_REC`) and
+/// As [`answer_one_query`](crate::answer::answer_one_query) plus `N3` (record
+/// degree, = the server's `N_REC`) and
 /// `T` (batch count). `RepackFn`/`CascadeFn` are the two injected operations.
 ///
 /// # Errors
@@ -63,9 +63,7 @@ use crate::resp_comp::resp_comp;
 /// # Constant-time: No
 ///
 /// Branches only on public data (query ciphertexts, the cleartext database); see
-/// [`answer_one_query`].
-///
-/// `paper:via.pdf §4.5–4.7`
+/// [`answer_one_query`](crate::answer::answer_one_query).
 #[allow(
     non_camel_case_types,
     clippy::too_many_arguments,
@@ -145,7 +143,7 @@ where
         rotated.push(ct);
     }
 
-    // --- Repack_{N2}: the one new VIA-B step (§3.4), reusing the cascade key --
+    // --- Repack_{N2}: the one new VIA-B step, reusing the cascade key --
     let cascade_key: &K = &pp.query_comp_key.lwe_to_rlwe_key;
     let repacked = tracing::debug_span!("step_repack").in_scope(|| repack(&rotated, cascade_key));
 

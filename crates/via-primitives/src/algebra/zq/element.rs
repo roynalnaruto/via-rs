@@ -55,7 +55,7 @@ impl<M: Modulus> Zq<M> {
     /// Construct a [`Zq`] from a signed `i64`, lifting into $[0, q)$.
     ///
     /// Useful for samplers that produce signed integers (ternary, bounded
-    /// uniform, discrete Gaussian — see §1.3-1.5).
+    /// uniform, discrete Gaussian).
     #[inline(always)]
     pub fn from_i64(modulus: M, value: i64) -> Self {
         let reduced = modulus.reduce_i64(value);
@@ -116,7 +116,7 @@ impl<M: Modulus> Zq<M> {
     }
 
     /// Constant-time variant of [`Self::to_centered_i64`]. Use this
-    /// when the underlying value is secret (e.g. §3.4 secret-key
+    /// when the underlying value is secret (e.g. secret-key
     /// rekeying); see [`Modulus::to_centered_i64_ct`] for details.
     #[inline(always)]
     pub fn to_centered_i64_ct(self) -> i64 {
@@ -136,13 +136,13 @@ impl<M: Modulus> Zq<M> {
     ///
     /// # Cross-language parity
     ///
-    /// This is the byte-for-byte counterpart of Python's `randbelow(q)` and of
+    /// This is the byte-for-byte counterpart of `randbelow(q)` and of
     /// [`crate::sampling::prg::Shake256Prg::uniform_below`]: it uses
     /// `q.bit_length()` (i.e. `64 - q.leading_zeros()`, **not** `q - 1`) and
     /// consumes exactly `nbytes` bytes per attempt, with the high bytes held at
     /// zero across rejections. Any deviation (reading a fixed 8 bytes, or
     /// masking with `bitlen(q-1)`) would desynchronise the SHAKE-256 stream and
-    /// break the §1.1 reproducibility contract for every ciphertext mask `A`.
+    /// break the PRG reproducibility contract for every ciphertext mask `A`.
     ///
     /// # Constant-time
     ///
@@ -152,7 +152,7 @@ impl<M: Modulus> Zq<M> {
     pub fn random<R: RngCore + ?Sized>(modulus: M, rng: &mut R) -> Self {
         let q = modulus.q();
         debug_assert!(q >= 2, "Zq::random requires q >= 2");
-        // `bitlen(q)` to match Python `randbelow(q)` (bound, not bound - 1).
+        // `bitlen(q)` to match `randbelow(q)` (bound, not bound - 1).
         let bits = 64 - q.leading_zeros();
         let nbytes = bits.div_ceil(8) as usize;
         let mask = if bits == 64 {
@@ -212,7 +212,7 @@ impl<M: Modulus> Mul<u64> for Zq<M> {
     /// Multiply by an arbitrary `u64` scalar (does not require pre-reduction).
     ///
     /// Performed as a single `u128` reduction: `value * scalar < q * 2^64 < 2^128`
-    /// whenever `q < 2^63`, which matches our §0.1 modulus bound.
+    /// whenever `q < 2^63`, which matches the modulus bound.
     #[inline(always)]
     fn mul(self, scalar: u64) -> Self {
         let v = self
@@ -417,7 +417,7 @@ mod tests {
     }
 
     /// Distributivity `(a + b) * c = a*c + b*c` at both a small prime and a
-    /// paper prime. Single sanity check that locks the ring axioms against
+    /// larger prime. Single sanity check that locks the ring axioms against
     /// any future kernel regression. Closes review item 23 (Zq side).
     #[test]
     fn zq_ring_axiom_distributivity() {

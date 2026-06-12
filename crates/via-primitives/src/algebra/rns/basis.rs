@@ -1,9 +1,9 @@
 //! The [`RnsBasis`] trait and its two concrete implementations.
 //!
-//! [`RnsBasis`] is the §0.2 analogue of [`super::super::zq::modulus::Modulus`]:
-//! a `Copy + Eq + Send + Sync + 'static` value type that the higher §0.x
+//! [`RnsBasis`] is the analogue of [`super::super::zq::modulus::Modulus`]:
+//! a `Copy + Eq + Send + Sync + 'static` value type that the higher
 //! primitives use to talk to a composite ring $\mathbb{Z}_Q$. The trait
-//! deliberately does **not** extend `Modulus` — the §0.1 trait is `u64`-output
+//! deliberately does **not** extend `Modulus` — the `Modulus` trait is `u64`-output
 //! bound (see `reduce.rs` "Modulus range constraints"), but $Q = q^{(0)} \cdot
 //! q^{(1)}$ exceeds $2^{64}$ for the realistic VIA-C / VIA-B parameter set, so
 //! the two layers must remain siblings.
@@ -12,7 +12,7 @@
 //!
 //! - [`ConstRnsBasis<Q0, Q1>`] — zero-sized, compile-time moduli, with the
 //!   coprimality check and the Garner inverse precomputed at monomorphisation
-//!   time. Use for the paper's parameter sets (see [`paper`]).
+//!   time. Use for the parameter sets (see [`paper`]).
 //! - [`DynRnsBasis`] — runtime basis. Panics on coprimality failure during
 //!   construction. Use for tests, toy parameters, and JSON-driven test
 //!   vectors.
@@ -20,7 +20,7 @@
 use super::super::zq::modulus::{ConstModulus, DynModulus, Modulus};
 use super::reduce::{gcd_u64, mod_inverse_u64};
 
-/// Abstract behaviour shared by every two-prime RNS basis at §0.2.
+/// Abstract behaviour shared by every two-prime RNS basis.
 ///
 /// All methods are constant-time over secret data — they may branch on the
 /// basis values (`q^{(0)}`, `q^{(1)}`, and the precomputed inverse, all public
@@ -57,9 +57,9 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
 
     /// $Q = q^{(0)} \cdot q^{(1)}$ as `u128`.
     ///
-    /// Fits comfortably: every modulus at §0.1 satisfies $q < 2^{63}$ (see
+    /// Fits comfortably: every modulus satisfies $q < 2^{63}$ (see
     /// `zq/reduce.rs` "Modulus range constraints"), so the product is at most
-    /// $2^{126}$; for paper parameters $Q \le 2^{75}$.
+    /// $2^{126}$; for realistic parameters $Q \le 2^{75}$.
     #[inline(always)]
     fn big_q(self) -> u128 {
         u128::from(self.m0().q()) * u128::from(self.m1().q())
@@ -93,8 +93,8 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
     /// The `a0_mod_q1 = m1.reduce_u64(a0)` step before the subtraction is
     /// necessary precisely when `q0 ≥ q1` — then `a0 ∈ [0, q0)` may exceed
     /// `q1` and must be reduced first so that [`Modulus::sub`]'s
-    /// `debug_assert!(a < q)` precondition holds. The paper convention places
-    /// the smaller prime as `q0`, making this a no-op for paper bases; the
+    /// `debug_assert!(a < q)` precondition holds. The convention places
+    /// the smaller prime as `q0`, making this a no-op for those bases; the
     /// `reconstruct_with_q0_greater_than_q1` test (`basis.rs`) exercises the
     /// reverse-ordering path that [`DynRnsBasis::new`] also accepts.
     #[inline(always)]
@@ -125,7 +125,7 @@ pub trait RnsBasis: Copy + Eq + Send + Sync + 'static {
 ///
 /// - $Q_0 \ge 2$, $Q_1 \ge 2$.
 /// - $Q_0 \ne Q_1$.
-/// - $Q_0, Q_1 < 2^{63}$ (matches the §0.1 modulus range bound).
+/// - $Q_0, Q_1 < 2^{63}$ (matches the modulus range bound).
 /// - $\gcd(Q_0, Q_1) = 1$ (coprimality, required for CRT).
 /// - $(Q_0 \bmod Q_1)^{-1}$ exists modulo $Q_1$ (follows from coprimality;
 ///   asserted as a defence-in-depth against `mod_inverse_u64` sentinel-`0`s).
@@ -229,7 +229,7 @@ impl<const Q0: u64, const Q1: u64> RnsBasis for ConstRnsBasis<Q0, Q1> {
 /// precomputed Garner inverse.
 ///
 /// Use this when the basis is only known at runtime — driven by parsed JSON,
-/// paper-quoted toy parameters, or fuzz-target inputs. For paper-pinned
+/// quoted toy parameters, or fuzz-target inputs. For pinned
 /// production paths, prefer [`ConstRnsBasis`] (zero overhead).
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct DynRnsBasis {
@@ -294,24 +294,23 @@ impl RnsBasis for DynRnsBasis {
     }
 }
 
-/// Compile-time markers for every two-prime RNS basis that appears in
-/// `.docs/primitives.md` Appendix A.
+/// Compile-time markers for every two-prime RNS basis in the parameter
+/// sets.
 ///
 /// Only $q_1$ is composite in any realistic VIA / VIA-C / VIA-B parameter set;
 /// $q_2$, $q_3$, $q_4$, and $p$ are single-prime / power-of-two and live
-/// entirely at §0.1.
+/// entirely in the single-prime $\mathbb{Z}_q$ layer.
 pub mod paper {
     use super::ConstRnsBasis;
 
     /// VIA $q_1 = 268\,369\,921 \cdot 536\,608\,769 \approx 2^{57}$ — the
     /// two-prime RNS basis used by every VIA ciphertext that lives at $q_1$.
-    /// See `.docs/primitives.md` §A.1.
     pub type ViaQ1Rns = ConstRnsBasis<268369921, 536608769>;
 
     /// VIA-C / VIA-B $q_1 = 137\,438\,822\,401 \cdot 274\,810\,798\,081
     /// \approx 2^{75}$ — the only composite modulus in either parameter set.
-    /// Used by the LWE-to-RLWE cascade outputs (§5) and the query-encryption
-    /// layer (§6.1). See `.docs/primitives.md` §A.1.
+    /// Used by the LWE-to-RLWE cascade outputs and the query-encryption
+    /// layer.
     pub type ViaCQ1Rns = ConstRnsBasis<137438822401, 274810798081>;
 }
 
@@ -449,7 +448,7 @@ mod tests {
 
     /// Reconstruction with `q0 > q1` exercises the `a0_mod_q1 =
     /// m1.reduce_u64(a0)` step in Garner — without it, `a1 - a0` would be
-    /// computed on a value outside `[0, q1)`. Paper bases happen to satisfy
+    /// computed on a value outside `[0, q1)`. These bases happen to satisfy
     /// `q0 < q1` so this path was previously un-exercised. Closes review
     /// item 19.
     #[test]

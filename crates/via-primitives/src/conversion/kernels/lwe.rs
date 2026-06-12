@@ -1,10 +1,10 @@
-//! GPU-portable constant-time kernel for the §5.1 LWE body dot product.
+//! GPU-portable constant-time kernel for the LWE body dot product.
 //!
-//! POD by value + flat slices (the Layer-0 kernel shape; see
+//! POD by value + flat slices (the kernel shape; see
 //! [`crate::algebra::zq::ops`]); the same body lowers to a CUDA / Metal
 //! reduction. The single-prime orchestrator calls [`dot_residues`] once; the
 //! RNS orchestrator calls it once per prime residue lane (mirroring how the
-//! §0.5 RNS reshape wrappers fan a slice kernel over both primes).
+//! RNS reshape wrappers fan a slice kernel over both primes).
 //!
 //! # Constant-time: Yes (over the key)
 //!
@@ -19,9 +19,8 @@
 /// single-prime modulus, or one RNS prime's residue lane.
 ///
 /// Both `a` (the LWE mask scalars, RLWE-uniform) and `s` (the secret-key
-/// coefficient vector) are passed as canonical residues in $[0, q)$, exactly as
-/// the Python reference computes the body
-/// (`pir/primitives/mlwe.py:149-153`, `sk_coeffs` taken mod $q$).
+/// coefficient vector) are passed as canonical residues in $[0, q)$, the
+/// standard way to compute the LWE body (`sk_coeffs` taken mod $q$).
 ///
 /// Products accumulate **full-width in `u128` with a single final reduction**
 /// mod $q$. Reduction is a ring homomorphism, so deferring it to the end does

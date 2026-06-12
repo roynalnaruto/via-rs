@@ -1,16 +1,14 @@
-//! Cross-language KAT parity for the Layer-5 MLWE LWE→RLWE conversion cascade
-//! (§5.1–§5.4).
+//! Cross-language KAT parity for the MLWE LWE→RLWE conversion cascade.
 //!
 //! Each test reproduces — in Rust, with the same per-component seeds and PRG
-//! draw order — a setup that
-//! `.references/via-spec/scripts/gen_layer5_kats.py` ran in Python, then asserts
+//! draw order — a known setup, then asserts
 //! byte-for-byte equality against the generated `data::*` constants.
 //!
 //! `kat_encrypt_lwe` locks the `n`-masks-then-error PRG order of `encrypt_lwe`;
 //! `kat_gen_lwe_to_rlwe_key` locks the step/group/j key-generation order; and
 //! `kat_conv_d` is the first cross-language check of the `conv_step` /
-//! `key_switch` sign convention. §5.5 `extr` has no KAT (absent from the Python
-//! reference — see `src/conversion/extract.rs` for its Rust round-trip tests).
+//! `key_switch` sign convention. `extr` has no KAT (see
+//! `src/conversion/extract.rs` for its Rust round-trip tests).
 //!
 //! Regenerate the constants with `just regen-kats-layer5`.
 
@@ -30,7 +28,7 @@ mod data {
     include!("data/layer5_kats.rs");
 }
 
-// TOY parameters, matching gen_layer5_kats.py.
+// TOY parameters.
 const Q: u64 = 65537;
 const P: u64 = 16;
 const BASE: u64 = 8;

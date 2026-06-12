@@ -14,7 +14,7 @@ use zeroize::Zeroize;
 
 /// A compressed PIR query: $\ell_\mathrm{query} \cdot (\log I + \log J + \log d)$
 /// LWE ciphertexts, each encrypting one index-bit gadget-decomposition level at
-/// modulus $q_1$ (`via_c/params.py:CompressedQuery`).
+/// modulus $q_1$.
 ///
 /// The length is dynamic (determined by the database layout at query-generation
 /// time), so this is the first protocol type that cannot be a fixed-size array.
@@ -77,11 +77,10 @@ impl<const RANK: usize, const N: usize, R: RingPoly<N>> fmt::Debug for Compresse
 // DecompressedQuery
 // ---------------------------------------------------------------------------
 
-/// A decompressed PIR query: RGSW ciphertexts grouped by Answer-pipeline role
-/// (`ciphertext.py:DecompressedQuery`).
+/// A decompressed PIR query: RGSW ciphertexts grouped by Answer-pipeline role.
 ///
 /// Every group's RGSW has the **same** gadget length `L_QUERY` (both halves) —
-/// `query_comp.py` builds all bits identically at `gadget_depth_1` levels, then
+/// query compression builds all bits identically at `gadget_depth_1` levels, then
 /// slices them into the three groups. The DMux tree uses all `L_QUERY` rows; the
 /// CMux/CRot trees decompose into the first `gadget_depth_2 ≤ L_QUERY` rows.
 ///

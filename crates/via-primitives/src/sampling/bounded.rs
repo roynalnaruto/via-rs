@@ -1,4 +1,4 @@
-//! Primitive §1.4 — bounded uniform sampler over $[-B, B]$.
+//! Bounded uniform sampler over $[-B, B]$.
 //!
 //! Per-coefficient call to [`Shake256Prg::uniform_below`] at bound
 //! $2B + 1$ followed by a shift by $-B$.
@@ -14,8 +14,7 @@ use crate::sampling::prg::Shake256Prg;
 /// \text{bound}]$ (inclusive on both ends — $2 \cdot \text{bound} + 1$ values).
 ///
 /// Each output is one [`Shake256Prg::uniform_below`] draw at bound $2B + 1$,
-/// minus $B$. PRG byte budget matches the Python reference's
-/// `DeterministicSampler::bounded_uniform_poly(n, bound)` exactly.
+/// minus $B$. PRG byte budget is one `uniform_below` draw per coefficient.
 ///
 /// Outputs are signed `i32`. Callers that need the coefficients lifted into a
 /// modulus $[0, q)$ should go through the

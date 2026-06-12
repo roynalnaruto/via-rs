@@ -1,4 +1,4 @@
-//! Primitive §1.2 — uniform sampler over $\mathbb{Z}_q$.
+//! Uniform sampler over $\mathbb{Z}_q$.
 //!
 //! Per-coefficient call to [`Shake256Prg::uniform_below`] using the modulus'
 //! `q` as the rejection bound. Output is canonical `[0, q)`.
@@ -13,8 +13,8 @@ use crate::sampling::prg::Shake256Prg;
 /// under `modulus`.
 ///
 /// Each output coefficient is one independent [`Shake256Prg::uniform_below`]
-/// draw at `modulus.q()`. The PRG byte budget matches the Python reference's
-/// `DeterministicSampler::uniform_poly(n, q)` exactly.
+/// draw at `modulus.q()`. The PRG byte budget is one `uniform_below` draw per
+/// coefficient.
 ///
 /// # Example
 ///
@@ -40,18 +40,18 @@ mod tests {
     use super::*;
     use crate::algebra::zq::modulus::{ConstModulus, DynModulus};
 
-    /// First 16 outputs of `DeterministicSampler(b"test").uniform_poly(16, 17)`.
+    /// First 16 outputs of `uniform_poly(16, 17)` on seed `b"test"`.
     const TEST_SEED_UP_Q17_N16: [u64; 16] =
         [1, 13, 11, 10, 10, 16, 10, 15, 5, 9, 14, 9, 5, 1, 12, 0];
 
-    /// First 8 outputs of `DeterministicSampler(b"test").uniform_poly(8, 8_380_417)`
-    /// — paper VIA-C $q_3$.
+    /// First 8 outputs of `uniform_poly(8, 8_380_417)` on seed `b"test"`
+    /// — the VIA-C $q_3$ modulus.
     const TEST_SEED_UP_Q3_N8: [u64; 8] = [
         7_199_425, 3_980_854, 662_059, 8_268_469, 6_056_624, 7_339_729, 6_004_453, 966_153,
     ];
 
-    /// First 6 outputs of `DeterministicSampler(b"test").uniform_poly(6, 137_438_822_401)`
-    /// — paper VIA-C $q_1$ smaller factor (≈ $2^{37}$, exercises the 5-byte path).
+    /// First 6 outputs of `uniform_poly(6, 137_438_822_401)` on seed `b"test"`
+    /// — the VIA-C $q_1$ smaller factor (≈ $2^{37}$, exercises the 5-byte path).
     const TEST_SEED_UP_Q1_FACTOR_N6: [u64; 6] = [
         129_770_576_577,
         92_511_284_156,
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn parity_q1_factor_dyn_modulus() {
-        // Paper q1 factors exceed the i32 range but fit comfortably in u64;
+        // The q1 factors exceed the i32 range but fit comfortably in u64;
         // only DynModulus carries them at runtime.
         let m = DynModulus::new(137_438_822_401);
         let mut prg = Shake256Prg::new(b"test");

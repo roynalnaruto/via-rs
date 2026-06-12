@@ -1,4 +1,4 @@
-//! Gadget primitives — `.docs/primitives.md` §2.3, VIA convention.
+//! Gadget primitives — VIA convention.
 //!
 //! A gadget is a fixed `(B, L)`-parameterised pair of:
 //!
@@ -16,8 +16,8 @@
 //!
 //! ## Why these primitives matter
 //!
-//! Layer 2's RLev / RGSW / external-product machinery (Phase 6-7) and
-//! Layer 3's key-switching (Phase 8) all reduce to **gadget products**:
+//! The RLev / RGSW / external-product machinery and
+//! key-switching all reduce to **gadget products**:
 //! "multiply by something large" is replaced by "decompose the large
 //! thing into a sum of small things, then multiply each small thing by a
 //! pre-computed encryption". The decomposed multipliers have
@@ -30,8 +30,8 @@
 //! VIA's gadget vector is $\mathbf{g} = (q/B, q/B^2, \ldots, q/B^L)$,
 //! **not** the standard GSW $\mathbf{g} = (1, B, B^2, \ldots, B^{L-1})$.
 //! The two are interchangeable up to a $q / B^L$ scaling, but the noise
-//! analysis in the paper (Appendix C) is written for VIA's. Mixing
-//! conventions silently degrades the noise bounds.
+//! analysis is written for VIA's. Mixing conventions silently degrades the
+//! noise bounds.
 //!
 //! ## API shape
 //!
@@ -46,7 +46,7 @@
 //!   $g_0$ (the largest gadget entry).
 //! - [`reconstruct`] — inverse for tests; computes $\sum_i d_i g_i$.
 //!
-//! The split lets Phase 7's `gadget_product` stream over levels using
+//! The split lets `gadget_product` stream over levels using
 //! `O(N)` scratch (`16 KiB` at `N=2048`) rather than materialising the
 //! full `[[i64; N]; L]` decomposition (`288 KiB` at `N=2048, L=18`).
 
@@ -61,7 +61,7 @@ use crate::algebra::wide::round_mul_div_u128;
 ///
 /// 1. For the RNS backend, entries can exceed `u64`; `u128` is the
 ///    smallest type that fits both backends uniformly.
-/// 2. Layer-5 reconstruction and Phase-7 gadget-product call sites lift
+/// 2. The reconstruction and gadget-product call sites lift
 ///    these into scalar polynomials lazily; centralising the
 ///    construction here would force every consumer through the same path.
 ///
@@ -84,7 +84,7 @@ pub fn gadget_vector_values<const N: usize, R: RingPoly<N>, const L: usize>(
         divisor = divisor
             .checked_mul(u128::from(base))
             .expect("gadget_vector_values: B^i overflows u128");
-        // Python: `(q + divisor // 2) // divisor` — half-up rounding.
+        // `(q + divisor / 2) / divisor` — half-up rounding.
         *slot = (q + divisor / 2) / divisor;
     }
     out
@@ -105,9 +105,8 @@ pub fn gadget_vector_values<const N: usize, R: RingPoly<N>, const L: usize>(
 ///
 /// # Sign handling
 ///
-/// Matches the Python reference (`gadget.py:84-91`): negative inputs
-/// take the absolute value, scale, divide, then negate. This is
-/// **round-half-away-from-zero**, distinct from Rust's truncating `/`.
+/// Negative inputs take the absolute value, scale, divide, then negate. This
+/// is **round-half-away-from-zero**, distinct from Rust's truncating `/`.
 ///
 /// # Panics
 ///
@@ -161,8 +160,7 @@ pub fn gadget_scale_into<const N: usize, R: RingPoly<N>>(
 /// - Even `B`: digit in `(-B/2, B/2]`.
 /// - Odd `B`:  digit in `[-(B-1)/2, (B-1)/2]` (symmetric).
 ///
-/// This matches the Python reference `gadget.py:94-99` exactly — the
-/// `if digit > B/2 { digit -= B }` rebalance step yields the asymmetric
+/// The `if digit > B/2 { digit -= B }` rebalance step yields the asymmetric
 /// even-B range and the symmetric odd-B range as a unified rule.
 ///
 /// After the call, `scratch[i]` has been advanced by `(val − digit) /
@@ -178,7 +176,7 @@ pub fn gadget_extract_lsb_into<const N: usize>(
 
     for (out_slot, val_slot) in out.iter_mut().zip(scratch.iter_mut()) {
         let val = *val_slot;
-        // Python's `val % base` returns a non-negative result; rem_euclid matches.
+        // `val % base` must return a non-negative result; rem_euclid matches.
         let mut digit = val.rem_euclid(base_i128);
         if digit > half_base {
             digit -= base_i128;
@@ -461,10 +459,10 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Python parity
+    // Reference parity
     // -----------------------------------------------------------------------
 
-    /// Hand-computed against the Python reference at q=17, B=2, L=4.
+    /// Hand-computed reference values at q=17, B=2, L=4.
     ///
     /// For c=5: centered=5, val=round(5·16/17)=5, LSB-first digits
     /// `(1, 0, 1, 0)` (val mod 2 = 1, val=2; 0; 1; 0). Reversed to

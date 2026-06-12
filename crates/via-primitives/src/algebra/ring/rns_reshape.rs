@@ -1,4 +1,4 @@
-//! RNS-aware SoA wrappers for primitive §0.5 — `PolyRns` analogues of
+//! RNS-aware SoA wrappers — `PolyRns` analogues of
 //! the four kernels in [`super::reshape`].
 //!
 //! Each kernel calls the corresponding single-prime kernel twice, once

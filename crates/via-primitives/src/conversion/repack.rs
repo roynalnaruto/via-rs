@@ -1,18 +1,18 @@
-//! Layer 7 — VIA-B homomorphic repacking primitives.
+//! VIA-B homomorphic repacking primitives.
 //!
-//! `embed_d` (multi-slot MLWEs embedding, §3.1), `mlwes_insert` (multi-input
-//! MLWE→RLWE pack), `mlwes_to_mlwe` (§3.2 pair conversion), and — landing in the
-//! rest of Part 1/2 — `mlwes_to_rlwe`, `repack_k`, the dedicated-key oracle, and
+//! `embed_d` (multi-slot MLWEs embedding), `mlwes_insert` (multi-input
+//! MLWE→RLWE pack), `mlwes_to_mlwe` (pair conversion), and — landing later —
+//! `mlwes_to_rlwe`, `repack_k`, the dedicated-key oracle, and
 //! the cascade-key-suffix borrow.
 //!
 //! Gated `#[cfg(all(feature = "via-b", feature = "alloc"))]` at the
 //! [`crate::conversion`] re-export boundary: the repack recursion is
 //! runtime-depth (`log2(T·n1/n2)`).
 //!
-//! ## Key reuse (§3.5)
+//! ## Key reuse
 //!
 //! [`mlwes_to_mlwe`] is the single recursion step and REUSES [`super::conv_step`]'s
-//! key-switch + slot-accumulation reduction verbatim, substituting the §3.1
+//! key-switch + slot-accumulation reduction verbatim, substituting the
 //! multi-input [`embed_d`] (`d = 2`, slots 0,1) for `conv_step`'s internal slot-0
 //! embed. Its step keys are exactly the cascade's own
 //! [`super::gen_conv_step_key`] outputs — which is what lets VIA-B borrow the
@@ -33,8 +33,8 @@ use super::{LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN2048};
 /// Mod-switch every gadget sample of an [`RLevCiphertext`] from its current
 /// modulus to `dst_mod`, via per-sample [`mod_switch_sym`].
 ///
-/// The same-modulus-type realization of the §3.5 key reuse across `q1 ≠ q2`: the
-/// repack runs at `q2` (the post-CRot modulus, `.docs/via-b.md` §4) but the
+/// The same-modulus-type realization of the cascade-key reuse across `q1 ≠ q2`:
+/// the repack runs at `q2` (the post-CRot modulus) but the
 /// cascade keys ship at `q1`, so the server mod-switches them internally — no new
 /// offline payload. (Single-prime: `R_SRC`/`R_DST` are the same ring type at
 /// different modulus *values*. The RNS-`q1` → single-prime-`q2` cross-type switch
@@ -55,7 +55,7 @@ where
     }
 }
 
-/// §3.1 (VIA-B) — MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
+/// MLWEs embedding: `d` many `(RANK, N)`-MLWE → one
 /// `(RANK, N_LARGE)`-MLWE (`N_LARGE = N·d`) encrypting
 /// `ι^{N→N_LARGE}(M_0, …, M_{d-1})`.
 ///
@@ -115,15 +115,15 @@ where
     RLWECiphertext::new(embedded.masks[0], embedded.body)
 }
 
-/// §3.2 (VIA-B) — MLWEs-to-MLWE conversion of a **pair**: 2 many
+/// MLWEs-to-MLWE conversion of a **pair**: 2 many
 /// `(RANK_IN, N_IN)`-MLWE → one `(RANK_OUT, N_OUT)`-MLWE
 /// (`RANK_OUT = RANK_IN/2`, `N_OUT = 2·N_IN`) encrypting `ι^{N_IN→N_OUT}(M)`,
 /// under the key `π^{·}(S)` matching `step_keys`.
 ///
 /// The single recursion step of `mlwes_to_rlwe`. REUSES [`super::conv_step`]'s
-/// key-switch + slot-accumulation reduction, substituting the §3.1 [`embed_d`]
-/// (`d = 2`) of the *pair* for `conv_step`'s internal slot-0 embed (per
-/// `.docs/via-b.md` §3.2): (1) interleave the pair into one `(RANK_IN, N_OUT)`-MLWE
+/// key-switch + slot-accumulation reduction, substituting the [`embed_d`]
+/// (`d = 2`) of the *pair* for `conv_step`'s internal slot-0 embed:
+/// (1) interleave the pair into one `(RANK_IN, N_OUT)`-MLWE
 /// at slots 0,1; (2) for each `idx ∈ [RANK_IN]` (group-outer, matching
 /// `conv_step`'s order) key-switch the already-embedded `masks[idx]` with
 /// `step_keys[idx]` and accumulate the switched mask into output slot
@@ -131,12 +131,12 @@ where
 /// body). `step_keys` is the same `&[RLev<N_OUT, R_OUT, L>; RANK_IN]` slice
 /// [`super::conv_step`] consumes.
 ///
-/// Noise: `θ' ≤ θ_c + 2·θ_ks` (Lemma 4.1, `d = 2`).
+/// Noise: `θ' ≤ θ_c + 2·θ_ks` (`d = 2`).
 ///
 /// # Constant-time: No
 ///
 /// Inputs are RLWE-uniform; the gadget products inside `key_switch` are
-/// data-independent (§0.6), exactly as in [`super::conv_step`].
+/// data-independent, exactly as in [`super::conv_step`].
 ///
 /// # Panics
 ///
@@ -167,10 +167,10 @@ pub fn mlwes_to_mlwe<
         );
     }
     assert_eq!(pair.len(), 2, "mlwes_to_mlwe converts exactly a pair (d=2)");
-    // §3.1 — interleave the pair into one (RANK_IN, N_OUT)-MLWE.
+    // interleave the pair into one (RANK_IN, N_OUT)-MLWE.
     let embedded = embed_d::<RANK_IN, N_IN, N_OUT, R_IN, R_OUT>(pair);
     let modulus = RingPoly::modulus(&embedded.body);
-    // §3.2 — conv_step's key-switch + slot reduction (conv.rs:84-98), but the
+    // conv_step's key-switch + slot reduction, but the
     // masks are ALREADY embedded (no further slot-0 embed).
     let mut result_masks: [R_OUT; RANK_OUT] = core::array::from_fn(|_| R_OUT::zero(modulus));
     let mut result_body = embedded.body;
@@ -266,7 +266,7 @@ macro_rules! repack_engine {
             "Per-level step-key schedule for the `n1=", stringify!($n1), ", T=",
             stringify!($t), "` repack. Both the owned oracle [`", stringify!($key),
             "`] and (Part 2) the borrowing cascade-suffix view implement it, so [`",
-            stringify!($repack), "`] is identical for generated and borrowed keys (§3.5)."
+            stringify!($repack), "`] is identical for generated and borrowed keys."
         )]
         pub trait $sched<$modp: $modbound, const $lev: usize> {
             $(
@@ -324,7 +324,7 @@ macro_rules! repack_engine {
         #[doc = concat!(
             "`Repack` at `n1=", stringify!($n1), ", K`, `T=", stringify!($t),
             "`: pack the designated coefficients of `T` RLWEs over `R_{", stringify!($n1),
-            ",q}` into one RLWE over the same ring (paper §3.4) — `Extr` each, pad to ",
+            ",q}` into one RLWE over the same ring — `Extr` each, pad to ",
             stringify!($d), " with zeros, then ", stringify!($d),
             "-leaf binary-tree `mlwes_to_mlwe` over the schedule, and unwrap."
         )]
@@ -417,7 +417,7 @@ macro_rules! repack_view {
         #[doc = concat!(
             "Borrowing schedule for the `n1=", stringify!($n1), ", T=", stringify!($t),
             "` repack, backed by a SUFFIX of an existing [`", stringify!($ckey),
-            "`] cascade key — zero-copy (the §3.5 key reuse: no new offline payload). ",
+            "`] cascade key — zero-copy (the cascade-key reuse: no new offline payload). ",
             "Built by [`", stringify!($from), "`]."
         )]
         pub struct $view<'a, $modp: $modbound, const $lev: usize> {
@@ -451,7 +451,7 @@ macro_rules! repack_view {
         #[doc = concat!(
             "Mod-switch the `keys_*` suffix of a [`", stringify!($ckey),
             "`] cascade key (at q1) to `dst_mod` (q2), yielding an OWNED [`",
-            stringify!($key), "`] repack schedule. The §3.5 key reuse when `q1 ≠ q2`: ",
+            stringify!($key), "`] repack schedule. The cascade-key reuse when `q1 ≠ q2`: ",
             "[`", stringify!($repack), "`] runs at q2 (the post-CRot modulus) but the ",
             "cascade keys ship at q1, so the server mod-switches them per-answer — no ",
             "new offline payload. Same-modulus-type only (single-prime); the RNS-q1 → ",
@@ -633,7 +633,7 @@ repack_view! {
 // has no same-ring cascade key — the only n2048 cascade is RNS-`q1` — so it
 // takes the engine ONLY; its q2 key is derived by cross-type mod-switch from the
 // RNS-`q1` cascade via `repack_keys_poly_2048_t256_from_rns_cascade_boxed` (the
-// §3.5 key reuse). The by-value `gen_repack_keys_poly_2048_t256` is generated but
+// cascade-key reuse). The by-value `gen_repack_keys_poly_2048_t256` is generated but
 // NOT re-exported — a ~11.25 MiB key by value overflows the stack.
 repack_engine! {
     n1 = 2048,
@@ -668,7 +668,7 @@ repack_engine! {
 /// heap**, cross-type mod-switching each RNS-`q1` step-key RLev → single-prime
 /// `q2`.
 ///
-/// The production paper-scale realization of the §3.5 key reuse: the repack runs
+/// The production paper-scale realization of the cascade-key reuse: the repack runs
 /// at the single-prime post-CRot modulus `q2`, but the cascade ships at the
 /// 2-prime RNS `q1`; the server derives the `q2` repack key internally — no new
 /// offline payload. The same-ring [`from_cascade_modswitched`](repack_view!) of
@@ -820,7 +820,7 @@ mod tests {
     type R4 = Poly<4, ConstModulus<65537>, Coefficient>;
     type R8 = Poly<8, ConstModulus<65537>, Coefficient>;
 
-    /// §3.1 — `embed_d` over `d=2` rank-1 inputs at `(N,N_LARGE)=(2,4)`
+    /// `embed_d` over `d=2` rank-1 inputs at `(N,N_LARGE)=(2,4)`
     /// interleaves the two bodies/masks at slots 0,1. Hand-checked:
     /// `b0=[10,20]`, `b1=[30,40]` ⇒ `ι^{2→4}(b0,b1)=[10,30,20,40]`.
     #[test]
@@ -865,7 +865,7 @@ mod tests {
         assert_eq!(mask, [1, 3, 2, 4]);
     }
 
-    /// §3.2 — `mlwes_to_mlwe` on a PAIR of `(4,2)`-MLWE → one `(2,4)`-MLWE
+    /// `mlwes_to_mlwe` on a PAIR of `(4,2)`-MLWE → one `(2,4)`-MLWE
     /// (toy level 0). The two inputs are `Extr_2` of two RLWEs of `M0,M1 ∈
     /// R_{8,p}`; the keys are the cascade's own `gen_conv_step_key::<8,2,4,4>`
     /// (NLWE=8=RANK_IN·N_IN=4·2 ✓), proving the repack reuses cascade keys. The
@@ -905,7 +905,7 @@ mod tests {
         assert_eq!(recovered.coeff(3).to_u64(), 7, "M1_4");
     }
 
-    /// §3.2 — `mlwes_to_mlwe` at the toy level-1 shape `(2,4)→(1,8)`, keys via
+    /// `mlwes_to_mlwe` at the toy level-1 shape `(2,4)→(1,8)`, keys via
     /// `gen_conv_step_key::<8,4,8,2>`; decrypts under the rank-1 `π^{8→8}(S)=S`.
     /// Guards the recursion's second level independently of the first.
     #[test]
@@ -943,7 +943,7 @@ mod tests {
     /// paper interleave `ι_0^{4→8} ι^{2→4}(π_0(M0), π_0(M1))` — coefficients
     /// 0,2,4,6 carry `M0_0, M1_0, M0_4, M1_4`, odd coefficients zero. Validates
     /// the full Extr→pad→recurse→unwrap path + the dedicated-key oracle (the
-    /// §3.4 / #1-risk reconstructability guard).
+    /// #1-risk reconstructability guard).
     #[test]
     fn repack_n8_t2_reconstructs() {
         type P8p = Poly<8, ConstModulus<16>, Coefficient>;
@@ -1021,7 +1021,7 @@ mod tests {
         assert_eq!(recovered.coeff(32).to_u64(), 0); // M_t[32] = 0
     }
 
-    /// §3.5 key reuse: repack with keys BORROWED from a full cascade key
+    /// cascade-key reuse: repack with keys BORROWED from a full cascade key
     /// (`gen_lwe_to_rlwe_key_n8`) — exactly the `pp_qck` the server already holds
     /// — reconstructs the paper interleave. Proves the query-compression
     /// cascade's `keys_4`/`keys_8` ARE valid repack keys (no new offline payload).
@@ -1101,7 +1101,7 @@ mod tests {
         assert_eq!(out_view.body, out_oracle.body, "body coeff-for-coeff");
     }
 
-    /// §3.5 across q1 ≠ q2 (the server's internal key mod-switch, in isolation):
+    /// cascade-key reuse across q1 ≠ q2 (the server's internal key mod-switch, in isolation):
     /// gen the cascade at q1, encrypt the T inputs at q2 under the SAME S1
     /// (rekeyed q1→q2), mod-switch the cascade suffix q1→q2 via
     /// `repack_keys_n8_t2_from_cascade_modswitched`, repack at q2, decrypt under
@@ -1140,7 +1140,7 @@ mod tests {
         assert_eq!(recovered.coeff(6).to_u64(), 7, "M1_4 @ slot 6");
     }
 
-    /// §3.5 CROSS-TYPE (RNS q1 → single-prime q2) — the paper-shape modulus
+    /// Cascade-key reuse CROSS-TYPE (RNS q1 → single-prime q2) — the paper-shape modulus
     /// switch in miniature: gen the **RNS** cascade at q1 (`PolyRns`), cross-type
     /// mod-switch its `keys_4`/`keys_8` suffix → **single-prime** q2 (`Poly`) into
     /// a `RepackKeysN8T2`, encrypt the inputs at q2 under S1@q2, repack at q2, and
@@ -1198,7 +1198,7 @@ mod tests {
 /// Paper-scale depth-10 repack SPIKE — the P2 GO/NO-GO. Mirrors the cascade's own
 /// `spike_n2048_depth18_noise_closes`: builds the ~24.75 MB `LweToRlweKeyRnsN2048`
 /// cascade key with the production **boxed** builder on a bounded thread, borrows
-/// its `keys_4..keys_2048` suffix as the repack schedule (the §3.5 key reuse — no
+/// its `keys_4..keys_2048` suffix as the repack schedule (the cascade-key reuse — no
 /// new offline payload), packs `T = 256` RLWEs over `R_{2048, q1}` through the
 /// depth-10 `mlwes_to_mlwe` recursion, and decrypts. PASS ⇒ noise closes at depth
 /// 10 ⇒ paper-scale repack GO; panic ⇒ NO-GO.
@@ -1228,7 +1228,7 @@ mod spike {
 
     const N1: usize = 2048;
     const T: usize = 256;
-    const L_CK: usize = 18; // conversion-key gadget depth (paper Table 6)
+    const L_CK: usize = 18; // conversion-key gadget depth
     const CK_BASE: u64 = 18; // conversion-key gadget base
     const VAL: u64 = 7; // the single nonzero message coefficient (< p = 16)
     const STACK: usize = 16 << 20; // 16 MB — boxed key is heap; covers builder + scratch
@@ -1302,7 +1302,7 @@ mod spike {
     }
 
     /// **The PRODUCTION paper repack GO/NO-GO** — depth-10 single-prime repack at
-    /// the paper `(n1,K,T) = (2048,512,256)`, the §3.5 key reuse end to end at
+    /// the paper `(n1,K,T) = (2048,512,256)`, the cascade-key reuse end to end at
     /// real scale. Supersedes [`repack_rns_2048_t256_spike`] (which packs over the
     /// q1-RNS `PolyRns`, a single-modulus noise spike) as the real paper gate:
     /// here the repack runs at the **single-prime** post-CRot modulus q2 the paper

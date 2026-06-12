@@ -93,7 +93,7 @@ mod b {
         )
     }
 
-    /// Repack step: mod-switch the cascade-key suffix q1→q2 (§3.5 across q1≠q2),
+    /// Repack step: mod-switch the cascade-key suffix q1→q2 (cascade-key reuse across q1≠q2),
     /// then pack the T post-CRot ciphertexts at base CK_BASE. The bench's
     /// `02_repack` therefore includes the per-batch key mod-switch (realistic).
     fn repack(rotateds: &[RLWECiphertext<N1, R64>], k: &K) -> RLWECiphertext<N1, R64> {

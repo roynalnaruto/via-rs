@@ -7,13 +7,13 @@
 //!
 //! # The single `L_QUERY` gadget depth
 //!
-//! The query is compressed at `gadget_depth_1` LWE levels per bit
-//! (`query_comp.py` via `client.py:117`), so **every** DMux/CMux/CRot RGSW in a
+//! The query is compressed at `gadget_depth_1` LWE levels per bit,
+//! so **every** DMux/CMux/CRot RGSW in a
 //! `DecompressedQuery` has the *same* gadget length — that one value is
 //! `L_QUERY = gadget_depth_1`. The DMux tree consumes all `L_QUERY` rows; the
-//! CMux/CRot trees decompose into the first `gadget_depth_2 ≤ L_QUERY` rows
-//! (`server.py:196`). Hence a single `L_QUERY` const is faithful (paper
-//! Table 6 sets DMux = CMux = 2 for realistic), while `gadget_depth_2` stays a
+//! CMux/CRot trees decompose into the first `gadget_depth_2 ≤ L_QUERY` rows.
+//! Hence a single `L_QUERY` const is faithful (realistic parameters set
+//! DMux = CMux = 2), while `gadget_depth_2` stays a
 //! runtime [`PIRParams`] field for the CMux tree.
 
 use crate::params::{KeyDist, PIRParams};
@@ -86,16 +86,14 @@ impl<
 
 /// Toy VIA-C preset: `n1=64, n2=16, L_QUERY=20, L_CK=40, L_RSK=8, D=4`.
 ///
-/// Matches `via_c/params.py:TOY_PARAMS` (`gadget_depth_1=20` → `L_QUERY`) plus
-/// `TOY_CK_DEPTH=40`. Security parameter is 0 — no security claim. Runtime
-/// sidecar: [`TOY_PARAMS`].
+/// `gadget_depth_1=20` → `L_QUERY`, conversion-key depth 40. Security
+/// parameter is 0 — no security claim. Runtime sidecar: [`TOY_PARAMS`].
 pub type ViaCToyParams = ViaCPublicParams<64, 16, 20, 40, 8, 4>;
 
 /// Realistic VIA-C preset: `n1=2048, n2=512, L_QUERY=2, L_CK=18, L_RSK=8, D=4`.
 ///
-/// Matches `via_c/params.py:REALISTIC_PARAMS` + paper Table 6 (DMux/CMux length
-/// 2, Conversion Key 18, Ring-Switching Key 8). Runtime sidecar:
-/// [`REALISTIC_PARAMS`].
+/// DMux/CMux length 2, Conversion Key 18, Ring-Switching Key 8. Runtime
+/// sidecar: [`REALISTIC_PARAMS`].
 pub type ViaCRealisticParams = ViaCPublicParams<2048, 512, 2, 18, 8, 4>;
 
 // ---------------------------------------------------------------------------
@@ -177,8 +175,8 @@ pub type ViaBToyParams = ViaBPublicParams<64, 16, 2, 8, 20, 40, 8, 4>;
 
 /// Realistic VIA-B preset: `n1=2048, n2=512, n3=2, T=256, L_QUERY=2, L_CK=18, L_RSK=8, D=4`.
 ///
-/// Database dims and gadget params match VIA-C (paper App. B); `n3 = 2`
-/// (1-byte records at `p=16`), `T = 256` (paper Table 2). Runtime sidecar:
+/// Database dims and gadget params match VIA-C; `n3 = 2`
+/// (1-byte records at `p=16`), `T = 256`. Runtime sidecar:
 /// [`REALISTIC_B_PARAMS`].
 #[cfg(feature = "via-b")]
 pub type ViaBRealisticParams = ViaBPublicParams<2048, 512, 2, 256, 2, 18, 8, 4>;
@@ -187,7 +185,7 @@ pub type ViaBRealisticParams = ViaBPublicParams<2048, 512, 2, 256, 2, 18, 8, 4>;
 // PIRParams preset constants
 // ---------------------------------------------------------------------------
 
-/// Toy `PIRParams` sidecar, matching `via_c/params.py:TOY_PARAMS`.
+/// Toy `PIRParams` sidecar.
 ///
 /// `gadget_depth_1 = 20 = L_QUERY`; `gadget_depth_2 = 16` is the (smaller)
 /// CMux/CRot tree depth. Validated at compile time by `PIRParams::new`'s
@@ -219,8 +217,7 @@ pub const TOY_PARAMS: PIRParams = PIRParams::new(
     0,
 );
 
-/// Realistic `PIRParams` sidecar, matching `via_c/params.py:REALISTIC_PARAMS`
-/// / paper Appendix B + Table 6.
+/// Realistic `PIRParams` sidecar.
 pub const REALISTIC_PARAMS: PIRParams = PIRParams::new(
     2048,
     512,
@@ -278,7 +275,7 @@ pub const TOY_B_PARAMS: PIRParams = PIRParams::new_b(
 );
 
 /// Realistic VIA-B `PIRParams` sidecar: [`REALISTIC_PARAMS`] values + `n3 = 2`,
-/// `t = 256` (paper Table 2, 1-byte records).
+/// `t = 256` (1-byte records).
 #[cfg(feature = "via-b")]
 pub const REALISTIC_B_PARAMS: PIRParams = PIRParams::new_b(
     2048,

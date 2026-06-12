@@ -1,4 +1,4 @@
-//! Paper-scale (n2048 RNS, Appendix B) per-step + full-pipeline benchmarks —
+//! Paper-scale (n2048 RNS) per-step + full-pipeline benchmarks —
 //! the authoritative, opt-in suite (reduced sampling; minutes per run).
 //!
 //! Same isolation technique as `pipeline_toy` (build each step's input once by

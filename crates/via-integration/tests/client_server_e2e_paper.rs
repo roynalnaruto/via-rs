@@ -1,9 +1,9 @@
-//! **Paper-scale** in-memory client ↔ server e2e (P4, double-confirmation).
+//! **Paper-scale** in-memory client ↔ server e2e (double-confirmation).
 //!
 //! Same protocol round-trip as `client_server_e2e`, but at the paper VIA-C
-//! parameters (Appendix B): `n1 = 2048`, `n2 = 512`, `d = 4`, `q1 ≈ 2^75`
+//! parameters: `n1 = 2048`, `n2 = 512`, `d = 4`, `q1 ≈ 2^75`
 //! (two-prime RNS) `≫ q2 ≈ 2^34 ≫ q3 ≈ 2^23 ≫ q4 = 2^12`, `p = 16`, with the
-//! Table-6 gadget bases (DMux 55879, CMux/CRot 81, conversion-key 18,
+//! gadget bases (DMux 55879, CMux/CRot 81, conversion-key 18,
 //! ring-switch 8). This is *not* a wire test — objects are passed in-memory;
 //! it exists only to confirm the protocol and the noise budget close at
 //! paper-scale ring dimensions and moduli.
@@ -42,7 +42,7 @@ const CK_BASE: u64 = 18;
 const NUM_ROWS: usize = 2; // I
 const NUM_COLS: usize = 2; // J
 
-// Paper ring instantiation (Appendix B).
+// Paper ring instantiation.
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2N1 = ViaCPolyQ2<N1>; // q2 @ n1 (DMux output / FirstDim)
 type R3N1 = ViaCPolyQ3<N1>; // q3 @ n1 (mod_switch_sym intermediate + rekey target)

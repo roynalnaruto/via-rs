@@ -1,8 +1,6 @@
 //! [`Client`] — the VIA-C client: keygen + public-parameter assembly
 //! (`setup`), index compression (`query`), and answer recovery (`recover`),
-//! exactly the three actions of VIA-C Figure 8.
-//!
-//! `paper:via_c/client.py`
+//! the three actions of the VIA-C client.
 
 use via_primitives::algebra::ring::RingPoly;
 use via_primitives::conversion::mlwe_ops::LweDot;
@@ -87,8 +85,6 @@ impl<
     ///
     /// [`ViaError::DimMismatch`] if `num_rows` or `num_cols` is not a power of
     /// two — the DMux/CMux bit decomposition assumes power-of-two dimensions.
-    ///
-    /// `paper:via_c/client.py:58-144`
     #[allow(clippy::too_many_arguments)]
     pub fn setup<K, GenCascade, GenRsk>(
         q1_mod: R1::Modulus,
@@ -184,8 +180,6 @@ impl<
     /// [`ViaError::IndexOutOfRange`] if `index >= D · num_rows · num_cols`.
     /// Without this guard an out-of-range index silently encodes an invalid
     /// rotation and recovers the wrong record.
-    ///
-    /// `paper:via_c/client.py:146-176`
     pub fn query(
         &self,
         index: usize,
@@ -225,8 +219,6 @@ impl<
     /// Currently infallible (decryption cannot fail), but returns [`Result`] for
     /// symmetry with [`Self::query`] and the server's `answer_one_query`, so the
     /// whole client boundary is uniformly `Result`-typed.
-    ///
-    /// `paper:via_c/client.py:178-203`
     pub fn recover<RM, RB, RP>(
         &self,
         answer: &ModSwitchedCiphertext<N2, RM, RB>,
@@ -260,8 +252,6 @@ impl<
     /// # Errors
     ///
     /// [`ViaError::IndexOutOfRange`] if any `idxs[t] ≥ d3 · num_rows · num_cols`.
-    ///
-    /// `paper:via.pdf §4.5 (VIA-B QueryComp, T-batched)`
     #[cfg(feature = "via-b")]
     pub fn batch_query<const T: usize, const N3: usize>(
         &self,
@@ -322,8 +312,6 @@ impl<
     ///
     /// Infallible today (returns [`Result`] for boundary symmetry with
     /// [`Self::recover`]).
-    ///
-    /// `paper:via.pdf §4.5 (VIA-B Recover, T-batched)`
     #[cfg(feature = "via-b")]
     pub fn recover_batch<RM, RB, RP, const N3: usize, const T: usize>(
         &self,

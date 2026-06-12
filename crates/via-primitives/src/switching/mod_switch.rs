@@ -1,5 +1,4 @@
-//! §3.1 symmetric + §3.2 asymmetric modulus switching. See
-//! `.docs/primitives.md` §3.1–§3.2.
+//! Symmetric and asymmetric modulus switching.
 //!
 //! Rescale an RLWE ciphertext from one modulus to another by rounding each
 //! coefficient: $c'_i = \mathrm{round}(c_i \cdot q' / q) \bmod q'$, integer
@@ -7,16 +6,16 @@
 //! coefficient hot loop lives in [`super::kernels::mod_switch`]; the
 //! orchestrators here own the ring-type plumbing.
 //!
-//! - [`mod_switch_sym`] (§3.1) — both mask and body to the same target $q'$.
-//! - [`mod_switch_asym`] (§3.2) — mask and body to **different** targets.
-//!   The §3.2 "body-only rescale" flavour is the call convention
+//! - [`mod_switch_sym`] — both mask and body to the same target $q'$.
+//! - [`mod_switch_asym`] — mask and body to **different** targets.
+//!   The "body-only rescale" flavour is the call convention
 //!   `R_MASK = R_SRC` with `mask_mod = src_mod` (the mask passes through
 //!   unchanged because $q'_A = q$).
 //!
 //! # Constant-time: No
 //!
 //! Both orchestrators rescale RLWE-uniform ciphertext coefficients, which
-//! leak nothing about secrets under the RLWE assumption (§0.6). Not for
+//! leak nothing about secrets under the RLWE assumption. Not for
 //! secret-key material — see [`super::rekey`].
 
 use crate::algebra::ring::abstraction::RingPoly;
@@ -24,7 +23,7 @@ use crate::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
 
 use super::kernels::RescaleConsts;
 
-/// §3.1 — symmetric modulus switch $\mathrm{ModSwitch}_{q \to q'}$.
+/// Symmetric modulus switch $\mathrm{ModSwitch}_{q \to q'}$.
 ///
 /// Rescale both mask and body of `ct` from its source modulus $q$ to the
 /// destination modulus $q'$ carried by `dst_mod`, returning an RLWE
@@ -52,7 +51,7 @@ use super::kernels::RescaleConsts;
 /// // 128 * 16 / 256 = 8.
 /// assert_eq!(b, [8, 0, 0, 0]);
 /// ```
-// `R_SRC` / `R_DST` mirror the paper's $q \to q'$ source/destination naming;
+// `R_SRC` / `R_DST` mirror the $q \to q'$ source/destination naming;
 // the snake_case reads far clearer than `RSrc` / `RDst` at every call site.
 #[allow(non_camel_case_types)]
 pub fn mod_switch_sym<const N: usize, R_SRC: RingPoly<N>, R_DST: RingPoly<N>>(
@@ -84,7 +83,7 @@ pub fn mod_switch_sym<const N: usize, R_SRC: RingPoly<N>, R_DST: RingPoly<N>>(
     )
 }
 
-/// §3.2 — asymmetric modulus switch.
+/// Asymmetric modulus switch.
 ///
 /// Rescale the mask of `ct` to `mask_mod` and the body to `body_mod`, which
 /// may be **different** moduli, returning a [`ModSwitchedCiphertext`]. Two
@@ -217,8 +216,8 @@ mod tests {
 
     #[test]
     fn mod_switch_sym_kat_viac_q1p0_to_q2() {
-        // Lock Python `_round_scale` parity at hardcoded inputs. Use
-        // single-prime moduli q_src and q_dst with the in-test reference
+        // Lock `_round_scale` parity at hardcoded inputs. Use
+        // single-prime moduli q_src and q_dst with the in-test
         // formula round(c * q_dst / q_src) = (c * q_dst + q_src/2) / q_src.
         use crate::algebra::zq::modulus::DynModulus;
         const Q_SRC: u64 = 1 << 20;
