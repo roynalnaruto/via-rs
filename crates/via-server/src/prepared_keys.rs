@@ -30,7 +30,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// - `R1` — the `q1` ring (conversion key `RLev_{S1}(S1²)` at `n1`).
 /// - `R3` — the `q3@n2` ring (ring-switch key samples).
 /// - `K` — the coefficient cascade key (`pp.query_comp_key.lwe_to_rlwe_key`); its
-///   [`CascadeKey::Eval`] mirror is held heap-boxed in [`Self::cascade`].
+///   [`CascadeKey::Eval`] mirror is held heap-boxed in `Self::cascade`.
 pub struct PreparedKeys<
     const N1: usize,
     const N2: usize,

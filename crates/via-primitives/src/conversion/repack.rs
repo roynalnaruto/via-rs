@@ -677,7 +677,7 @@ repack_engine! {
 /// hand-written to mirror the cascade's own boxed builder.
 ///
 /// Peak stack is a **single** degree-2048 `RLev` (~589 KiB): each
-/// [`mod_switch_rlev`] call returns one switched step key, written straight into
+/// `mod_switch_rlev` call returns one switched step key, written straight into
 /// its heap slot via `addr_of_mut!`, never assembling a whole field (let alone
 /// the whole key) on the stack.
 #[allow(clippy::needless_range_loop)] // index drives both src field and heap slot

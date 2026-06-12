@@ -240,7 +240,7 @@ impl<
 
     /// VIA-B `batch_query` (M1): compress `T` flat indices into a
     /// [`BatchedQuery`](via_protocol::BatchedQuery) of `T`
-    /// [`CompressedQuery`](via_protocol::CompressedQuery), each built with the
+    /// [`CompressedQuery`], each built with the
     /// **record** degree `d3 = N1/N3` as the CRot degree — more CRot bits than
     /// VIA-C's `D = N1/N2`, matching the server's `answer_through_crot::<N_REC =
     /// N3>`.
