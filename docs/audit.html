@@ -90,8 +90,8 @@
 
             <p class="toc" id="toc">
                 <a href="#summary">Summary</a> &middot;
-                <a href="#validation">Audit-of-audit</a> &middot;
                 <a href="#audit">VIA-C findings</a> &middot;
+                <a href="#validation">Audit-of-audit</a> &middot;
                 <a href="#open-questions">Open questions</a> &middot;
                 <a href="#via-b">VIA-B follow-up</a> &middot;
                 <a href="#footnotes">Footnotes</a>
@@ -136,179 +136,6 @@
                 <em>refuted</em>: the VIA-C plaintext modulus is correctly
                 \(p=16\), and the secret-dependent decode step is constant-time.
             </p>
-
-            <!-- ====================================================================== -->
-            <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="validation">Audit-of-audit &mdash; adversarial validation</h3>
-            <p>
-                Every finding below was independently re-checked by a separate
-                adversarial pass whose remit was to <em>disconfirm</em>: four
-                fresh reviewers re-read the primary sources &mdash; the
-                <a
-                    href="https://eprint.iacr.org/2025/2074"
-                    target="_blank"
-                    rel="noopener"
-                    >paper</a
-                >, the
-                <a
-                    href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg"
-                    target="_blank"
-                    rel="noopener"
-                    >VIA Security</a
-                >
-                thread, and the code read at the same pinned commits
-                (<code>9575286</code> / <code>62fe493</code>, via
-                <code>git show</code>) &mdash; and tried to break each claim
-                rather than confirm it. <span class="tag tag-infer">inference</span>
-                <strong>No finding was refuted.</strong> Every core claim held;
-                the corrections were precision-level (a few line numbers, one
-                page number, and one cross-finding \(\sigma\) mislabel), and
-                they are folded into the findings below.
-            </p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Finding</th>
-                        <th>Verdict</th>
-                        <th>What the re-check changed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><a href="#a1">A1</a> gadget bases</td>
-                        <td>confirmed &middot; corrected</td>
-                        <td>
-                            CMux base <code>81</code> is at <code>:153</code>,
-                            ring-switch <code>8</code> at <code>:156</code> (not
-                            <code>:152</code>/<code>:154</code>); Table 6 is on
-                            <strong>p.23</strong>; conversion-key base
-                            <code>18</code>&rarr;<code>11</code> distinguished
-                            from length \(\ell{=}18\) (unchanged)
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a2">A2</a> security_param</td>
-                        <td>confirmed</td>
-                        <td>
-                            <code>u32</code>, read only in asserts/Debug; no
-                            estimator; <code>128</code> exceeds even the paper's
-                            own 110
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a3">A3</a> no paper-noise test</td>
-                        <td>confirmed</td>
-                        <td>
-                            lines exact; the cited
-                            \(\sigma_{1,S}{=}32,\sigma_{1,E}{=}1024,\sigma{=}26\)
-                            are the genuine VIA-C distributions; no
-                            \(P_{\text{fail}}\) code anywhere
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a4">A4</a> inert Gaussian key</td>
-                        <td>confirmed &middot; clarified</td>
-                        <td>
-                            inertness grep-verified; Yue's \(\sigma{=}4960\) is
-                            the <em>plain-VIA</em> figure &mdash; VIA-C keys are
-                            \(\sigma_{1,S}{=}32\) / \(\sigma{=}26\) (see fn 10)
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a5">A5</a> decode threshold</td>
-                        <td>confirmed</td>
-                        <td>
-                            decode at \(q_4\), \(\Delta/2{=}128\); paper budget
-                            \(\approx 2.6\times10^5\); ratio \(\approx 2000\times\)
-                            checks out
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a6">A6</a> VIA \(q_1\)</td>
-                        <td>confirmed &middot; upgraded</td>
-                        <td>
-                            directly <em>observable</em> (App B prints
-                            \(268369921^2\)), not mere inference; a prime-square
-                            cannot be RNS-split, so two primes is deliberate
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a7">A7</a> wire serialization</td>
-                        <td>confirmed</td>
-                        <td>
-                            only a <code>Vec&lt;u64&gt;</code> codec;
-                            <code>serialize</code> is <code>todo!()</code>; no
-                            size accounting anywhere
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#a8">A8</a> refuted concerns</td>
-                        <td>confirmed (both hold)</td>
-                        <td>
-                            <code>ViaCP=16</code>, no <code>MODULUS_PC</code>
-                            (the bug was in the Python reference); decode centring
-                            is constant-time
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb1">VB-1</a> no production e2e</td>
-                        <td>confirmed</td>
-                        <td>
-                            only ignored T=8 e2e + ignored T=256 repack
-                            <em>spike</em> tests on fresh inputs
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb2">VB-2</a> inherited bases</td>
-                        <td>confirmed</td>
-                        <td>
-                            <code>REALISTIC_B_PARAMS</code> reuse the VIA-C draft
-                            bases on the same rings
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb3">VB-3</a> repack depth</td>
-                        <td>confirmed &middot; softened</td>
-                        <td>
-                            depth 10 vs formula's 9 verified; "~11%" is of the
-                            key-switch term \(2\theta_{ks}\log n_2\), not of
-                            \(\theta_{rep}\) overall
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb4">VB-4</a> omitted terms</td>
-                        <td>confirmed</td>
-                        <td>
-                            key mod-switch + approximate-gadget terms omitted;
-                            Yue \(S^2\) concern is hedged/upstream
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb5">VB-5</a> response size</td>
-                        <td>confirmed</td>
-                        <td>
-                            1.81 KB / 127&times; headline confirmed in paper; not
-                            measurable from code
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb6">VB-6</a> single-repack bound</td>
-                        <td>confirmed &middot; re-tagged</td>
-                        <td>
-                            invariant + boundary arithmetic verified; "\(T\le
-                            n_1/n_3\)" is <em>inference</em>, not paper-stated
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="#vb7">VB-7/8</a> no new params; CT</td>
-                        <td>confirmed (both hold)</td>
-                        <td>
-                            zero-copy borrow proven by a byte-identity test; no
-                            secret-dependent timing path
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
@@ -826,6 +653,180 @@
                 </p>
                 <p class="conf">Confidence: high (read at source).</p>
             </div>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h3 id="validation">Audit-of-audit &mdash; adversarial validation</h3>
+            <p>
+                Every finding on this page (the VIA-C findings above and the
+                VIA-B follow-up below) was independently re-checked by a separate
+                adversarial pass whose remit was to <em>disconfirm</em>: four
+                fresh reviewers re-read the primary sources &mdash; the
+                <a
+                    href="https://eprint.iacr.org/2025/2074"
+                    target="_blank"
+                    rel="noopener"
+                    >paper</a
+                >, the
+                <a
+                    href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg"
+                    target="_blank"
+                    rel="noopener"
+                    >VIA Security</a
+                >
+                thread, and the code read at the same pinned commits
+                (<code>9575286</code> / <code>62fe493</code>, via
+                <code>git show</code>) &mdash; and tried to break each claim
+                rather than confirm it. <span class="tag tag-infer">inference</span>
+                <strong>No finding was refuted.</strong> Every core claim held;
+                the corrections were precision-level (a few line numbers, one
+                page number, and one cross-finding \(\sigma\) mislabel), and
+                they are folded into the findings themselves.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Finding</th>
+                        <th>Verdict</th>
+                        <th>What the re-check changed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><a href="#a1">A1</a> gadget bases</td>
+                        <td>confirmed &middot; corrected</td>
+                        <td>
+                            CMux base <code>81</code> is at <code>:153</code>,
+                            ring-switch <code>8</code> at <code>:156</code> (not
+                            <code>:152</code>/<code>:154</code>); Table 6 is on
+                            <strong>p.23</strong>; conversion-key base
+                            <code>18</code>&rarr;<code>11</code> distinguished
+                            from length \(\ell{=}18\) (unchanged)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a2">A2</a> security_param</td>
+                        <td>confirmed</td>
+                        <td>
+                            <code>u32</code>, read only in asserts/Debug; no
+                            estimator; <code>128</code> exceeds even the paper's
+                            own 110
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a3">A3</a> no paper-noise test</td>
+                        <td>confirmed</td>
+                        <td>
+                            lines exact; the cited
+                            \(\sigma_{1,S}{=}32,\sigma_{1,E}{=}1024,\sigma{=}26\)
+                            are the genuine VIA-C distributions; no
+                            \(P_{\text{fail}}\) code anywhere
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a4">A4</a> inert Gaussian key</td>
+                        <td>confirmed &middot; clarified</td>
+                        <td>
+                            inertness grep-verified; Yue's \(\sigma{=}4960\) is
+                            the <em>plain-VIA</em> figure &mdash; VIA-C keys are
+                            \(\sigma_{1,S}{=}32\) / \(\sigma{=}26\) (see fn 10)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a5">A5</a> decode threshold</td>
+                        <td>confirmed</td>
+                        <td>
+                            decode at \(q_4\), \(\Delta/2{=}128\); paper budget
+                            \(\approx 2.6\times10^5\); ratio \(\approx 2000\times\)
+                            checks out
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a6">A6</a> VIA \(q_1\)</td>
+                        <td>confirmed &middot; upgraded</td>
+                        <td>
+                            directly <em>observable</em> (App B prints
+                            \(268369921^2\)), not mere inference; a prime-square
+                            cannot be RNS-split, so two primes is deliberate
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a7">A7</a> wire serialization</td>
+                        <td>confirmed</td>
+                        <td>
+                            only a <code>Vec&lt;u64&gt;</code> codec;
+                            <code>serialize</code> is <code>todo!()</code>; no
+                            size accounting anywhere
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a8">A8</a> refuted concerns</td>
+                        <td>confirmed (both hold)</td>
+                        <td>
+                            <code>ViaCP=16</code>, no <code>MODULUS_PC</code>
+                            (the bug was in the Python reference); decode centring
+                            is constant-time
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb1">VB-1</a> no production e2e</td>
+                        <td>confirmed</td>
+                        <td>
+                            only ignored T=8 e2e + ignored T=256 repack
+                            <em>spike</em> tests on fresh inputs
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb2">VB-2</a> inherited bases</td>
+                        <td>confirmed</td>
+                        <td>
+                            <code>REALISTIC_B_PARAMS</code> reuse the VIA-C draft
+                            bases on the same rings
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb3">VB-3</a> repack depth</td>
+                        <td>confirmed &middot; softened</td>
+                        <td>
+                            depth 10 vs formula's 9 verified; "~11%" is of the
+                            key-switch term \(2\theta_{ks}\log n_2\), not of
+                            \(\theta_{rep}\) overall
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb4">VB-4</a> omitted terms</td>
+                        <td>confirmed</td>
+                        <td>
+                            key mod-switch + approximate-gadget terms omitted;
+                            Yue \(S^2\) concern is hedged/upstream
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb5">VB-5</a> response size</td>
+                        <td>confirmed</td>
+                        <td>
+                            1.81 KB / 127&times; headline confirmed in paper; not
+                            measurable from code
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb6">VB-6</a> single-repack bound</td>
+                        <td>confirmed &middot; re-tagged</td>
+                        <td>
+                            invariant + boundary arithmetic verified; "\(T\le
+                            n_1/n_3\)" is <em>inference</em>, not paper-stated
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#vb7">VB-7/8</a> no new params; CT</td>
+                        <td>confirmed (both hold)</td>
+                        <td>
+                            zero-copy borrow proven by a byte-identity test; no
+                            secret-dependent timing path
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
