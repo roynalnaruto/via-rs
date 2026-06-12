@@ -17,5 +17,9 @@ via-primitives = { workspace = true }
 tracing        = { workspace = true }
 zeroize        = { workspace = true }
 
+[package.metadata.docs.rs]
+features = ["via-b"]
+rustdoc-args = ["--html-in-header", "../../katex-header.html"]
+
 [lints]
 workspace = true
