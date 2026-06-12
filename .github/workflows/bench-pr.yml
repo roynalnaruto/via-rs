@@ -112,12 +112,15 @@ jobs:
           fi
 
       # 6. Benchmark the HEAD against the saved baseline → criterion writes change/.
-      - name: Benchmark PR head (--baseline base)
+      #    `--baseline-lenient` (not `--baseline`): a phase present on the head but
+      #    not the base — e.g. a newly added paper step — is left uncompared
+      #    instead of aborting with "Baseline 'base' must exist".
+      - name: Benchmark PR head (--baseline-lenient base)
         if: env.HAVE_BASE == '1'
         run: |
-          cargo bench --bench pipeline_paper -- --baseline base || true
-          cargo bench --bench pipeline_batch_paper     --features via-b -- --baseline base || true
-          cargo bench --bench pipeline_batch_e2e_paper --features via-b -- --baseline base || true
+          cargo bench --bench pipeline_paper -- --baseline-lenient base || true
+          cargo bench --bench pipeline_batch_paper     --features via-b -- --baseline-lenient base || true
+          cargo bench --bench pipeline_batch_e2e_paper --features via-b -- --baseline-lenient base || true
 
       # 7. Build the green/red comparison table (handles the no-data case itself).
       - name: Build comparison table

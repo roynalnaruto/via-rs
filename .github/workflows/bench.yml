@@ -65,10 +65,14 @@ jobs:
 
       # Benchmark this branch. With a base baseline available, criterion writes
       # the per-step relative change under target/criterion/<id>/change/.
+      # `--baseline-lenient` (not `--baseline`): a bench-id present on this branch
+      # but absent from the base — e.g. a step added since `main`, like
+      # `toy/04b_prepare_db` — is left uncompared instead of aborting the run with
+      # "Baseline 'base' must exist before comparison is allowed".
       - name: Benchmark PR / branch
         run: |
           if [ "${HAVE_BASE:-0}" = "1" ]; then
-            cargo bench --bench pipeline_toy -- --baseline base
+            cargo bench --bench pipeline_toy -- --baseline-lenient base
           else
             cargo bench --bench pipeline_toy
           fi
