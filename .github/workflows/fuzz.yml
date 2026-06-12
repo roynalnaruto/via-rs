@@ -1,10 +1,11 @@
 name: Fuzz
 
-# on:
-#   # Heavy (~60 targets × 60 s) — kept off push/PR. Manual + nightly only.
-#   workflow_dispatch:
-#   schedule:
-#     - cron: "0 3 * * *" # nightly 03:00 UTC
+on:
+  # Heavy (~60 targets × 60 s) — kept off push/PR. Manual-only for now.
+  workflow_dispatch:
+  # Nightly disabled for now; re-enable when fuzz CI is wanted again:
+  # schedule:
+  #   - cron: "0 3 * * *" # nightly 03:00 UTC
 
 # Cancel superseded runs on the same branch / PR.
 concurrency:
