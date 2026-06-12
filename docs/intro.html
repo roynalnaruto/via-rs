@@ -363,14 +363,20 @@
                         long as \(|E| < \Delta/2 = 16\).
                     </p>
                     <p>
-                        <strong>Accumulation.</strong> A
-                        <em>fresh</em> ciphertext might carry \(E = 3\): value
-                        \(35\), comfortably inside the safe band. But operations
-                        fold errors together — adding two ciphertexts adds their
-                        errors, and the first-dimension step (next Move) sums
-                        many terms at once — so \(E\) creeps upward, say \(3 \to
-                        11 \to 24\). At \(E = 24\) the stored value is \(32 + 24
-                        = 56\).
+                        <strong>Accumulation.</strong>
+                        <em>Adding two ciphertexts adds their two errors</em>. A
+                        <em>fresh</em> ciphertext might hold only \(E = 3\) (value
+                        \(35\), comfortably inside the safe band). But the
+                        server's whole job is to add ciphertexts together: sum
+                        \(k\) of them, each carrying an error of about \(3\), and
+                        by that rule the result's error can be as large as
+                        \(3 + 3 + \dots = 3k\). So the error grows with
+                        <em>how many terms you sum</em>: eight such terms already
+                        push \(E\) to \(8\times 3 = 24\), and the stored value
+                        becomes \(32 + 24 = 56\). (This is not hypothetical — it
+                        is exactly what a one-hot selector does: it sums one term
+                        per database row, so a bigger database means more terms
+                        and more error.)
                     </p>
                     <figure class="fig">
                         <svg
