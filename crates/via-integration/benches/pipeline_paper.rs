@@ -39,9 +39,24 @@ const L_QUERY: usize = 2;
 const L_CK: usize = 18;
 const L_RSK: usize = 8;
 const CK_BASE: u64 = 18;
-const NUM_ROWS: usize = 2;
-const NUM_COLS: usize = 2;
-const INDEX: usize = 15; // (α,β,γ)=(1,1,3) — every gate selecting.
+// num_crot is RING-fixed: log2(N1/N2) = log2(D) = 2. Independent of the grid.
+const NUM_CROT: usize = (N1 / N2).trailing_zeros() as usize;
+
+/// Paper grid dim (I or J) from env — default 2 preserves `just bench-paper` at
+/// 2×2. The `/benchmark` CI workflow sets `VIA_BENCH_ROWS=8`, `VIA_BENCH_COLS=16`
+/// to surface `first_dim`'s O(I·J) cost on a larger, asymmetric grid. Must stay a
+/// power of two (the DMux/CMux trees recurse one bit per layer).
+fn grid_dim(var: &str, default: usize) -> usize {
+    let v = std::env::var(var)
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .unwrap_or(default);
+    assert!(
+        v.is_power_of_two(),
+        "{var}={v} must be a power of two (DMux/CMux trees)"
+    );
+    v
+}
 
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2N1 = ViaCPolyQ2<N1>; // q2 @ n1
@@ -107,6 +122,9 @@ struct Fixture {
     q3: ViaCQ3,
     q4: ViaCQ4,
     p: ViaCP,
+    num_rows: usize,
+    num_cols: usize,
+    index: usize,
 }
 
 fn build_fixture() -> Fixture {
@@ -118,12 +136,17 @@ fn build_fixture() -> Fixture {
         ViaCP::default(),
     );
     let mut prg = Shake256Prg::new(b"via-c-bench-paper");
+    let num_rows = grid_dim("VIA_BENCH_ROWS", 2);
+    let num_cols = grid_dim("VIA_BENCH_COLS", 2);
+    // Last valid index → (γ,α,β) = (D-1, I-1, J-1): every DMux/CMux/CRot bit set
+    // (generalizes the old INDEX=15 at 2×2 → (1,1,3)).
+    let index = D * num_rows * num_cols - 1;
     let (client, pp) = PaperClient::setup(
         q1,
         q3,
         paper_params(),
-        NUM_ROWS,
-        NUM_COLS,
+        num_rows,
+        num_cols,
         CK_BASE,
         Distribution::Ternary,
         Distribution::Ternary,
@@ -133,10 +156,10 @@ fn build_fixture() -> Fixture {
         gen_rsk_closure,
     )
     .expect("client setup");
-    let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
-    let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, NUM_ROWS, NUM_COLS, p);
+    let records: Vec<Rec> = (0..D * num_rows * num_cols).map(|m| record(m, p)).collect();
+    let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, num_rows, num_cols, p);
     let prepared_db = PreparedDb::<N1, R2N1>::from_encoded(&encoded_db, q2);
-    let query = client.query(INDEX, &mut prg).expect("client query");
+    let query = client.query(index, &mut prg).expect("client query");
     Fixture {
         client,
         pp,
@@ -148,6 +171,9 @@ fn build_fixture() -> Fixture {
         q3,
         q4,
         p,
+        num_rows,
+        num_cols,
+        index,
     }
 }
 
@@ -158,8 +184,12 @@ fn paper_benches(c: &mut Criterion) {
     let b2 = fx.pp.params.gadget_base_2;
     let b_rsk = fx.pp.params.gadget_base_rsk;
     let ck_base = fx.pp.ck_base;
-    // Paper: I=J=2 (1 bit each), d=4 (2 bits).
-    let (num_dmux, num_cmux, num_crot) = (1usize, 1usize, 2usize);
+    // Grid-derived: num_dmux=log2(I), num_cmux=log2(J); num_crot is ring-fixed.
+    let (num_dmux, num_cmux, num_crot) = (
+        fx.num_rows.trailing_zeros() as usize,
+        fx.num_cols.trailing_zeros() as usize,
+        NUM_CROT,
+    );
 
     // T7: the static keys are pre-transformed once (the answer path does this at setup).
     let conv_key_eval = fx.pp.query_comp_key.rlwe_to_rgsw_key.to_eval();
@@ -185,7 +215,7 @@ fn paper_benches(c: &mut Criterion) {
         delta_coeffs[0] = fx.pp.params.delta();
         let trivial = RLWECiphertext::trivial(fx.q1, &R1::from_u128_coeffs(fx.q1, &delta_coeffs));
         let zero_q1 = RLWECiphertext::new(R1::zero(fx.q1), R1::zero(fx.q1));
-        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; NUM_ROWS];
+        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; fx.num_rows];
         dmux_tree(&dq.dmux_bits, trivial, &mut out, b1, b1);
         out
     };
@@ -238,8 +268,8 @@ fn paper_benches(c: &mut Criterion) {
                     fx.q1,
                     fx.q3,
                     paper_params(),
-                    NUM_ROWS,
-                    NUM_COLS,
+                    fx.num_rows,
+                    fx.num_cols,
                     CK_BASE,
                     Distribution::Ternary,
                     Distribution::Ternary,
@@ -255,7 +285,7 @@ fn paper_benches(c: &mut Criterion) {
     c.bench_function("paper/00_client_query", |b| {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-paper-query"),
-            |mut prg| black_box(fx.client.query(INDEX, &mut prg)),
+            |mut prg| black_box(fx.client.query(fx.index, &mut prg)),
             BatchSize::SmallInput,
         )
     });
@@ -302,7 +332,7 @@ fn paper_benches(c: &mut Criterion) {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-paper-e2e"),
             |mut prg| {
-                let query = fx.client.query(INDEX, &mut prg).expect("client query");
+                let query = fx.client.query(fx.index, &mut prg).expect("client query");
                 let ans = answer_one_query::<
                     N1,
                     N2,

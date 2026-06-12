@@ -40,5 +40,11 @@ harness = false
 name    = "pipeline_batch_paper"
 harness = false
 
+# VIA-B paper-scale full `answer_batch` e2e bench (requires `--features via-b`;
+# env-driven grid, runs its own 32 MiB-stack harness — no-op main otherwise).
+[[bench]]
+name    = "pipeline_batch_e2e_paper"
+harness = false
+
 [lints]
 workspace = true

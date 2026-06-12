@@ -1,0 +1,150 @@
+name: Bench (PR, /benchmark)
+
+# Comment-triggered, owner-gated paper-scale benchmark comparison.
+#
+# The repo owner comments `/benchmark` on a PR → this benchmarks the PR base and
+# the PR head back-to-back on the same runner at paper params on a larger,
+# asymmetric grid (I×J = 8×16, where first_dim's O(I·J) win shows) → posts a
+# sticky PR comment with a green/red per-phase base-vs-branch table.
+#
+# `issue_comment` fires for BOTH issues and PRs and ALWAYS runs the workflow file
+# from the DEFAULT branch (not the PR head), and does NOT auto-checkout the PR
+# head — so we gate to PR comments, resolve the PR head/base SHAs via the API,
+# and check them out manually. Non-blocking: its own workflow (not CI),
+# `continue-on-error`, outside the required-check path.
+on:
+  issue_comment:
+    types: [created]
+
+# Serialize per PR; a second `/benchmark` on the same PR cancels the first. NOT
+# keyed on github.ref — for issue_comment that is the default branch, so all PRs
+# would share one group and serialize globally.
+concurrency:
+  group: bench-pr-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+# A `permissions:` block REPLACES the default token scopes (unlisted → none).
+permissions:
+  contents: read # checkout + fetch the base commit
+  pull-requests: write # the sticky comparison comment
+  issues: write # 👍 reaction ack on the triggering comment
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench-pr:
+    name: Paper-scale /benchmark comparison
+    runs-on: ubuntu-latest
+    continue-on-error: true # never block merge — advisory only
+    # Gate: PR comments only, the `/benchmark` command, by the repo owner.
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/benchmark') &&
+      github.event.comment.author_association == 'OWNER'
+    env:
+      VIA_BENCH_ROWS: "8" # larger, asymmetric grid (I) — powers of two
+      VIA_BENCH_COLS: "16" # … (J); surfaces first_dim's O(I·J) cost
+      BENCH_NOISE_PCT: "3" # |Δ| within this band reads as ⚪ noise
+    steps:
+      # 1. Acknowledge: 👍 the triggering comment so the user sees it started.
+      - name: Ack with reaction
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '+1',
+            });
+
+      # 2. Resolve the PR head/base SHAs (the issue_comment payload has no refs).
+      - name: Resolve PR SHAs
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_sha', pr.base.sha);
+
+      # 3. Check out the PR HEAD with full history (so we can reach the base).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+      - name: Fetch base commit
+        run: git fetch --no-tags origin "${{ steps.pr.outputs.base_sha }}" || true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # 4. Start from a clean criterion slate (avoid stale base/new/change from a
+      #    restored cache poisoning the comparison).
+      - name: Clean criterion data
+        run: rm -rf target/criterion
+
+      # 5. Benchmark the BASE first, saving a criterion baseline `base` — but only
+      #    if it already carries this feature's bench targets (the PR that
+      #    *introduces* them has no base to compare against → skip gracefully).
+      #    `|| true` per target ensures the checkout-back always runs and one
+      #    target's failure doesn't abort the others.
+      - name: Benchmark base (--save-baseline base)
+        run: |
+          BASE='${{ steps.pr.outputs.base_sha }}'
+          GUARD='crates/via-integration/benches/pipeline_batch_e2e_paper.rs'
+          if git cat-file -e "$BASE:$GUARD" 2>/dev/null; then
+            PR_REF="$(git rev-parse HEAD)"
+            git checkout --quiet --detach "$BASE"
+            cargo bench --bench pipeline_paper -- --save-baseline base || true
+            cargo bench --bench pipeline_batch_paper     --features via-b -- --save-baseline base || true
+            cargo bench --bench pipeline_batch_e2e_paper --features via-b -- --save-baseline base || true
+            git checkout --quiet "$PR_REF"
+            echo "HAVE_BASE=1" >> "$GITHUB_ENV"
+          else
+            echo "Base lacks the paper bench targets — first-introduction PR; skipping comparison."
+            echo "HAVE_BASE=0" >> "$GITHUB_ENV"
+          fi
+
+      # 6. Benchmark the HEAD against the saved baseline → criterion writes change/.
+      - name: Benchmark PR head (--baseline base)
+        if: env.HAVE_BASE == '1'
+        run: |
+          cargo bench --bench pipeline_paper -- --baseline base || true
+          cargo bench --bench pipeline_batch_paper     --features via-b -- --baseline base || true
+          cargo bench --bench pipeline_batch_e2e_paper --features via-b -- --baseline base || true
+
+      # 7. Build the green/red comparison table (handles the no-data case itself).
+      - name: Build comparison table
+        if: always()
+        run: python3 .github/scripts/bench_compare_comment.py
+
+      # 8. Sticky PR comment: list → find by marker → create-or-update. `always()`
+      #    so a failed run still posts a note instead of going silent.
+      - name: Post sticky comparison comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- via-bench-compare -->';
+            const path = 'target/bench_compare_comment.md';
+            const body = fs.existsSync(path)
+              ? fs.readFileSync(path, 'utf8')
+              : marker + '\n_Benchmark run failed before producing a table — see the Actions log._\n';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
