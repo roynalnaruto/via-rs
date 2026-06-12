@@ -10,8 +10,10 @@
 //!   of an RGSW. This is why §4.7 lives in `gates` (Layer 4), not `encryption`
 //!   (Layer 2): importing Layer 3 into Layer 2 would invert the layer order.
 
-use crate::algebra::ring::RingPoly;
-use crate::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
+use crate::algebra::ring::{RingPoly, RingPolyEval};
+use crate::encryption::types::{
+    RGSWCiphertext, RLWECiphertext, RLevCiphertext, RLevEval, SecretKey,
+};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 use crate::switching::mod_switch::mod_switch_sym;
@@ -138,9 +140,40 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
 /// assert_eq!(rgsw.neg_s_m.samples.len(), 2);
 /// assert_eq!(rgsw.m.samples.len(), 2);
 /// ```
-pub fn rlwe_to_rgsw<const N: usize, R: RingPoly<N>, const L_OUT: usize, const L_CK: usize>(
+pub fn rlwe_to_rgsw<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L_OUT: usize,
+    const L_CK: usize,
+>(
     rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
     conv_key: &RLevCiphertext<N, R, L_CK>,
+    m_rlev: RLevCiphertext<N, R, L_OUT>,
+    base_ck: u64,
+) -> RGSWCiphertext<N, R, L_OUT, L_OUT> {
+    let neg_s_m = core::array::from_fn(|i| {
+        let prod = conv_key.gadget_product(&rlwe_levels[i].mask, base_ck);
+        RLWECiphertext::new(rlwe_levels[i].body + prod.mask, prod.body)
+    });
+    RGSWCiphertext::new(RLevCiphertext::new(neg_s_m), m_rlev)
+}
+
+/// Eval-key variant of [`rlwe_to_rgsw`] (T7): the conversion key is supplied
+/// **pre-transformed** as an [`RLevEval`], so the per-level gadget products skip
+/// the per-call `to_eval` of the conv-key samples. The conv key is static
+/// (`pp.query_comp_key.rlwe_to_rgsw_key`), so transforming it once at setup and
+/// reusing the eval form here removes `2·L_CK` transforms per level per query.
+///
+/// **Bit-identical** to [`rlwe_to_rgsw`] (the NTT is exact); the only change is
+/// where the conv-key transform happens (setup vs per call).
+pub fn rlwe_to_rgsw_eval<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L_OUT: usize,
+    const L_CK: usize,
+>(
+    rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
+    conv_key: &RLevEval<N, R, L_CK>,
     m_rlev: RLevCiphertext<N, R, L_OUT>,
     base_ck: u64,
 ) -> RGSWCiphertext<N, R, L_OUT, L_OUT> {

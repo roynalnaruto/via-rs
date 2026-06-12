@@ -99,7 +99,10 @@ fuzz_target!(|input: Input| {
         &mut rsk_prg,
     );
 
-    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk, q3, q4, B_RSK);
+    // T7: `resp_comp` consumes the eval-form ring-switch key (derived once,
+    // bit-identical to the coeff key via exact NTT — the round-trip is unchanged).
+    let rsk_eval = rsk.to_eval();
+    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk_eval, q3, q4, B_RSK);
 
     // Shape: mask reduced mod q3, body mod q4.
     for i in 0..N2 {

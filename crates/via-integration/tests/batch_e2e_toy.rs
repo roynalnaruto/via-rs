@@ -31,7 +31,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64,
+    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64_eval,
     repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -75,7 +75,7 @@ type R16 = Poly<N2, DynModulus, Coefficient>;
 type R2 = Poly<N3, DynModulus, Coefficient>; // the record ring at n3
 type K = LweToRlweKeyN64<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R64, R16, L_QUERY, L_CK, L_RSK, D>;
-type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, R64, L_QUERY, L_CK, L_RSK, D>;
+type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct degree-n3 record per flat index.
 fn record(m: usize, p: DynModulus) -> R2 {
@@ -160,7 +160,7 @@ fn build() -> Harness {
     let records: Vec<R2> = (0..D3 * NUM_ROWS * NUM_COLS)
         .map(|m| record(m, p))
         .collect();
-    let server = ToyBServer::setup::<R2>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyBServer::setup::<R64, R2>(&records, pp, q1, q2, q3, q4, p);
 
     Harness {
         client,
@@ -190,7 +190,7 @@ fn run_batch(h: &mut Harness, idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
                 let keys_q2 = repack_keys_n64_t8_from_cascade_modswitched(k, q2);
                 repack_n64_t8(arr, &keys_q2, CK_BASE)
             },
-            lwe_to_rlwe_n64::<DynModulus, L_CK>,
+            lwe_to_rlwe_n64_eval::<DynModulus, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<R2> = h

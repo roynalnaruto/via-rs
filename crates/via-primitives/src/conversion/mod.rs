@@ -65,8 +65,10 @@ pub mod extract;
 #[cfg(all(feature = "via-b", feature = "alloc"))]
 pub mod repack;
 
+#[cfg(feature = "alloc")]
+pub use conv::CascadeKey;
 pub use conv::{
-    ConvDims, conv_step, gen_conv_step_key, gen_conv_step_key_element,
+    ConvDims, conv_step, conv_step_eval, gen_conv_step_key, gen_conv_step_key_element,
     gen_conv_step_key_element_into,
 };
 pub use mlwe_ops::{
@@ -76,9 +78,11 @@ pub use mlwe_ops::{
 // toy-parameter instantiations it produces are re-exported here. The degree-64
 // instantiation is the VIA-C toy end-to-end query-compression cascade.
 pub use cascade::{
-    LweToRlweKeyN4, LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN8, gen_lwe_to_rlwe_key_n4,
+    LweToRlweKeyN4, LweToRlweKeyN4Eval, LweToRlweKeyN8, LweToRlweKeyN8Eval, LweToRlweKeyN64,
+    LweToRlweKeyN64Eval, LweToRlweKeyRnsN8, LweToRlweKeyRnsN8Eval, gen_lwe_to_rlwe_key_n4,
     gen_lwe_to_rlwe_key_n8, gen_lwe_to_rlwe_key_n64, gen_lwe_to_rlwe_key_rns_n8, lwe_to_rlwe_n4,
-    lwe_to_rlwe_n8, lwe_to_rlwe_n64, lwe_to_rlwe_rns_n8,
+    lwe_to_rlwe_n4_eval, lwe_to_rlwe_n8, lwe_to_rlwe_n8_eval, lwe_to_rlwe_n64,
+    lwe_to_rlwe_n64_eval, lwe_to_rlwe_rns_n8, lwe_to_rlwe_rns_n8_eval,
 };
 // Paper-scale n₁ = 2048 cascade (`alloc`-only — its ~24.75 MB key is heap-built).
 // The supported constructor is the heap builder `gen_lwe_to_rlwe_key_rns_n2048_boxed`;
@@ -87,7 +91,8 @@ pub use cascade::{
 // consumes `lwe_to_rlwe_rns_n2048`.
 #[cfg(feature = "alloc")]
 pub use cascade::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, LweToRlweKeyRnsN2048Eval, gen_lwe_to_rlwe_key_rns_n2048_boxed,
+    lwe_to_rlwe_rns_n2048, lwe_to_rlwe_rns_n2048_eval,
 };
 pub use extract::{ExtrDims, extr};
 // §7 — VIA-B repacking primitives (Part 1/2). Same gate as the `repack` module.

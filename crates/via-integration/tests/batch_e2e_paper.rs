@@ -28,7 +28,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
     repack_keys_poly_2048_t8_from_rns_cascade_boxed, repack_poly_2048_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -66,7 +66,7 @@ type Rp512 = ViaCPolyP<N2>; // p @ n2 (recover's degree-n2 plaintext)
 type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperBClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
-type PaperBServer = ViaBServer<K, N1, N2, N3, R1, R2, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperBServer = ViaBServer<K, N1, N2, N3, R1, R2, R3N2, R4N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct degree-n3 record per flat index.
 fn record(m: usize) -> Rec {
@@ -134,7 +134,7 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
 
     // --- Server setup: a DB of d3·I·J degree-n3 records (N_REC = N3) ---------
     let records: Vec<Rec> = (0..D3 * NUM_ROWS * NUM_COLS).map(record).collect();
-    let server = PaperBServer::setup::<Rec>(&records, pp, q1, q2, q3, q4, p);
+    let server = PaperBServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Batch query → answer_batch → recover_batch --------------------------
     let batch = client
@@ -150,7 +150,7 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
                 repack_poly_2048_t8(arr, &*q2_key, CK_BASE)
             },
-            lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>,
+            lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<Rec> = client

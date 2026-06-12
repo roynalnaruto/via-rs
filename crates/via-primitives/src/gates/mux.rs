@@ -14,7 +14,7 @@
 //! base_m)` — one per RGSW RLev half (paper Tables 5-6 list distinct `(L,B)`
 //! per half). Passing `base_neg_s_m == base_m` reproduces Python exactly.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::types::{RGSWCiphertext, RLWECiphertext};
 
 /// §4.1 — Homomorphic 1-of-2 multiplexer: returns `ct0` when the encrypted bit
@@ -77,7 +77,7 @@ use crate::encryption::types::{RGSWCiphertext, RLWECiphertext};
 /// let recovered: RP = sk.decrypt(&out, p);
 /// assert_eq!(recovered, msg0);
 /// ```
-pub fn cmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn cmux<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     select_bit: &RGSWCiphertext<N, R, L1, L2>,
     ct0: &RLWECiphertext<N, R>,
     ct1: &RLWECiphertext<N, R>,
@@ -133,7 +133,7 @@ pub fn cmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
 /// assert_eq!(sk.decrypt::<RP>(&r0, p), msg);
 /// assert_eq!(sk.decrypt::<RP>(&r1, p), Poly::new(p, [0, 0, 0, 0]));
 /// ```
-pub fn dmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn dmux<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     control_bit: &RGSWCiphertext<N, R, L1, L2>,
     ct: &RLWECiphertext<N, R>,
     base_neg_s_m: u64,
@@ -173,7 +173,12 @@ pub fn dmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
 ///
 /// No — see [`cmux`]; the gadget-decomposition path is data-dependent only on
 /// public ciphertext coefficients.
-pub fn cmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn cmux_tree<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L1: usize,
+    const L2: usize,
+>(
     select_bits: &[RGSWCiphertext<N, R, L1, L2>],
     inputs: &mut [RLWECiphertext<N, R>],
     base_neg_s_m: u64,
@@ -225,7 +230,12 @@ pub fn cmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usiz
 ///
 /// Output at depth `m` carries `m` chained external products:
 /// `m·(‖S‖₁·σ_e + L·B/4) < q/(2p)`, same budget as [`cmux_tree`].
-pub fn dmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn dmux_tree<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L1: usize,
+    const L2: usize,
+>(
     control_bits: &[RGSWCiphertext<N, R, L1, L2>],
     input: RLWECiphertext<N, R>,
     out: &mut [RLWECiphertext<N, R>],
@@ -254,6 +264,7 @@ pub fn dmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::ring::RingPoly;
     use crate::algebra::ring::element::Poly;
     use crate::algebra::ring::form::Coefficient;
     use crate::algebra::zq::modulus::PowerOfTwoModulus;

@@ -22,10 +22,10 @@
 //! scalar access, `from_centered_i64s`) are only meaningful in the
 //! coefficient basis; placing them on a form-parametric trait would be a
 //! lie at every `Evaluation` call site. Layer 2 today lives entirely in
-//! coefficient form (the Python reference does too, and the §0.4 NTT body
-//! is currently `unimplemented!()`). When eval-form ciphertexts become
-//! useful — e.g. once the NTT body lands and we want to keep ciphertexts
-//! in eval form across many homomorphic operations — a sibling
+//! coefficient form (the Python reference does too). The §0.4 negacyclic NTT
+//! body itself is implemented and tested; what remains coefficient-only is the
+//! Layer-2 *usage*. When eval-form ciphertexts become useful — i.e. once we
+//! keep ciphertexts in eval form across many homomorphic operations — a sibling
 //! `RingPolyEval<N>` trait will be introduced for the form-neutral subset.
 //!
 //! ## Associated-type story

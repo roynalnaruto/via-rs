@@ -11,12 +11,11 @@
 //! `paper:primitives/query_comp.py:263-353`, `via_c/server.py:136-142`
 
 use alloc::vec::Vec;
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::MLWECiphertext;
-use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext};
-use via_primitives::gates::rlwe_to_rgsw;
-use via_protocol::{DecompressedQuery, QueryCompressionKey};
-use zeroize::Zeroize;
+use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext, RLevEval};
+use via_primitives::gates::rlwe_to_rgsw_eval;
+use via_protocol::DecompressedQuery;
 
 /// Decompress `total_bits · L_QUERY` LWE ciphertexts into a [`DecompressedQuery`]
 /// of three RGSW groups (dmux / cmux / crot), all at `q1`.
@@ -24,8 +23,8 @@ use zeroize::Zeroize;
 /// # Type parameters
 ///
 /// - `N1` — large ring degree; `R1` — its ring backend at `q1`.
-/// - `K` — the cascade-key type (P2's `LweToRlweKey…`); reached via the `Box<K>`
-///   in [`QueryCompressionKey`].
+/// - `KEval` — the **eval-form** cascade key (`CascadeKey::Eval`), supplied as
+///   `cascade_eval`; the injected `cascade` closure key-switches against it (T7).
 /// - `L_QUERY` — per-bit LWE count = output RGSW gadget depth.
 /// - `L_CK` — conversion-key depth (`rlwe_to_rgsw_key`).
 /// - `CascadeFn` — the bound `lwe_to_rlwe_*` for this ring (returns RLWE).
@@ -43,14 +42,15 @@ use zeroize::Zeroize;
 #[allow(clippy::too_many_arguments)]
 pub fn query_decomp<
     const N1: usize,
-    R1: RingPoly<N1>,
-    K: Zeroize,
+    R1: RingPoly<N1> + RingPolyEval<N1>,
+    KEval,
     const L_QUERY: usize,
     const L_CK: usize,
     CascadeFn,
 >(
     lwe_query: &[MLWECiphertext<N1, 1, R1::Projected<1>>],
-    comp_key: &QueryCompressionKey<K, N1, R1, L_CK>,
+    conv_key_eval: &RLevEval<N1, R1, L_CK>,
+    cascade_eval: &KEval,
     num_dmux: usize,
     num_cmux: usize,
     num_crot: usize,
@@ -59,7 +59,7 @@ pub fn query_decomp<
     cascade: CascadeFn,
 ) -> DecompressedQuery<N1, R1, L_QUERY>
 where
-    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K, u64) -> RLWECiphertext<N1, R1>,
+    CascadeFn: Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &KEval, u64) -> RLWECiphertext<N1, R1>,
 {
     let total_bits = num_dmux + num_cmux + num_crot;
     assert_eq!(
@@ -77,16 +77,16 @@ where
         let lwe_levels = &lwe_query[bit_idx * L_QUERY..(bit_idx + 1) * L_QUERY];
 
         // LWE → RLWE via the cascade (P2 returns RLWE directly — no unwrap).
-        let rlwe_levels: [RLWECiphertext<N1, R1>; L_QUERY] = core::array::from_fn(|i| {
-            cascade(&lwe_levels[i], &comp_key.lwe_to_rlwe_key, cascade_base)
-        });
+        let rlwe_levels: [RLWECiphertext<N1, R1>; L_QUERY] =
+            core::array::from_fn(|i| cascade(&lwe_levels[i], cascade_eval, cascade_base));
 
         // Assemble the `m` RLev (RLWECiphertext is `Copy`, so reuse `rlwe_levels`).
         let m_rlev = RLevCiphertext::new(rlwe_levels);
 
-        // RLWE → RGSW @ q1 using RLev_{S1}(S1²).
+        // RLWE → RGSW @ q1 using the pre-transformed RLev_{S1}(S1²) (T7: the
+        // conv key is static, so it is supplied eval-form once from setup).
         let rgsw: RGSWCiphertext<N1, R1, L_QUERY, L_QUERY> =
-            rlwe_to_rgsw(rlwe_levels, &comp_key.rlwe_to_rgsw_key, m_rlev, ck_base);
+            rlwe_to_rgsw_eval(rlwe_levels, conv_key_eval, m_rlev, ck_base);
 
         rgsw_bits.push(rgsw);
     }
@@ -105,7 +105,7 @@ mod tests {
     use via_primitives::algebra::ring::form::Coefficient;
     use via_primitives::algebra::zq::modulus::DynModulus;
     use via_primitives::conversion::{
-        LweToRlweKeyN8, encrypt_lwe, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+        CascadeKey, LweToRlweKeyN8, encrypt_lwe, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
     };
     use via_primitives::encryption::types::SecretKey;
     use via_primitives::gates::gen_rlwe_to_rgsw_key;
@@ -131,10 +131,8 @@ mod tests {
             gen_lwe_to_rlwe_key_n8(&sk, BASE, Distribution::Ternary, &mut prg);
         let conv_key =
             gen_rlwe_to_rgsw_key::<N1, R8, L_CK>(&sk, BASE, Distribution::Ternary, &mut prg);
-        let comp_key = QueryCompressionKey::new(
-            alloc::boxed::Box::new(cascade_key),
-            alloc::boxed::Box::new(conv_key),
-        );
+        let conv_key_eval = conv_key.to_eval();
+        let cascade_eval = cascade_key.to_eval_boxed();
 
         // 10 trivial-zero LWEs (shape only — decrypt-correctness is the e2e test).
         let zero_lwe = encrypt_lwe(&sk, 0u64, 16, Distribution::Ternary, &mut prg);
@@ -142,13 +140,14 @@ mod tests {
 
         let dq = query_decomp::<N1, R8, _, L_QUERY, L_CK, _>(
             &lwe_query,
-            &comp_key,
+            &conv_key_eval,
+            &*cascade_eval,
             2, // num_dmux
             2, // num_cmux
             1, // num_crot
             BASE,
             BASE,
-            lwe_to_rlwe_n8,
+            lwe_to_rlwe_n8_eval,
         );
         assert_eq!(dq.dmux_bits.len(), 2);
         assert_eq!(dq.cmux_bits.len(), 2);
@@ -166,22 +165,21 @@ mod tests {
             gen_lwe_to_rlwe_key_n8(&sk, BASE, Distribution::Ternary, &mut prg);
         let conv_key =
             gen_rlwe_to_rgsw_key::<N1, R8, L_CK>(&sk, BASE, Distribution::Ternary, &mut prg);
-        let comp_key = QueryCompressionKey::new(
-            alloc::boxed::Box::new(cascade_key),
-            alloc::boxed::Box::new(conv_key),
-        );
+        let conv_key_eval = conv_key.to_eval();
+        let cascade_eval = cascade_key.to_eval_boxed();
         let zero_lwe = encrypt_lwe(&sk, 0u64, 16, Distribution::Ternary, &mut prg);
         let lwe_query = alloc::vec![zero_lwe; 9]; // not 10
 
         let _ = query_decomp::<N1, R8, _, L_QUERY, L_CK, _>(
             &lwe_query,
-            &comp_key,
+            &conv_key_eval,
+            &*cascade_eval,
             2,
             2,
             1,
             BASE,
             BASE,
-            lwe_to_rlwe_n8,
+            lwe_to_rlwe_n8_eval,
         );
     }
 }

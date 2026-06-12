@@ -53,14 +53,13 @@
 //! convert back via `into_coeff()`. §0.4 may add a `mul_via_ntt` helper that
 //! wraps this round-trip; the plain `Mul` impl will not change semantics.
 //!
+//! The negacyclic NTT transform body (§0.4) — `element::Poly::into_eval` /
+//! `into_coeff` and their `ntt::ntt_inplace` / `ntt::intt_inplace` cores — is
+//! implemented and tested on both backends (the round-trip tests run; they are
+//! not `#[ignore]`d). See "Multiplication semantics" above. Still pending:
+//!
 //! ## What is **not** here
 //!
-//! - **Negacyclic NTT transform body** — §0.4. The [`element::Poly::into_eval`]
-//!   / [`element::Poly::into_coeff`] methods exist today but their internal
-//!   `ntt::ntt_inplace` / `ntt::intt_inplace` are `unimplemented!()` stubs.
-//!   Eval-form arithmetic on freshly constructed zero polynomials is fully
-//!   testable; round-trips through the transforms are
-//!   `#[ignore = "needs §0.4 NTT body"]`.
 //! - **Ring embedding / projection** $\iota_j^{n' \to n}$ and
 //!   $\pi_j^{n \to n'}$ — §0.5. Pure coefficient-level index moves; lands
 //!   when the ring-switching layer (§3.3) needs it.
@@ -81,6 +80,7 @@ pub mod abstraction;
 pub mod element;
 pub mod form;
 pub mod ntt;
+pub mod ntt_abstraction;
 pub mod ops;
 pub mod reshape;
 pub mod rns_element;
@@ -88,3 +88,4 @@ pub mod rns_ops;
 pub mod rns_reshape;
 
 pub use abstraction::RingPoly;
+pub use ntt_abstraction::RingPolyEval;

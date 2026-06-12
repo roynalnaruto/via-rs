@@ -545,6 +545,65 @@ mod tests {
         check(paper::ViaQ2::default());
     }
 
+    /// §0.4 audit (T5): every paper *coefficient* modulus that carries the
+    /// `O(N²)` multiply cost is NTT-friendly at the paper degree `N = 2048`, so
+    /// the eval-form `RLevCiphertext::gadget_product_ntt` path applies to it.
+    /// This additionally covers the RNS `q₁` slot primes (both VIA and VIA-C)
+    /// that `ntt_friendly_consts_n_inv_paper` does not. The power-of-two `q₄`
+    /// and `p` are intentionally excluded — they keep the schoolbook path and do
+    /// not implement `NttFriendly` (they satisfy `q ≡ 0 mod 2N`, not `q ≡ 1`).
+    #[test]
+    fn paper_coefficient_moduli_are_ntt_friendly_at_n2048() {
+        use crate::algebra::rns::basis::RnsBasis;
+        use crate::algebra::rns::basis::paper as rns_paper;
+
+        // Compile-time witness: touching `N_INV` forces `check_ntt::<Q, 2048>()`
+        // (the `(Q-1) % 4096 == 0` assertion), so this fails to compile if any
+        // listed modulus stops being NTT-friendly. `N_INV` (not `PSI`) is used
+        // to avoid the expensive const-eval primitive-root search.
+        fn witness<M: NttFriendly<2048>>() {
+            assert!(M::N_INV != 0);
+        }
+        // RNS q₁ slot primes — tied to the actual basis definitions.
+        witness::<<rns_paper::ViaCQ1Rns as RnsBasis>::M0>();
+        witness::<<rns_paper::ViaCQ1Rns as RnsBasis>::M1>();
+        witness::<<rns_paper::ViaQ1Rns as RnsBasis>::M0>();
+        witness::<<rns_paper::ViaQ1Rns as RnsBasis>::M1>();
+        // Single-prime q₂ / q₃.
+        witness::<paper::ViaCQ2>();
+        witness::<paper::ViaCQ3>();
+        witness::<paper::ViaQ2>();
+        witness::<paper::ViaQ3>();
+
+        // Human-readable companion: every eval-path modulus has q ≡ 1 (mod 4096).
+        for q in [
+            137_438_822_401u64, // ViaCQ1 slot 0
+            274_810_798_081,    // ViaCQ1 slot 1
+            268_369_921,        // ViaQ1 slot 0
+            536_608_769,        // ViaQ1 slot 1
+            17_175_674_881,     // ViaCQ2
+            8_380_417,          // ViaCQ3
+            34_359_214_081,     // ViaQ2
+            2_147_352_577,      // ViaQ3
+        ] {
+            assert_eq!(
+                q % 4096,
+                1,
+                "paper coeff modulus {q} must be ≡ 1 mod 2N=4096"
+            );
+        }
+
+        // q₄ (2¹² / 2¹⁵) and p (16 / 256) are power-of-two ⇒ q ≡ 0 mod 2N, so
+        // they are NOT NttFriendly and stay on the schoolbook path by design.
+        for pow2 in [4096u64, 32768, 16, 256] {
+            assert_ne!(
+                pow2 % 4096,
+                1,
+                "power-of-two modulus {pow2} must not be NTT-friendly"
+            );
+        }
+    }
+
     /// Forward NTT on a known input at q=17, N=4 produces the evaluations
     /// at psi^1, psi^3, psi^5, psi^7 in bit-reversed order.
     #[test]

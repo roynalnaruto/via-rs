@@ -233,9 +233,11 @@ fn kat_resp_comp() {
     let rsk_prg = &mut Shake256Prg::new(b"layer6-kat-rc-rsk");
     let rsk =
         gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &sk2, B_RSK, Distribution::Ternary, rsk_prg);
+    let rsk_eval = rsk.to_eval();
 
     // Paper path: sym q2→q3 → ring_switch n1→n2 @ q3 → asym q3→q4 (body only).
-    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk, q3, q4, B_RSK);
+    // (T7: resp_comp now consumes the pre-transformed RSK; bit-identical, KAT holds.)
+    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk_eval, q3, q4, B_RSK);
 
     assert_coeffs(
         &answer.mask,
