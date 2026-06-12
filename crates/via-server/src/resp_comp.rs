@@ -30,8 +30,8 @@ use via_primitives::switching::ring_switch::ring_switch_eval;
 /// # Noise
 ///
 /// Three rescales + one ring-switch; correctness needs the total under
-/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure rides on the
-/// P2 SPIKE budget.
+/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure follows from
+/// the noise analysis in the paper.
 ///
 /// # Panics
 ///

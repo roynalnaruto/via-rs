@@ -72,7 +72,7 @@ where
     for bit_idx in 0..total_bits {
         let lwe_levels = &lwe_query[bit_idx * L_QUERY..(bit_idx + 1) * L_QUERY];
 
-        // LWE → RLWE via the cascade (P2 returns RLWE directly — no unwrap).
+        // LWE → RLWE via the cascade (returns RLWE directly — no unwrap).
         let rlwe_levels: [RLWECiphertext<N1, R1>; L_QUERY] =
             core::array::from_fn(|i| cascade(&lwe_levels[i], cascade_eval, cascade_base));
 

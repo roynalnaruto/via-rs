@@ -264,7 +264,7 @@ where
 /// # Noise
 ///
 /// Toy-param closure (the full cascade→…→ring-switch chain) is verified by the
-/// `e2e_toy` gate; paper-scale closure rides the P2 SPIKE budget.
+/// `e2e_toy` gate; paper-scale closure follows from the noise analysis in the paper.
 ///
 /// # Parallelism (GPU)
 ///
