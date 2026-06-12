@@ -8,7 +8,7 @@ Private Information Retrieval (PIR) schemes — [Liu, Wang & Zhang (2025)](https
 > implementation/architecture analysis and audit. This README is the quick
 > path for developers who want to clone, build, and test.
 
-### Overview
+### Overview 
 
 PIR lets a client fetch the `i`-th record of a server-held database while
 keeping the index `i` hidden from the server — single-server, with no
