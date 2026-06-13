@@ -30,17 +30,13 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
-use via_primitives::conversion::{
-    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64_eval,
-    repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
-};
-use via_primitives::encryption::types::RLWECiphertext;
+use via_primitives::conversion::{LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64};
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams};
-use via_server::ViaBServer;
+use via_server::{ServerConfig, ViaBServer};
 
 const N1: usize = 64;
 const N2: usize = 16;
@@ -160,7 +156,8 @@ fn build() -> Harness {
     let records: Vec<R2> = (0..D3 * NUM_ROWS * NUM_COLS)
         .map(|m| record(m, p))
         .collect();
-    let server = ToyBServer::setup::<R64, R2>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyBServer::setup::<R64, R2>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+        .expect("server setup");
 
     Harness {
         client,
@@ -174,25 +171,13 @@ fn build() -> Harness {
 
 /// One batch round-trip for `idxs`; returns `(recovered, expected)` records.
 fn run_batch(h: &mut Harness, idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
-    let q2 = DynModulus::new(Q2);
     let batch = h
         .client
         .batch_query::<T, N3>(idxs, &mut h.prg)
         .expect("batch_query");
-    let answer = h
-        .server
-        .answer_batch::<R64, T, _, _>(
-            &batch,
-            // Repack closure (cascade-key reuse across q1 ≠ q2): mod-switch the q1 cascade key
-            // suffix → q2, then repack the q2 post-CRot ciphertexts at base CK_BASE.
-            |rotateds: &[RLWECiphertext<N1, R64>], k: &K| {
-                let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-                let keys_q2 = repack_keys_n64_t8_from_cascade_modswitched(k, q2);
-                repack_n64_t8(arr, &keys_q2, CK_BASE)
-            },
-            lwe_to_rlwe_n64_eval::<DynModulus, L_CK>,
-        )
-        .expect("answer_batch");
+    // cascade + repack (cascade-key reuse across q1 ≠ q2) are the server backend's
+    // behaviour now; `answer_batch::<T>` wires them.
+    let answer = h.server.answer_batch::<T>(&batch).expect("answer_batch");
     let recovered: Vec<R2> = h
         .client
         .recover_batch::<R16, R16, R16, N3, T>(&answer, h.q3, h.q4, h.p)

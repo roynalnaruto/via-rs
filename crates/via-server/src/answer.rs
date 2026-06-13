@@ -562,6 +562,7 @@ impl<
         <Rg::R3 as RingPoly<N2>>::Embedded<N1>: RingPoly<N1, Projected<N2> = Rg::R3>,
     {
         let q2 = self.q2_mod;
+        let ck_base = self.public_params.ck_base;
         crate::batch::answer_batch::<
             N1,
             N2,
@@ -588,7 +589,7 @@ impl<
             self.q3_mod,
             self.q4_mod,
             move |rotateds: &[RLWECiphertext<N1, Rg::R2>], k: &Rg::K| {
-                <Rg as ServerScheme<N1, N2>>::repack::<T>(rotateds, k, q2)
+                <Rg as ServerScheme<N1, N2>>::repack::<T>(rotateds, k, q2, ck_base)
             },
             <Rg as ServerScheme<N1, N2>>::cascade,
         )
@@ -597,7 +598,7 @@ impl<
 
 /// VIA-C server: [`Server`] with the record degree fixed to `N_REC = N2` (one
 /// record-ring per query-compression slot — the VIA-C packing), over the
-/// [`Scheme`](crate::scheme::Scheme) carrier.
+/// [`Scheme`] carrier.
 /// `ViaCServer<K, N1, N2, R1, R2, R3, R4, …>` ≡ `Server<Scheme<K,R1,R2,R3,R4>, N1, N2, N2, …>`.
 #[allow(type_alias_bounds)]
 pub type ViaCServer<
@@ -616,7 +617,7 @@ pub type ViaCServer<
 
 /// VIA-B server: [`Server`] with the record degree exposed as the finer
 /// `N_REC = N3 ≤ N2` (the VIA-B record ring), over the
-/// [`Scheme`](crate::scheme::Scheme) carrier. Gated on `via-b`.
+/// [`Scheme`] carrier. Gated on `via-b`.
 /// `ViaBServer<K, N1, N2, N3, R1, R2, R3, R4, …>` ≡ `Server<Scheme<K,R1,R2,R3,R4>, N1, N2, N3, …>`.
 #[cfg(feature = "via-b")]
 #[allow(type_alias_bounds)]

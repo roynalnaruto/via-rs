@@ -174,24 +174,7 @@ mod b {
 
         // Run answer_batch once (untimed) to obtain the answer for recover_batch.
         let run_answer_batch = || {
-            answer_batch::<
-                N1,
-                N2,
-                N3,
-                T,
-                R64,
-                R64,
-                R64,
-                R16,
-                R16,
-                K,
-                L_QUERY,
-                L_CK,
-                L_RSK,
-                D,
-                _,
-                _,
-            >(
+            answer_batch::<N1, N2, N3, T, R64, R64, R16, R16, K, L_QUERY, L_CK, L_RSK, D, _, _>(
                 &fx.batch,
                 &fx.pp,
                 &prepared_db,
@@ -259,7 +242,6 @@ mod b {
                         N2,
                         N3,
                         T,
-                        R64,
                         R64,
                         R64,
                         R16,

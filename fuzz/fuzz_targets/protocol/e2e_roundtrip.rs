@@ -18,12 +18,12 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
-use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval};
+use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8};
 use via_primitives::sampling::{Distribution, Shake256Prg};
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams};
-use via_server::ViaCServer;
+use via_server::{ServerConfig, ViaCServer};
 
 const N1: usize = 8;
 const N2: usize = 4;
@@ -137,12 +137,11 @@ fuzz_target!(|input: Input| {
     .expect("client setup");
 
     let records: Vec<R4> = input.records.iter().map(|c| R4::new(p, *c)).collect();
-    let server = ToyServer::setup::<R8, R4>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyServer::setup::<R8, R4>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+        .expect("server setup");
 
     let query = client.query(input.index, &mut prg).expect("client query");
-    let answer = server
-        .answer::<R8, _>(&query, lwe_to_rlwe_n8_eval::<DynModulus, L_CK>)
-        .expect("server answer");
+    let answer = server.answer(&query).expect("server answer");
     let recovered: R4 = client
         .recover::<R4, R4, R4>(&answer, q3, q4, p)
         .expect("client recover");
