@@ -235,7 +235,7 @@ fn kat_resp_comp() {
 
     // Asymmetric path: sym q2→q3 → ring_switch n1→n2 @ q3 → asym q3→q4 (body only).
     // (T7: resp_comp now consumes the pre-transformed RSK; bit-identical, KAT holds.)
-    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk_eval, q3, q4, B_RSK);
+    let answer = resp_comp::<N1, N2, R8, R4, R4, L_RSK, D>(&ct, &rsk_eval, q3, q4, B_RSK);
 
     assert_coeffs(
         &answer.mask,

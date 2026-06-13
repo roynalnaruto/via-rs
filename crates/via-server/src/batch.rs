@@ -76,8 +76,7 @@ pub fn answer_batch<
     const T: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
     R2: RingPoly<N1> + RingPolyEval<N1>,
-    R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
+    R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     K: Zeroize + CascadeKey,
     const L_QUERY: usize,
@@ -93,12 +92,13 @@ pub fn answer_batch<
     prepared_keys: &PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
-    q3_mod: R3L::Modulus,
+    q3_mod: R3::Modulus,
     q4_mod: R4::Modulus,
     repack: RepackFn,
     cascade: CascadeFn,
 ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
 where
+    R3::Embedded<N1>: RingPoly<N1, Projected<N2> = R3>,
     RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
     CascadeFn:
         Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
@@ -149,7 +149,7 @@ where
 
     // --- Step 7: RespComp once on the repacked ciphertext --------------------
     let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
-        resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
+        resp_comp::<N1, N2, R2, R3, R4, L_RSK, D>(
             &repacked,
             &prepared_keys.rsk,
             q3_mod,

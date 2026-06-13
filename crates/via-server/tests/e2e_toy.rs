@@ -31,7 +31,7 @@ use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams, QueryCompressionKey};
-use via_server::{PreparedDb, PreparedKeys, ViaCServer, answer_one_query, setup_db};
+use via_server::{PreparedDb, PreparedKeys, ServerConfig, ViaCServer, answer_one_query, setup_db};
 
 const N1: usize = 8;
 const N2: usize = 4;
@@ -143,14 +143,13 @@ fn run_e2e(target_i: usize, target_j: usize, target_k: usize, via_server: bool) 
         let server = ViaCServer::<Cascade, N1, N2, R8, R8, R4, R4, L_QUERY, L_CK, L_RSK, D>::setup::<
             R8,
             R4,
-        >(&records, pp, q1, q2, q3, q4, p);
-        server
-            .answer::<R8, _>(&query, lwe_to_rlwe_n8_eval::<DynModulus, L_CK>)
-            .expect("server answer")
+        >(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+        .expect("server setup");
+        server.answer(&query).expect("server answer")
     } else {
         let prepared = PreparedDb::<N1, R8>::from_encoded(&db, q2);
         let prepared_keys = PreparedKeys::from_public_params(&pp);
-        answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+        answer_one_query::<N1, N2, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
             &query,
             &pp,
             &prepared,

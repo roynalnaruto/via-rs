@@ -21,9 +21,9 @@ use via_primitives::switching::ring_switch::ring_switch_eval;
 /// # Type parameters
 ///
 /// - `R2` — input ring at `(q2, n1)`.
-/// - `R3L` — intermediate ring at `(q3, n1)` (the `mod_switch_sym` output);
-///   `R3L::Projected<N2> = R3`.
-/// - `R3` — ring at `(q3, n2)` (ring-switch output and answer **mask**).
+/// - `R3` — ring at `(q3, n2)` (ring-switch output and answer **mask**). The
+///   q3-at-n1 `mod_switch_sym` intermediate is derived internally as
+///   `R3::Embedded<N1>` (the `where` bound pins `Projected<N2> = R3`).
 /// - `R4` — ring at `(q4, n2)` (answer **body** after the trailing rescale).
 /// - `L`, `D` — ring-switch key depth and `D = N1 / N2`.
 ///
@@ -47,24 +47,29 @@ pub fn resp_comp<
     const N1: usize,
     const N2: usize,
     R2: RingPoly<N1>,
-    R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
+    R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     const L: usize,
     const D: usize,
 >(
     ct: &RLWECiphertext<N1, R2>,
     rsk: &RingSwitchKeyEval<N1, N2, R3, L, D>,
-    q3_mod: R3L::Modulus,
+    q3_mod: R3::Modulus,
     q4_mod: R4::Modulus,
     base_rsk: u64,
-) -> ModSwitchedCiphertext<N2, R3, R4> {
+) -> ModSwitchedCiphertext<N2, R3, R4>
+where
+    // `R3` lifted to degree `n1` is the q3-at-n1 ring-switch input; the GAT
+    // guarantees its modulus, so we only need the round-trip `Projected<N2> = R3`.
+    R3::Embedded<N1>: RingPoly<N1, Projected<N2> = R3>,
+{
     // Step 1: symmetric q2 → q3, still at degree n1.
-    let ct_q3_n1: RLWECiphertext<N1, R3L> = mod_switch_sym::<N1, R2, R3L>(ct, q3_mod);
+    let ct_q3_n1: RLWECiphertext<N1, R3::Embedded<N1>> =
+        mod_switch_sym::<N1, R2, R3::Embedded<N1>>(ct, q3_mod);
 
     // Step 2: ring-switch n1 → n2 @ q3 (uniform-q3 input — no asymmetry yet).
     let ct_q3_n2: RLWECiphertext<N2, R3> =
-        ring_switch_eval::<N1, N2, R3L, L, D>(&ct_q3_n1, rsk, base_rsk);
+        ring_switch_eval::<N1, N2, R3::Embedded<N1>, L, D>(&ct_q3_n1, rsk, base_rsk);
 
     // Step 3: trailing asymmetric rescale — mask stays @ q3, body → q4.
     mod_switch_asym::<N2, R3, R3, R4>(&ct_q3_n2, q3_mod, q4_mod)
@@ -117,7 +122,7 @@ mod tests {
         let ct = s1_q2.encrypt(&encode(&pt, q2), Distribution::Ternary, &mut prg);
 
         let answer =
-            resp_comp::<N1, N2, Rq<N1>, Rq<N1>, Rq<N2>, Rq<N2>, L, D>(&ct, &rsk_eval, q3, q4, BASE);
+            resp_comp::<N1, N2, Rq<N1>, Rq<N2>, Rq<N2>, L, D>(&ct, &rsk_eval, q3, q4, BASE);
 
         // decrypt_asymmetric(S2@q3, q3, q4, p) → slot-0 projection π_0(M).
         let recovered: Rq<N2> = s2_q3.decrypt_asymmetric(&answer, q3, q4, p);
