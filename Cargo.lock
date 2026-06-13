@@ -485,6 +485,7 @@ dependencies = [
 name = "via-primitives"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "libm",
  "rand_core",
  "sha3",

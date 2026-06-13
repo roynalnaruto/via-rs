@@ -1,9 +1,9 @@
-//! **Paper-scale** in-memory client ↔ server e2e (P4, double-confirmation).
+//! **Paper-scale** in-memory client ↔ server e2e (double-confirmation).
 //!
 //! Same protocol round-trip as `client_server_e2e`, but at the paper VIA-C
-//! parameters (Appendix B): `n1 = 2048`, `n2 = 512`, `d = 4`, `q1 ≈ 2^75`
+//! parameters: `n1 = 2048`, `n2 = 512`, `d = 4`, `q1 ≈ 2^75`
 //! (two-prime RNS) `≫ q2 ≈ 2^34 ≫ q3 ≈ 2^23 ≫ q4 = 2^12`, `p = 16`, with the
-//! Table-6 gadget bases (DMux 55879, CMux/CRot 81, conversion-key 18,
+//! gadget bases (DMux 55879, CMux/CRot 81, conversion-key 18,
 //! ring-switch 8). This is *not* a wire test — objects are passed in-memory;
 //! it exists only to confirm the protocol and the noise budget close at
 //! paper-scale ring dimensions and moduli.
@@ -21,7 +21,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
 };
 use via_primitives::params::{ViaCPolyP, ViaCPolyQ1Rns, ViaCPolyQ2, ViaCPolyQ3, ViaCPolyQ4};
 use via_primitives::sampling::distribution::Distribution;
@@ -42,7 +42,7 @@ const CK_BASE: u64 = 18;
 const NUM_ROWS: usize = 2; // I
 const NUM_COLS: usize = 2; // J
 
-// Paper ring instantiation (Appendix B).
+// Paper ring instantiation.
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2N1 = ViaCPolyQ2<N1>; // q2 @ n1 (DMux output / FirstDim)
 type R3N1 = ViaCPolyQ3<N1>; // q3 @ n1 (mod_switch_sym intermediate + rekey target)
@@ -53,7 +53,7 @@ type Rec = ViaCPolyP<N2>; // p @ n2 (records)
 type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
-type PaperServer = ViaCServer<K, N1, N2, R1, R2N1, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperServer = ViaCServer<K, N1, N2, R1, R2N1, R3N2, R4N2, L_QUERY, L_CK, L_RSK, D>;
 type PaperPp = PublicParams<K, N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// Client `setup` (the keygen-heavy phase) factored out for reuse by both the
@@ -126,12 +126,12 @@ fn round_trip(index: usize) -> (Rec, Rec) {
 
     // --- Server setup ----------------------------------------------------
     let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
-    let server = PaperServer::setup::<Rec>(&records, pp, q1, q2, q3, q4, p);
+    let server = PaperServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Query → Answer → Recover ----------------------------------------
     let query = client.query(index, &mut prg).expect("client query");
     let answer = server
-        .answer::<R3N1, _>(&query, lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>)
+        .answer::<R3N1, _>(&query, lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>)
         .expect("server answer");
     let recovered: Rec = client
         .recover::<R3N2, R4N2, Rec>(&answer, q3, q4, p)

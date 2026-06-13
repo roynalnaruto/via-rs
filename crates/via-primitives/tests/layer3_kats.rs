@@ -1,8 +1,8 @@
-//! Cross-language KAT parity for Layer-3 switching primitives (§3.1–§3.4).
+//! Cross-language KAT parity for the switching primitives.
 //!
 //! Each test reproduces — in Rust, with the same seed and sampling order — a
-//! setup that `.references/via-spec/scripts/gen_layer3_kats.py` ran in Python,
-//! then asserts byte-for-byte equality against the generated `data::*`
+//! setup that the reference implementation ran, then asserts byte-for-byte
+//! equality against the generated `data::*`
 //! constants. The `kat_gen_rsk_prg_order` test is the critical PRG-ordering
 //! lock: it asserts the full D×L×N2 mask/body byte stream, so any divergence
 //! in the four nested `gen_rsk` loops (j-outer, level-inner, mask-before-error)
@@ -26,7 +26,7 @@ mod data {
     include!("data/layer3_kats.rs");
 }
 
-// TOY parameter backends (power-of-two moduli, matching the Python generator).
+// TOY parameter backends (power-of-two moduli, matching the reference generator).
 type Q2<const N: usize> = Poly<N, PowerOfTwoModulus<32>, Coefficient>;
 type Q3<const N: usize> = Poly<N, PowerOfTwoModulus<16>, Coefficient>;
 type Q4<const N: usize> = Poly<N, PowerOfTwoModulus<12>, Coefficient>;
@@ -80,7 +80,7 @@ fn kat_mod_switch_asym() {
 }
 
 /// Build the ring-switch key from the `gen-rsk-rsk` seed exactly as the
-/// Python generator does (S1, S2 keygen, then gen_rsk on the same stream).
+/// reference generator does (S1, S2 keygen, then gen_rsk on the same stream).
 fn build_gen_rsk_rsk() -> RingSwitchKey<N1, N2, Q3<N2>, DEPTH, D> {
     let q3 = PowerOfTwoModulus::<16>;
     let mut prg = Shake256Prg::new(b"layer3-kat-gen-rsk-rsk");

@@ -61,17 +61,24 @@ bench-save NAME="main":
 bench-cmp NAME="main":
     cargo bench --bench pipeline_toy -- --baseline {{NAME}}
 
+# Run the via-primitives kernel micro-benchmarks (NTT-mediated vs schoolbook
+# gadget product, raw NTT round-trip) — isolates the primitives the pipeline
+# benches reach only transitively.
+bench-primitives *FLAGS:
+    cargo bench --package via-primitives --bench kernels {{FLAGS}}
+
 # ─── docs ────────────────────────────────────────────────────────────────
 
-# Build rustdoc for via-primitives (KaTeX math rendering) and open in a browser.
-# `--features alloc` so the paper-scale `…_boxed` builders + n2048 path are
-# documented and their intra-doc links resolve.
+# Build rustdoc for the full workspace (KaTeX math rendering) and open in a browser.
+# `--features alloc,via-b` mirrors the docs.rs feature sets: alloc unlocks the
+# paper-scale boxed paths in via-primitives; via-b documents the full variant
+# surface in via-client / via-server / via-protocol.
 doc:
-    cargo doc --no-deps --document-private-items --package via-primitives --features alloc --open
+    cargo doc --no-deps --document-private-items --features alloc,via-b --open
 
 # Same as `doc` but without opening a browser — for CI.
 doc-build:
-    cargo doc --no-deps --document-private-items --package via-primitives --features alloc
+    cargo doc --no-deps --document-private-items --features alloc,via-b
 
 # ─── lint ────────────────────────────────────────────────────────────────
 

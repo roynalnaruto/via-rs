@@ -1,9 +1,9 @@
-//! Const-fn helpers for §0.2 — `gcd_u64` and the extended-Euclidean
+//! Const-fn helpers — `gcd_u64` and the extended-Euclidean
 //! `mod_inverse_u64`. Used by [`super::basis::ConstRnsBasis`] at compile time
 //! to validate that the two moduli are coprime and to precompute the Garner
 //! reconstruction inverse $(q^{(0)})^{-1} \bmod q^{(1)}$.
 //!
-//! These mirror the role of [`super::super::zq::reduce`] for §0.1: small,
+//! These mirror the role of [`super::super::zq::reduce`] for the single-prime layer: small,
 //! `const fn`-friendly primitives that the higher layers fold into immediates.
 //!
 //! # Why `i128` intermediates?
@@ -12,7 +12,7 @@
 //! the larger input modulus, but the per-step product $q \cdot y$ can grow up
 //! to $\approx \text{modulus}^2$. For our 38-bit VIA-C / VIA-B primes that is
 //! $\approx 2^{76}$ — well past `i64::MAX`. `i128` headroom is comfortable for
-//! every modulus in `.docs/primitives.md` §A.1 (the largest is
+//! every modulus here (the largest is
 //! $274\,810\,798\,081 \approx 2^{38}$, so products stay under $2^{77}$).
 
 /// Greatest common divisor of two `u64` values via the Euclidean algorithm.

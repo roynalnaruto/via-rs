@@ -1,8 +1,8 @@
 //! Fixed-width 256-bit arithmetic helpers.
 //!
-//! These exist because §2.3 gadget decomposition on the RNS path needs a
+//! These exist because gadget decomposition on the RNS path needs a
 //! single computation — `round(|c_centered| · B^L / Q)` — whose
-//! intermediate product overflows `i128`. At paper VIA-C parameters
+//! intermediate product overflows `i128`. At VIA-C parameters
 //! (`Q ≈ 2⁷⁵`, `B^L ≈ 2⁷⁵` for the LWE-to-RLWE conversion-key gadget)
 //! the product `|c| · B^L` can reach `2¹⁴⁹` — comfortably inside a
 //! 256-bit intermediate, well past the 128-bit limit.
@@ -61,7 +61,10 @@ pub(crate) fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
 /// # Preconditions
 ///
 /// - `divisor > 0`.
-/// - `hi < divisor` — otherwise the quotient overflows `u128`. Debug-asserted.
+/// - `hi < divisor` — otherwise the true quotient does not fit in `u128`.
+///   Asserted **always-on**: a violation panics rather than silently truncating
+///   the high quotient bits, because this is a `pub(crate)` primitive whose
+///   misuse would corrupt gadget-decomposed ciphertexts.
 ///
 /// For our use case (gadget scale step), the quotient is bounded by `B^L`
 /// which fits in `u128` with margin, and the precondition holds.
@@ -79,7 +82,7 @@ pub(crate) fn div_u256_by_u128(hi: u128, lo: u128, divisor: u128) -> u128 {
     if hi == 0 {
         return lo / divisor;
     }
-    debug_assert!(
+    assert!(
         hi < divisor,
         "div_u256_by_u128: quotient overflows u128 (hi >= divisor)"
     );
@@ -127,17 +130,20 @@ pub(crate) fn div_u256_by_u128(hi: u128, lo: u128, divisor: u128) -> u128 {
 /// Compute `round(num_abs · scale / divisor)`, where the intermediate
 /// product `num_abs · scale` may exceed 128 bits.
 ///
-/// Rounding is half-up (Python's `(num + divisor / 2) // divisor` for
+/// Rounding is half-up (`(num + divisor / 2) // divisor` for
 /// non-negative operands; the caller is responsible for sign-handling).
 ///
 /// # Preconditions
 ///
 /// - `divisor > 0`.
-/// - `scale < divisor` (typical for gadget decomposition where
-///   `scale = B^L` and `B^L < Q` by construction); else the quotient
-///   may overflow `u128`.
+/// - `num_abs <= divisor / 2`. This — not `scale < divisor` — is the real
+///   sufficient condition for the quotient to fit in `u128` (equivalently, for
+///   `div_u256_by_u128`'s `hi < divisor`): then
+///   `num_abs·scale + divisor/2 < divisor·2^128` for *any* `u128` `scale`. The
+///   gadget-decomposition caller satisfies it — centred coefficients obey
+///   `|c| <= Q/2 = divisor/2` — whether or not `scale = B^L` is below `divisor`.
 pub(crate) fn round_mul_div_u128(num_abs: u128, scale: u128, divisor: u128) -> u128 {
-    debug_assert!(divisor > 0);
+    assert!(divisor > 0, "round_mul_div_u128: divisor must be nonzero");
     let (lo, hi) = widening_mul_u128(num_abs, scale);
     // Add divisor / 2 for half-up rounding. May carry into `hi`.
     let half = divisor / 2;
@@ -180,7 +186,7 @@ mod tests {
         assert_eq!(hi, u128::MAX - 1);
     }
 
-    /// At paper VIA-C scale: `|c| ≈ 2^74`, `B^L = 18^18 ≈ 2^75`. The
+    /// At VIA-C scale: `|c| ≈ 2^74`, `B^L = 18^18 ≈ 2^75`. The
     /// product is in `[0, 2^150)`, so `hi` is in `[0, 2^22)`.
     #[test]
     fn widening_mul_at_paper_via_c_scale() {
@@ -221,7 +227,7 @@ mod tests {
         assert_eq!(lo_mul, u128::MAX); // 2^128 − 1
     }
 
-    /// At paper VIA-C LWE-to-RLWE conversion: `Q ≈ 2^75`, scale `≈ 2^75`,
+    /// At VIA-C LWE-to-RLWE conversion: `Q ≈ 2^75`, scale `≈ 2^75`,
     /// `|c| < Q/2`. The full `round_mul_div_u128` round-trip is exercised
     /// indirectly via the gadget decomposition tests in Phase 5; here we
     /// just pin one concrete value.
@@ -234,6 +240,15 @@ mod tests {
         assert_eq!(div_u256_by_u128(hi, lo, divisor), num_abs);
     }
 
+    /// The `hi < divisor` precondition is always-on (an `assert!`, not a
+    /// `debug_assert!`), so a violation panics in every build rather than
+    /// silently returning a truncated quotient. `hi == divisor` is the boundary.
+    #[test]
+    #[should_panic(expected = "quotient overflows u128")]
+    fn div_u256_panics_when_hi_ge_divisor() {
+        let _ = div_u256_by_u128(5, 0, 5);
+    }
+
     // -----------------------------------------------------------------------
     // round_mul_div_u128
     // -----------------------------------------------------------------------
@@ -244,13 +259,13 @@ mod tests {
     }
 
     /// `round(2 · 5 / 3) = round(10/3) = round(3.33) = 3`. Verify with
-    /// Python-style half-up rounding: (10 + 1) / 3 = 11/3 = 3.
+    /// half-up rounding: (10 + 1) / 3 = 11/3 = 3.
     #[test]
     fn round_mul_div_small_values() {
         assert_eq!(round_mul_div_u128(2, 5, 3), 3);
         // round(5 · 5 / 3) = round(25/3) = round(8.33) = 8. (25 + 1) / 3 = 8.
         assert_eq!(round_mul_div_u128(5, 5, 3), 8);
-        // round(2 · 3 / 4) = round(6/4) = round(1.5). Python's half-up: (6 + 2) / 4 = 2.
+        // round(2 · 3 / 4) = round(6/4) = round(1.5). half-up: (6 + 2) / 4 = 2.
         assert_eq!(round_mul_div_u128(2, 3, 4), 2);
         // round(1 · 3 / 4) = round(0.75). (3 + 2) / 4 = 1.
         assert_eq!(round_mul_div_u128(1, 3, 4), 1);
@@ -258,11 +273,11 @@ mod tests {
         assert_eq!(round_mul_div_u128(1, 1, 4), 0);
     }
 
-    /// Paper VIA-C: round-trip with `divisor ≈ 2^75`, `scale ≈ 2^75`.
+    /// VIA-C: round-trip with `divisor ≈ 2^75`, `scale ≈ 2^75`.
     /// Verifies the whole pipeline (widening mul + add half + div).
     #[test]
     fn round_mul_div_at_paper_via_c_scale() {
-        // Q = VIA-C q_1 (paper RNS Q value) ≈ 2^75.
+        // Q = VIA-C q_1 (RNS Q value) ≈ 2^75.
         // q_1 = 137438822401 * 274810798081.
         let q: u128 = 137_438_822_401u128 * 274_810_798_081u128;
         // B^L = 18^18 ≈ 2^75.

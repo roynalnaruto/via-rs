@@ -12,9 +12,7 @@
 //! Swapping an MSB-first / LSB-first order is a *silent* logic error (same bit
 //! count, different content → the server selects the wrong record), so the
 //! orderings are pinned by exhaustive reconstructability tests below and, later,
-//! by the P5 cross-language KAT.
-//!
-//! `paper:via_c/query_comp.py:43-68` (decompose) · `:229-242` (bit extraction)
+//! by the cross-language KAT.
 
 use alloc::vec::Vec;
 
@@ -24,8 +22,6 @@ use alloc::vec::Vec;
 /// - `γ = index / (I·J)` — rotation slot (CRot),
 /// - `α = (index % (I·J)) / J` — row (DMux),
 /// - `β = index % J` — column (CMux).
-///
-/// `paper:via_c/query_comp.py:43-68`
 pub fn decompose_index(index: usize, num_rows: usize, num_cols: usize) -> (usize, usize, usize) {
     let group = num_rows * num_cols;
     let gamma = index / group;
@@ -36,8 +32,6 @@ pub fn decompose_index(index: usize, num_rows: usize, num_cols: usize) -> (usize
 
 /// DMux control bits for `α`, **MSB-first** (`bits[0]` is the most significant,
 /// the first dmux split). Length `num_dmux = log₂ I`.
-///
-/// `paper:via_c/query_comp.py:235-238`
 pub fn dmux_bits(alpha: usize, num_dmux: usize) -> Vec<u8> {
     (0..num_dmux)
         .map(|i| ((alpha >> (num_dmux - 1 - i)) & 1) as u8)
@@ -46,16 +40,12 @@ pub fn dmux_bits(alpha: usize, num_dmux: usize) -> Vec<u8> {
 
 /// CMux select bits for `β`, **LSB-first** (`bits[i]` controls tree depth `i`).
 /// Length `num_cmux = log₂ J`.
-///
-/// `paper:via_c/query_comp.py:239-241`
 pub fn cmux_bits(beta: usize, num_cmux: usize) -> Vec<u8> {
     (0..num_cmux).map(|i| ((beta >> i) & 1) as u8).collect()
 }
 
 /// CRot rotation bits for `γ`, **LSB-first** (`bits[i]` drives a `2ⁱ`-slot
 /// rotation, matching `crot`'s bit-index convention). Length `num_crot = log₂ d`.
-///
-/// `paper:via_c/query_comp.py:242`
 pub fn crot_bits(gamma: usize, num_crot: usize) -> Vec<u8> {
     (0..num_crot).map(|i| ((gamma >> i) & 1) as u8).collect()
 }

@@ -1,10 +1,9 @@
-//! §3.3 ring switch + ring-switch-key generation. See
-//! `.docs/primitives.md` §3.3.
+//! Ring switch + ring-switch-key generation.
 //!
 //! Convert an RLWE ciphertext in $R_{n_1, q}$ under $S_1$ to an RLWE in
 //! $R_{n_2, q}$ under $S_2$ encrypting $\pi_0^{n_1 \to n_2}(M)$ — the slot-0
 //! projection of the original message into the smaller ring. This is the
-//! second half of VIA-C's `RespComp` (§6.2) and the per-column step of VIA's
+//! second half of VIA-C's `RespComp` and the per-column step of VIA's
 //! `FirstDim`.
 //!
 //! ## Algebraic identity
@@ -17,18 +16,19 @@
 //! where $X^{-j} \equiv -X^{n_1 - j} \pmod{X^{n_1} + 1}$. [`gen_rsk`]
 //! encrypts the $d$ *key* halves $\pi_0(X^{-j} S_1)$ under $S_2$;
 //! [`ring_switch`] supplies the *public mask* halves $\pi_0(X^j A)$ and
-//! combines them via gadget products (§2.4).
+//! combines them via gadget products.
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::algebra::ring::RingPolyEval;
 use crate::algebra::ring::abstraction::RingPoly;
-use crate::encryption::types::{RLWECiphertext, RLevCiphertext, SecretKey};
+use crate::encryption::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
 /// Ring-switch key: $d = N_1 / N_2$ RLev samples that drive conversion of an
 /// $R_{N_1, q}$ ciphertext under $S_1$ to an $R_{N_2, q}$ ciphertext under
-/// $S_2$ (§3.3). Sample `j` encrypts $\pi_0(X^{-j} \cdot S_1)$ under $S_2$.
+/// $S_2$. Sample `j` encrypts $\pi_0(X^{-j} \cdot S_1)$ under $S_2$.
 ///
 /// The `D` const-generic is the sample count $d$; the compile-time invariant
 /// $N_1 = N_2 \cdot D$ is checked by [`Self::_CHECK`].
@@ -122,6 +122,76 @@ impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D
 {
 }
 
+/// Evaluation-form [`RingSwitchKey`] (T7 eval-key storage): the `D` RLev samples
+/// pre-transformed to [`RLevEval`], so [`ring_switch_eval`] runs without
+/// re-transforming the (static) key samples on every call. Built once from a
+/// [`RingSwitchKey`] via [`RingSwitchKey::to_eval`]. `ZeroizeOnDrop` — the NTT
+/// image of the key is secret-derived.
+pub struct RingSwitchKeyEval<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> {
+    pub(crate) samples: [RLevEval<N2, R2, L>; D],
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> Zeroize for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+    fn zeroize(&mut self) {
+        for s in &mut self.samples {
+            s.zeroize();
+        }
+    }
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> Drop for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> ZeroizeOnDrop for RingSwitchKeyEval<N1, N2, R2, L, D>
+{
+}
+
+impl<
+    const N1: usize,
+    const N2: usize,
+    R2: RingPoly<N2> + RingPolyEval<N2>,
+    const L: usize,
+    const D: usize,
+> RingSwitchKey<N1, N2, R2, L, D>
+{
+    /// Pre-transform the `D` RLev samples to evaluation form once (T7;
+    /// deterministic, no PRG). The result drives [`ring_switch_eval`].
+    pub fn to_eval(&self) -> RingSwitchKeyEval<N1, N2, R2, L, D> {
+        RingSwitchKeyEval {
+            samples: core::array::from_fn(|j| self.samples[j].to_eval()),
+        }
+    }
+}
+
 impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D: usize>
     core::fmt::Debug for RingSwitchKey<N1, N2, R2, L, D>
 {
@@ -135,7 +205,7 @@ impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D
     }
 }
 
-/// §3.3 — generate a ring-switch key from source key $S_1 \in R_{N_1, q}$ to
+/// Generate a ring-switch key from source key $S_1 \in R_{N_1, q}$ to
 /// target key $S_2 \in R_{N_2, q}$.
 ///
 /// Produces $D = N_1 / N_2$ RLev samples; sample `j` encrypts
@@ -147,7 +217,7 @@ impl<const N1: usize, const N2: usize, R2: RingPoly<N2>, const L: usize, const D
 /// The `CenteredScalar = i64` bound on `R1` restricts the source key to a
 /// **single-prime** modulus. For VIA-C, where $S_1$ is sampled at the
 /// RNS-composite $q_1$, the caller must first rekey $S_1$ to the working
-/// single-prime modulus (typically $q_3$) via the §3.4
+/// single-prime modulus (typically $q_3$) via the
 /// [`rekey_secret_key`](super::rekey::rekey_secret_key) helper before calling
 /// `gen_rsk`.
 ///
@@ -204,7 +274,7 @@ pub fn gen_rsk<
     RingSwitchKey::new(samples)
 }
 
-/// §3.3 — convert an RLWE ciphertext from $R_{N_1, q}$ to $R_{N_2, q}$.
+/// Convert an RLWE ciphertext from $R_{N_1, q}$ to $R_{N_2, q}$.
 ///
 /// Homomorphically evaluates the slot-0 projection: the result decrypts under
 /// $S_2$ to $\pi_0(M)$ in $R_{N_2, q}$. All arithmetic stays in coefficient
@@ -251,7 +321,7 @@ pub fn gen_rsk<
 pub fn ring_switch<
     const N1: usize,
     const N2: usize,
-    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus>>,
+    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus> + RingPolyEval<N2>>,
     const L: usize,
     const D: usize,
 >(
@@ -262,6 +332,40 @@ pub fn ring_switch<
     // Re-evaluate _CHECK at the entry point to defend against an RSK built
     // by struct literal (bypassing `RingSwitchKey::new`, the only other path
     // that forces it).
+    let () = RingSwitchKey::<N1, N2, R::Projected<N2>, L, D>::_CHECK;
+    let modulus = ct.mask.modulus();
+    let body_proj_0 = ct.body.project_at::<N2>(0);
+    let mut acc_mask = <R::Projected<N2>>::zero(modulus);
+    let mut acc_body = body_proj_0;
+    for j in 0..D {
+        let mask_proj_j = if j == 0 {
+            ct.mask.project_at::<N2>(0)
+        } else {
+            ct.mask.mul_x_pow(j).project_at::<N2>(0)
+        };
+        let gp = rsk.samples[j].gadget_product(&mask_proj_j, base);
+        acc_mask -= gp.mask;
+        acc_body -= gp.body;
+    }
+    RLWECiphertext::new(acc_mask, acc_body)
+}
+
+/// Eval-key variant of [`ring_switch`] (T7): the ring-switch key is supplied
+/// **pre-transformed** ([`RingSwitchKeyEval`] via [`RingSwitchKey::to_eval`]), so
+/// the `D` per-sample gadget products skip the per-call `to_eval` of the static
+/// key samples. **Bit-identical** to [`ring_switch`] (the NTT is exact).
+#[allow(non_camel_case_types)]
+pub fn ring_switch_eval<
+    const N1: usize,
+    const N2: usize,
+    R: RingPoly<N1, Projected<N2>: RingPoly<N2, Modulus = R::Modulus> + RingPolyEval<N2>>,
+    const L: usize,
+    const D: usize,
+>(
+    ct: &RLWECiphertext<N1, R>,
+    rsk: &RingSwitchKeyEval<N1, N2, R::Projected<N2>, L, D>,
+    base: u64,
+) -> RLWECiphertext<N2, R::Projected<N2>> {
     let () = RingSwitchKey::<N1, N2, R::Projected<N2>, L, D>::_CHECK;
     let modulus = ct.mask.modulus();
     let body_proj_0 = ct.body.project_at::<N2>(0);
@@ -320,7 +424,7 @@ mod tests {
         // Dropping a zeroized key must not panic (Drop re-zeroizes).
     }
 
-    /// Full §3.3 round-trip at toy paper-shaped params: encrypt $m$ in
+    /// Full round-trip at toy params: encrypt $m$ in
     /// $R_{N_1, q}$ under $S_1$, ring-switch to $R_{N_2, q}$ under $S_2$, and
     /// recover $\pi_0(m)$ by decrypting under $S_2$.
     #[test]
@@ -384,7 +488,7 @@ mod tests {
     }
 
     /// PRG-order KAT anchor: the first RLev sample's mask at VIA-C TOY
-    /// params, reproduced from the same seed as `gen_layer3_kats.py`
+    /// params, reproduced from the same seed as the KAT generator
     /// (`GEN_RSK_J0_L0_MASK`). The full D×L×N2 byte stream is locked by the
     /// integration test `tests/layer3_kats.rs::kat_gen_rsk_prg_order`; this
     /// inline anchor guards the j-outer / level-inner / mask-before-error

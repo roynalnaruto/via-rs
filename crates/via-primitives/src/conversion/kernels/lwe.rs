@@ -1,10 +1,10 @@
-//! GPU-portable constant-time kernel for the §5.1 LWE body dot product.
+//! GPU-portable constant-time kernel for the LWE body dot product.
 //!
-//! POD by value + flat slices (the Layer-0 kernel shape; see
+//! POD by value + flat slices (the kernel shape; see
 //! [`crate::algebra::zq::ops`]); the same body lowers to a CUDA / Metal
 //! reduction. The single-prime orchestrator calls [`dot_residues`] once; the
 //! RNS orchestrator calls it once per prime residue lane (mirroring how the
-//! §0.5 RNS reshape wrappers fan a slice kernel over both primes).
+//! RNS reshape wrappers fan a slice kernel over both primes).
 //!
 //! # Constant-time: Yes (over the key)
 //!
@@ -12,20 +12,30 @@
 //! secret. [`dot_residues`] runs a **data-independent** loop — always
 //! `a.len()` multiply-accumulates, no early exit and no secret-indexed branch —
 //! so it leaks nothing about `s` through control flow (the only data-dependent
-//! cost is the hardware `%`, the standard caveat shared with every reduce in
-//! [`crate::switching::kernels`]).
+//! cost is the single final hardware `%`, the standard caveat shared with every
+//! reduce in [`crate::switching::kernels`]).
 
 /// $\bigl(\sum_i a_i \cdot s_i\bigr) \bmod q$ over flat residue slices — one
 /// single-prime modulus, or one RNS prime's residue lane.
 ///
 /// Both `a` (the LWE mask scalars, RLWE-uniform) and `s` (the secret-key
-/// coefficient vector) are passed as canonical residues in $[0, q)$, exactly as
-/// the Python reference computes the body
-/// (`pir/primitives/mlwe.py:149-153`, `sk_coeffs` taken mod $q$).
+/// coefficient vector) are passed as canonical residues in $[0, q)$, the
+/// standard way to compute the LWE body (`sk_coeffs` taken mod $q$).
 ///
-/// The running accumulator is reduced mod $q$ **each step**, so with
-/// $q < 2^{64}$ every intermediate stays below $q^2 + q < 2^{128}$ and `u128`
-/// never overflows regardless of `a.len()`.
+/// Products accumulate **full-width in `u128` with a single final reduction**
+/// mod $q$. Reduction is a ring homomorphism, so deferring it to the end does
+/// not change the result — the in-module `dot_residues_matches_reference` test
+/// pins this. Safe whenever $q < 2^{48}$: each product is $< q^2 < 2^{96}$, so a
+/// sum of up to $2^{32}$ of them stays below $2^{128}$. Every modulus this
+/// kernel sees is a single RNS-prime lane $\le 2^{38}$ (the composite $q_1$ is
+/// never passed whole — the RNS orchestrator fans one lane at a time), so the
+/// bound holds with ~$2^{41}$ of margin at $N \le 2048$; a `debug_assert` guards
+/// it for any future caller wiring a wider single-prime modulus through here.
+///
+/// Deferring the reduction also matches the natural device-kernel shape (a CUDA
+/// / Metal port accumulates in a 128-bit register and reduces once), and it
+/// strictly reduces the single data-dependent cost from `a.len()` modulo ops to
+/// one (see the module-level constant-time note).
 ///
 /// # Panics
 ///
@@ -38,12 +48,16 @@ pub fn dot_residues(a: &[u64], s: &[u64], q: u64) -> u64 {
         a.len(),
         s.len(),
     );
+    debug_assert!(
+        q < (1u64 << 48),
+        "dot_residues: q ({q}) must be < 2^48 for single-reduction accumulation"
+    );
     let q = u128::from(q);
     let mut acc: u128 = 0;
     for (&ai, &si) in a.iter().zip(s.iter()) {
-        acc = (acc + u128::from(ai) * u128::from(si)) % q;
+        acc += u128::from(ai) * u128::from(si);
     }
-    acc as u64
+    (acc % q) as u64
 }
 
 #[cfg(test)]

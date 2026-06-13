@@ -8,7 +8,7 @@
 //! # Invariants
 //!
 //! - $N \ge 2$ and $N$ is a power of two — enforced at monomorphisation
-//!   by a `const _CHECK` block (mirrors the §0.1 / §0.2 pattern).
+//!   by a `const _CHECK` block (mirrors the modulus / RNS-basis pattern).
 //! - Every stored value is in $[0, q)$. Safe constructors reduce; the
 //!   `unsafe` [`Poly::from_reduced_unchecked`] trusts the caller.
 //!
@@ -19,7 +19,7 @@
 //! `F = Coefficient` they are the polynomial's coefficients in the
 //! monomial basis $\sum_i v_i X^i$; under `F = Evaluation` they are
 //! evaluations at the negacyclic $2N$-th roots of unity (filled in by
-//! §0.4's NTT). Form-aware accessors `coeff(i)` / `eval(i)` exist on
+//! the negacyclic NTT). Form-aware accessors `coeff(i)` / `eval(i)` exist on
 //! the respective impls to read the values with the right name.
 //!
 //! # Storage rationale (`[u64; N]` vs `Vec`)
@@ -30,7 +30,7 @@
 //! cryptographic hot loops, give type-level "same degree" guarantees on
 //! every binary op without runtime asserts, and map cleanly to a CUDA
 //! shared-memory buffer or SoA stride layout. Realistic $N$ tops out at
-//! $n_1 = 2048$ (paper §A.1), making one `Poly` 16 KiB — well within
+//! $n_1 = 2048$, making one `Poly` 16 KiB — well within
 //! the default 8 MiB stack. Higher layers that aggregate many polys per
 //! ciphertext will introduce `Box<Poly<…>>`; the const-generic shape
 //! survives the transition unchanged.
@@ -72,7 +72,7 @@ use super::reshape;
 /// # Memory layout
 ///
 /// `#[repr(C, align(32))]` — the `values` array is 32-byte aligned for
-/// AVX2 / AVX-512 SIMD and CUDA shared-memory loads at §0.4+. The
+/// AVX2 / AVX-512 SIMD and CUDA shared-memory loads. The
 /// `modulus` and `_form` fields sit after the value buffer and pay only
 /// tail padding (which is zero bytes for the `ConstModulus` /
 /// `PowerOfTwoModulus` zero-sized cases and at most a few bytes for
@@ -104,8 +104,8 @@ impl<const N: usize, M: Modulus, F: Form> Poly<N, M, F> {
     /// (via `let () = Self::_CHECK;`) so a bad $N$ fails to compile.
     ///
     /// $N = 1$ realises the degenerate ring $R_{1, q} = \mathbb{Z}_q\lbrack X
-    /// \rbrack/(X + 1) \cong \mathbb{Z}_q$ — the LWE-form component ring of an $(n, 1)$-MLWE
-    /// (§5.1). It is supported in **coefficient form only**: the NTT path is
+    /// \rbrack/(X + 1) \cong \mathbb{Z}_q$ — the LWE-form component ring of an $(n, 1)$-MLWE.
+    /// It is supported in **coefficient form only**: the NTT path is
     /// gated by `M: NttFriendly<N>` (see [`super::ntt`]) whose own `_CHECK`
     /// still requires $N \ge 2$, so no eval-form / NTT operation is reachable
     /// at $N = 1$.
@@ -293,8 +293,8 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     }
 
     /// Lift every coefficient to its centred representation
-    /// $\tilde{v}_i \in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$ —
-    /// see §0.6. Used at decoding boundaries; **not constant-time**
+    /// $\tilde{v}_i \in (-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
+    /// Used at decoding boundaries; **not constant-time**
     /// over the input values. For secret-data inputs, use
     /// [`Self::to_centered_coeffs_ct`].
     pub fn to_centered_coeffs(&self, dst: &mut [i64; N]) {
@@ -302,13 +302,13 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     }
 
     /// Constant-time variant of [`Self::to_centered_coeffs`]. Use this
-    /// when the polynomial is a secret (e.g. §3.4 secret-key rekeying).
+    /// when the polynomial is a secret (e.g. secret-key rekeying).
     pub fn to_centered_coeffs_ct(&self, dst: &mut [i64; N]) {
         zq_ops::to_centered_i64_ct_slice(self.modulus, dst, &self.values);
     }
 
     /// Deterministic rotation: returns $X^k \cdot \mathrm{self}$ in
-    /// $R_{n, q}$ — paper §4.5. The rotation exponent $k$ is taken as a
+    /// $R_{n, q}$. The rotation exponent $k$ is taken as a
     /// public parameter and the implementation may branch on it; the
     /// coefficient *values* are still handled in constant time.
     ///
@@ -318,10 +318,10 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     /// (e.g. a query index or any value derived from a key or
     /// plaintext). The implementation reduces `k` modulo `2 * n` and
     /// branches on the wrap quadrant, which leaks `k` through timing.
-    /// At every paper §4.5 call site `k` is a public loop induction
+    /// At every rotation call site `k` is a public loop induction
     /// variable (the per-bit shift $2^i$ in `CRot`), and the
     /// *encrypted* control bits feed [`CMux`](../../../) — not this
-    /// rotation primitive directly. When the §4.4 `CRot` primitive
+    /// rotation primitive directly. When the `CRot` primitive
     /// lands it will compose `mul_x_pow` with `CMux` to support
     /// encrypted exponents; route secret-$k$ call sites through that
     /// composite rather than calling `mul_x_pow` with secret input.
@@ -335,8 +335,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
 
 /// Evaluation-form conversion — only available when `M: NttFriendly<N>`.
 impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Coefficient> {
-    /// Convert to evaluation form via the forward negacyclic NTT
-    /// (§0.4).
+    /// Convert to evaluation form via the forward negacyclic NTT.
     ///
     /// The output buffer is in **bit-reversed** order — `Poly::eval(i)`
     /// on the result returns the value at $\psi^{2 \cdot \mathrm{br}(i) + 1}$.
@@ -350,14 +349,14 @@ impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Coefficient> {
     /// moved into a stack-local scratch slot and the in-place NTT
     /// overwrites it. Rust does **not** guarantee the original stack
     /// location is zeroed after the move. If the caller's `self`
-    /// carries secret data (e.g. a §2.1 secret-key polynomial, or a
-    /// §3.3 ring-switch-key intermediate that exposes coefficient
+    /// carries secret data (e.g. a `SecretKey` polynomial, or a
+    /// ring-switch-key intermediate that exposes coefficient
     /// statistics of $S_1$), the residual stack slot remains
     /// observable to anyone who can read that memory.
     ///
     /// Today the only call sites are tests and non-secret protocol
     /// paths, so direct use is safe. When secret-bearing types land
-    /// (§2.1 `SecretKey`, §3.3 ring-switch keys), funnel secret
+    /// ([`crate::encryption::SecretKey`], ring-switch keys), funnel secret
     /// inputs through a `_zeroizing` wrapper that calls
     /// [`zeroize::Zeroize::zeroize`] on `self.values` immediately
     /// after the NTT. **Do not** call this method directly on a
@@ -372,10 +371,10 @@ impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Coefficient> {
 }
 
 // ---------------------------------------------------------------------------
-// §0.5 ring embedding / projection — coefficient-form only.
+// ring embedding / projection — coefficient-form only.
 // ---------------------------------------------------------------------------
 
-/// Single-slot embedding $\iota_j^{N \to N_\text{large}}$ — see §0.5.
+/// Single-slot embedding $\iota_j^{N \to N_\text{large}}$.
 ///
 /// Compile-time `_CHECK` (via inline `const` block) enforces
 /// $N_\text{large} \ge N$, $N \mid N_\text{large}$, and $N_\text{large}$
@@ -397,7 +396,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     ///   The `slot` argument is a runtime value, so the const block
     ///   *cannot* check it. `f.embed_at::<16>(7)` when $d = 4$
     ///   compiles, then panics when executed. This is by design — the
-    ///   slot index in §3.3 / §5.5 / §6.3 is a loop variable bounded
+    ///   slot index is a loop variable bounded
     ///   by $d$ at the call site, not a constant known at the type
     ///   parameter.
     pub fn embed_at<const N_LARGE: usize>(&self, slot: usize) -> Poly<N_LARGE, M, Coefficient> {
@@ -432,7 +431,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
     /// - **Compile-time**: `N_SMALL > N`, `N` not a multiple of
     ///   `N_SMALL`, or `N_SMALL` not a power of two. The degenerate
     ///   `N_SMALL = 1` is permitted (it yields $R_{1, q} \cong
-    ///   \mathbb{Z}_q$, used by §5.4 cascade key-gen and §5.5 `extr` at
+    ///   \mathbb{Z}_q$, used by `gen_lwe_to_rlwe_key` and `extr` at
     ///   $d = 1$).
     /// - **Runtime**: `slot >= d`. Runtime panic, not compile error.
     pub fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Poly<N_SMALL, M, Coefficient> {
@@ -490,7 +489,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
         // earlier shape built a `[u64; N_LARGE]` concatenation scratch
         // and then ran `reshape::pack_slots_slice`; inlining the
         // permutation removes that intermediate (one `Poly<N_LARGE>`
-        // worth of stack — 16 KiB at paper $N_\mathrm{large} = 2048$).
+        // worth of stack — 16 KiB at paper-scale $N_\mathrm{large} = 2048$).
         let mut packed = [0u64; N_LARGE];
         for (j, slot_poly) in slots.iter().enumerate() {
             assert!(
@@ -539,7 +538,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Coefficient> {
         // The earlier shape ran `reshape::unpack_slots_slice` into a
         // `[u64; N]` concatenation scratch, then `copy_from_slice`d
         // each slot out; inlining the permutation removes that
-        // intermediate (16 KiB at paper $N = 2048$).
+        // intermediate (16 KiB at paper-scale $N = 2048$).
         for (j, slot_poly) in dsts.iter_mut().enumerate() {
             assert!(
                 slot_poly.modulus == self.modulus,
@@ -588,8 +587,7 @@ impl<const N: usize, M: Modulus> Poly<N, M, Evaluation> {
 
 /// Coefficient-form conversion — only available when `M: NttFriendly<N>`.
 impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Evaluation> {
-    /// Convert back to coefficient form via the inverse negacyclic NTT
-    /// (§0.4).
+    /// Convert back to coefficient form via the inverse negacyclic NTT.
     ///
     /// Assumes the eval-form buffer is in **bit-reversed** order — i.e.
     /// the output of a prior [`Poly::<N, M, Coefficient>::into_eval`]
@@ -602,8 +600,8 @@ impl<const N: usize, M: NttFriendly<N>> Poly<N, M, Evaluation> {
     /// by value and Rust does not guarantee the original stack slot
     /// is zeroed after the move. If `self` carries secret data, the
     /// residual eval-form buffer remains observable. Route secret
-    /// inputs through a `_zeroizing` wrapper (to land with §2.1
-    /// `SecretKey` / §3.3 ring-switch keys); current call sites are
+    /// inputs through a `_zeroizing` wrapper (to land with
+    /// `SecretKey` / ring-switch keys); current call sites are
     /// non-secret and use this method directly.
     #[inline]
     pub fn into_coeff(self) -> Poly<N, M, Coefficient> {
@@ -924,14 +922,14 @@ mod tests {
 
     /// `Poly::random` (the RLWE mask sampler reached via
     /// [`RingPoly::random_uniform`]) must consume the SHAKE-256 stream
-    /// byte-identically to Python's `uniform_poly` — i.e. agree with
+    /// byte-identically to the uniform-polynomial sampler — i.e. agree with
     /// [`crate::sampling::uniform::uniform_zq`] coefficient-for-coefficient.
-    /// This pins the §1.1 reproducibility contract for ciphertext masks
+    /// This pins the SHAKE-256 PRG reproducibility contract for ciphertext masks
     /// (regression guard for the `Zq::random` byte-budget fix).
     #[test]
     fn random_matches_python_uniform_poly_q17() {
         use crate::sampling::prg::Shake256Prg;
-        // First 16 outputs of `DeterministicSampler(b"test").uniform_poly(16, 17)`.
+        // First 16 outputs of a deterministic `uniform_poly(16, 17)` over seed b"test".
         const EXPECTED: [u64; 16] = [1, 13, 11, 10, 10, 16, 10, 15, 5, 9, 14, 9, 5, 1, 12, 0];
         let mut prg = Shake256Prg::new(b"test");
         let p: Poly<16, M17, Coefficient> = Poly::random(ConstModulus, &mut prg);
@@ -1174,7 +1172,7 @@ mod tests {
 
     #[test]
     fn eval_zero_round_trip_through_coeff_is_zero() {
-        // §0.4: with the NTT body wired in, zero round-trips to zero.
+        // with the NTT body wired in, zero round-trips to zero.
         let m = M17::default();
         let z: Poly<4, _, Evaluation> = Poly::zero(m);
         let back = z.into_coeff();
@@ -1322,40 +1320,9 @@ mod tests {
         assert!(chi2 < 60.0, "chi^2 = {chi2}, counts = {counts:?}");
     }
 
-    /// SplitMix64 — small PRG used in uniformity tests. Mirrors the
-    /// helper duplicated in `zq/element.rs` / `rns/element.rs`.
-    struct SplitMix64(u64);
+    use crate::test_util::SplitMix64;
 
-    impl SplitMix64 {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-    }
-
-    impl RngCore for SplitMix64 {
-        fn next_u32(&mut self) -> u32 {
-            self.next_u64() as u32
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn fill_bytes(&mut self, dst: &mut [u8]) {
-            for chunk in dst.chunks_mut(8) {
-                let bytes = self.next_u64().to_le_bytes();
-                chunk.copy_from_slice(&bytes[..chunk.len()]);
-            }
-        }
-        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
-            self.fill_bytes(dst);
-            Ok(())
-        }
-    }
-
-    // ----- §0.5 ring embedding / projection tests -----
+    // ----- ring embedding / projection tests -----
 
     /// `f.embed_at::<N_LARGE>(j).project_at::<N>(j) == f` for every
     /// slot, single-prime case at small (N, N_LARGE).
@@ -1457,7 +1424,7 @@ mod tests {
         assert_eq!(via_pack, via_sum);
     }
 
-    /// Round-trip at realistic paper sizes $N_\text{small} = 512$,
+    /// Round-trip at realistic sizes $N_\text{small} = 512$,
     /// $N_\text{large} = 2048$, modulus `ViaCQ3`. Locks the realistic
     /// path.
     #[test]
@@ -1496,7 +1463,7 @@ mod tests {
         let _ = Poly::<4, DynModulus, Coefficient>::pack_slots::<8>(m17, &slots);
     }
 
-    // ----- §0.6 centred-coeffs tests -----
+    // ----- centred-coeffs tests -----
 
     /// `to_centered_coeffs` at a small modulus produces the expected
     /// per-coefficient centred values.
@@ -1550,7 +1517,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // N = 1 audit (§5 LWE form): R_{1,q} = Z_q[X]/(X+1) ≅ Z_q. Coefficient-form
+    // N = 1 audit (LWE form): R_{1,q} = Z_q[X]/(X+1) ≅ Z_q. Coefficient-form
     // only; every op the cascade uses must behave at degree 1.
     // -----------------------------------------------------------------------
 
@@ -1630,7 +1597,7 @@ mod tests {
     }
 }
 
-/// `compile_fail` doctests for §0.5 degree-relationship checks.
+/// `compile_fail` doctests for degree-relationship checks.
 ///
 /// `N_LARGE` smaller than `N`:
 ///

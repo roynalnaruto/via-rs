@@ -1,15 +1,14 @@
 //! Compressed answer wire type.
 //!
-//! [`CompressedAnswer`] is the paper-path `RespComp` output: an **asymmetric**
-//! `ModSwitchedCiphertext` with mask at $q_3$ and body at $q_4$ (paper Figure 7:
-//! $\mathrm{ans} \leftarrow (A, \lfloor q_4 \cdot B / q_3 \rceil)$).
+//! [`CompressedAnswer`] is the `RespComp` output: an **asymmetric**
+//! `ModSwitchedCiphertext` with mask at $q_3$ and body at $q_4$
+//! ($\mathrm{ans} \leftarrow (A, \lfloor q_4 \cdot B / q_3 \rceil)$).
 //!
-//! # Paper vs Python divergence
+//! # Asymmetric mod-switch
 //!
-//! The Python reference `via_c/resp_comp.py` uses a **symmetric** mod-switch
-//! (both mask and body at $q_3$) "for implementation simplicity". The paper
-//! (Figure 7) and this implementation use the asymmetric variant: mask stays at
-//! $q_3$, body is rescaled to $q_4$. Per "paper wins", the asymmetric q3/q4
+//! A symmetric mod-switch (both mask and body at $q_3$) is simpler to
+//! implement, but this implementation uses the asymmetric variant: mask stays
+//! at $q_3$, body is rescaled to $q_4$. The asymmetric q3/q4
 //! split is the target; `decrypt_asymmetric(S2 @ q3, q3, q4, p)` is the matching
 //! recovery primitive. Cross-language KATs must therefore compare at the
 //! *recover output*, not the raw ciphertext modulus.
@@ -18,8 +17,7 @@ use core::fmt;
 
 use via_primitives::params::ViaCModSwitchedQ3Q4;
 
-/// VIA-C compressed answer: the `RespComp` output ciphertext
-/// (`via_c/params.py:CompressedAnswer`).
+/// VIA-C compressed answer: the `RespComp` output ciphertext.
 ///
 /// Wraps `ViaCModSwitchedQ3Q4<N2>` =
 /// `ModSwitchedCiphertext<N2, Poly<N2, q3>, Poly<N2, q4>>` — mask at $q_3$, body

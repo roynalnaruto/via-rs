@@ -1,33 +1,31 @@
-//! §4.6 RLWE→RGSW conversion and §4.7 RGSW modulus-switch (Part 3).
-//!
-//! See `.docs/primitives.md` §4.6-§4.7, `gates.py:257-311`, and
-//! `query_comp.py:316-353`.
+//! RLWE→RGSW conversion and RGSW modulus-switch.
 //!
 //! - [`gen_rlwe_to_rgsw_key`] — the conversion key $\mathrm{RLev}_S(S^2)$.
 //! - [`rlwe_to_rgsw`] — convert per-gadget-level RLWE ciphertexts to RGSW.
-//! - [`mod_switch_rgsw`] — apply the Layer-3
+//! - [`mod_switch_rgsw`] — apply the switching-layer
 //!   [`crate::switching::mod_switch::mod_switch_sym`] to every constituent RLWE
-//!   of an RGSW. This is why §4.7 lives in `gates` (Layer 4), not `encryption`
-//!   (Layer 2): importing Layer 3 into Layer 2 would invert the layer order.
+//!   of an RGSW. This is why the RGSW modulus-switch lives in `gates`, not
+//!   `encryption`: importing the switching layer into encryption would invert
+//!   the layer order.
 
-use crate::algebra::ring::RingPoly;
-use crate::encryption::types::{RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
+use crate::algebra::ring::{RingPoly, RingPolyEval};
+use crate::encryption::types::{
+    RGSWCiphertext, RLWECiphertext, RLevCiphertext, RLevEval, SecretKey,
+};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 use crate::switching::mod_switch::mod_switch_sym;
 
-/// §4.6 — Generate the conversion key $\mathrm{RLev}_S(S^2)$: an RLev
+/// Generate the conversion key $\mathrm{RLev}_S(S^2)$: an RLev
 /// encryption of the **square** of the secret-key polynomial under the same
 /// key. Thin wrapper over [`SecretKey::encrypt_rlev`], mirroring
 /// [`crate::encryption::gen_ksk`]. Returns a bare `RLevCiphertext` (no named
 /// wrapper — `gen_ksk` sets the precedent).
 ///
-/// `paper:gates.py:286-291`
-///
 /// # PRG consumption order
 ///
 /// Delegates to `encrypt_rlev::<L>` (mask then error per level, level 0..L).
-/// Reversing would break Python parity for the conversion-key test vectors.
+/// Reversing would break the conversion-key test vectors.
 ///
 /// # Constant-time
 ///
@@ -78,13 +76,13 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
     sk.encrypt_rlev_boxed::<L>(&s_squared, base, error_dist, prg)
 }
 
-/// §4.6 — Convert per-gadget-level RLWE ciphertexts `rlwe_levels[i] =
+/// Convert per-gadget-level RLWE ciphertexts `rlwe_levels[i] =
 /// RLWE_S(M·g[i])` into an `RGSW_S(M)` using the conversion key `conv_key =
 /// RLev_S(S^2)`.
 ///
 /// For each level `i`: `prod = conv_key ⊡ A_i`; the `neg_s_m` sample is
 /// `(B_i + prod.mask, prod.body)`, which decrypts to `-S·M·g[i]` (the
-/// §2.4 key-switch identity per gadget level):
+/// key-switch identity per gadget level):
 ///
 /// ```text
 /// prod.body - (B_i + prod.mask)·S
@@ -93,19 +91,16 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
 ///   ≈ -S·M·g[i]
 /// ```
 ///
-/// The `m` half (`m_rlev`) is passed **separately**: in production
-/// (`query_comp.py:332`) it is `RLevCiphertext::new(rlwe_levels)` (the same
-/// ciphertexts); in tests it is a fresh `RLev_S(M)`. The conversion key should
-/// use a **finer** gadget (`L_CK > L_OUT`, smaller `base_ck`) so the
-/// `~q/base_ck^{L_CK}` approximation error stays under the downstream CMux
-/// budget.
-///
-/// `paper:gates.py:257-311`, `paper:query_comp.py:316-353`
+/// The `m` half (`m_rlev`) is passed **separately**: in production it is
+/// `RLevCiphertext::new(rlwe_levels)` (the same ciphertexts); in tests it is a
+/// fresh `RLev_S(M)`. The conversion key should use a **finer** gadget
+/// (`L_CK > L_OUT`, smaller `base_ck`) so the `~q/base_ck^{L_CK}`
+/// approximation error stays under the downstream CMux budget.
 ///
 /// # Output depth
 ///
-/// Both RGSW halves share depth `L_OUT`. If per-half depths are ever needed
-/// (paper Tables 5-6), add an `L_M` const-generic and return
+/// Both RGSW halves share depth `L_OUT`. If per-half depths are ever needed,
+/// add an `L_M` const-generic and return
 /// `RGSWCiphertext<N, R, L_OUT, L_M>`.
 ///
 /// # Constant-time: No
@@ -138,7 +133,12 @@ pub fn gen_rlwe_to_rgsw_key_boxed<const N: usize, R: RingPoly<N>, const L: usize
 /// assert_eq!(rgsw.neg_s_m.samples.len(), 2);
 /// assert_eq!(rgsw.m.samples.len(), 2);
 /// ```
-pub fn rlwe_to_rgsw<const N: usize, R: RingPoly<N>, const L_OUT: usize, const L_CK: usize>(
+pub fn rlwe_to_rgsw<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L_OUT: usize,
+    const L_CK: usize,
+>(
     rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
     conv_key: &RLevCiphertext<N, R, L_CK>,
     m_rlev: RLevCiphertext<N, R, L_OUT>,
@@ -151,19 +151,45 @@ pub fn rlwe_to_rgsw<const N: usize, R: RingPoly<N>, const L_OUT: usize, const L_
     RGSWCiphertext::new(RLevCiphertext::new(neg_s_m), m_rlev)
 }
 
-/// §4.7 — Modulus-switch an RGSW from ring `R_SRC` to ring `R_DST` by mapping
-/// the Layer-3 [`mod_switch_sym`] over every constituent RLWE of both RLev
+/// Eval-key variant of [`rlwe_to_rgsw`] (T7): the conversion key is supplied
+/// **pre-transformed** as an [`RLevEval`], so the per-level gadget products skip
+/// the per-call `to_eval` of the conv-key samples. The conv key is static
+/// (`pp.query_comp_key.rlwe_to_rgsw_key`), so transforming it once at setup and
+/// reusing the eval form here removes `2·L_CK` transforms per level per query.
+///
+/// **Bit-identical** to [`rlwe_to_rgsw`] (the NTT is exact); the only change is
+/// where the conv-key transform happens (setup vs per call).
+pub fn rlwe_to_rgsw_eval<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L_OUT: usize,
+    const L_CK: usize,
+>(
+    rlwe_levels: [RLWECiphertext<N, R>; L_OUT],
+    conv_key: &RLevEval<N, R, L_CK>,
+    m_rlev: RLevCiphertext<N, R, L_OUT>,
+    base_ck: u64,
+) -> RGSWCiphertext<N, R, L_OUT, L_OUT> {
+    let neg_s_m = core::array::from_fn(|i| {
+        let prod = conv_key.gadget_product(&rlwe_levels[i].mask, base_ck);
+        RLWECiphertext::new(rlwe_levels[i].body + prod.mask, prod.body)
+    });
+    RGSWCiphertext::new(RLevCiphertext::new(neg_s_m), m_rlev)
+}
+
+/// Modulus-switch an RGSW from ring `R_SRC` to ring `R_DST` by mapping
+/// [`mod_switch_sym`] over every constituent RLWE of both RLev
 /// halves. Gadget depths `L1` / `L2` and ring degree `N` are preserved; only
 /// the modulus changes.
 ///
-/// In the VIA-C server (`server.py:38-60`) this switches the sel/rot RGSW bits
+/// In the VIA-C server this switches the sel/rot RGSW bits
 /// from `q1` to `q2` before CMux / CRot, shrinking coefficients from ~75 bits
 /// (RNS `q1`) to ~34 bits (`q2`).
 ///
 /// # Placement
 ///
-/// Lives in `gates` (Layer 4), not `encryption` (Layer 2), because it depends
-/// on Layer 3's `mod_switch_sym`.
+/// Lives in `gates`, not `encryption`, because it depends
+/// on `mod_switch_sym`.
 ///
 /// # Constant-time: No
 ///
@@ -266,7 +292,7 @@ mod tests {
 
     // ----- rlwe_to_rgsw -----
 
-    /// Mirror `test_gates.py::TestRLWEToRGSW`: build per-level RLWE(M·g[i]),
+    /// Build per-level RLWE(M·g[i]),
     /// convert to RGSW(M=1), then check `external_product(rgsw, RLWE(M')) ==
     /// RLWE(M')`. Functional smoke test (its own seeds), complementary to the
     /// byte-parity KAT.
@@ -451,7 +477,7 @@ mod tests {
         let mut rgsw_prg = Shake256Prg::new(b"msr-q1q2-rgsw");
         let rgsw = sk.encrypt_rgsw::<2, 2>(&m, 2, 2, Distribution::Ternary, &mut rgsw_prg);
 
-        // Production gate: VIA-C server.py:38-60 performs exactly this switch.
+        // Production gate: the VIA-C server performs exactly this switch.
         let switched: RGSWCiphertext<N, Q2<N>, 2, 2> = mod_switch_rgsw(&rgsw, q2);
         let q2_val = <Q2<N> as RingPoly<N>>::modulus_value(q2);
         for sample in switched

@@ -69,11 +69,11 @@ impl<B: RnsBasis> RnsZq<B> {
 
     /// Construct an [`RnsZq`] from a signed `i64`, lifting into $[0, Q)$.
     ///
-    /// Convenience over `from_i128(basis, x as i128)` — §1.x samplers
+    /// Convenience over `from_i128(basis, x as i128)` — samplers
     /// (ternary, bounded-uniform, discrete Gaussian) produce `i64` and
     /// going through `i128` is awkward. Delegates to [`Modulus::reduce_i64`]
     /// for each component, which is constant-time over `x` (see
-    /// `.docs/review.md` item 5 and the CT contract on the trait).
+    /// item 5 and the CT contract on the trait).
     #[inline(always)]
     pub fn from_i64(basis: B, x: i64) -> Self {
         let v0 = basis.m0().reduce_i64(x);
@@ -93,7 +93,7 @@ impl<B: RnsBasis> RnsZq<B> {
     /// modulo `Q`) are computed unconditionally and the result is selected
     /// via [`subtle::ConditionallySelectable`]. `i128::unsigned_abs` is
     /// itself branchless in `std` and correctly maps `i128::MIN` to
-    /// `2^127`. Mirrors the §0.1 [`Modulus::reduce_i64`] discipline; the
+    /// `2^127`. Mirrors the [`Modulus::reduce_i64`] discipline; the
     /// sign of `x` may be secret sampler output and must not leak.
     #[inline(always)]
     pub fn from_i128(basis: B, x: i128) -> Self {
@@ -168,16 +168,16 @@ impl<B: RnsBasis> RnsZq<B> {
         self.basis.reconstruct(self.value0, self.value1)
     }
 
-    /// §0.6 centred representation in $\mathbb{Z}_Q$ —
+    /// Centred representation in $\mathbb{Z}_Q$ —
     /// $\tilde a \in (-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$ with
     /// $\tilde a \equiv a \pmod Q$. Returns `i128` because $Q$ can
-    /// exceed $2^{63}$ (paper VIA-C / VIA-B $q_1 \approx 2^{75}$).
+    /// exceed $2^{63}$ (VIA-C / VIA-B $q_1 \approx 2^{75}$).
     ///
     /// # Not constant-time
     ///
     /// Branches on the reconstructed value's position relative to
-    /// $Q/2$. Intended for decoding boundaries (paper §2.2 `Dec`,
-    /// §3.1 `ModSwitch`) where the value is about to be revealed.
+    /// $Q/2$. Intended for decoding boundaries (`Dec`,
+    /// `ModSwitch`) where the value is about to be revealed.
     /// For secret-data inputs, use [`Self::to_centered_i128_ct`].
     #[inline(always)]
     pub fn to_centered_i128(self) -> i128 {
@@ -211,7 +211,7 @@ impl<B: RnsBasis> RnsZq<B> {
     ///
     /// CT over the input value; access pattern depends only on the
     /// public basis $Q$. Use for centring secret-key coefficients in
-    /// §3.4 rekeying (RNS variant).
+    /// rekeying (RNS variant).
     #[inline(always)]
     pub fn to_centered_i128_ct(self) -> i128 {
         let big_q = self.basis.big_q();
@@ -247,7 +247,7 @@ impl<B: RnsBasis> RnsZq<B> {
     /// The RNG is consumed in the order `m0, m1` — slot 0 first, then
     /// slot 1. Same convention as the polynomial-level
     /// [`super::super::ring::rns_element::PolyRns::random`]; pinned
-    /// here so the §1.1 cross-language reproducibility contract can
+    /// here so the cross-language reproducibility contract can
     /// lock against it.
     pub fn random<R: RngCore + ?Sized>(basis: B, rng: &mut R) -> Self {
         let v0 = Zq::random(basis.m0(), rng).to_u64();
@@ -500,7 +500,7 @@ mod tests {
             let via_i128 = RnsZq::from_i128(b, x as i128);
             assert_eq!(via_i64, via_i128, "x = {x}");
         }
-        // Paper basis sanity at the realistic 57-bit Q.
+        // Basis sanity at the realistic 57-bit Q.
         let b = paper::ViaQ1Rns::default();
         for x in [0i64, 1, -1, 1234567890, -1234567890, i64::MAX, i64::MIN] {
             assert_eq!(
@@ -526,11 +526,11 @@ mod tests {
 
     /// `from_i128(i128::MIN)` exercises the `unsigned_abs → neg` path on
     /// the most adversarial signed input — `i128::MIN.unsigned_abs() ==
-    /// 2^127`. Closes the `.docs/review.md` item 11 gap and verifies the
+    /// 2^127`. Closes the review item 11 gap and verifies the
     /// constant-time rewrite preserves value semantics on the boundary.
     #[test]
     fn from_i128_min_extreme() {
-        // Z_55 (toy) and the VIA q_1 paper basis (75-bit Q) — the latter
+        // Z_55 (toy) and the VIA q_1 basis (75-bit Q) — the latter
         // confirms the path is well-defined at the realistic scale.
         let b = Z55::default();
         let got = RnsZq::from_i128(b, i128::MIN).to_u128();
@@ -625,7 +625,7 @@ mod tests {
         let _: RnsZq<paper::ViaCQ1Rns> = RnsZq::zero(paper::ViaCQ1Rns::default());
     }
 
-    /// Distributivity `(a + b) * c = a*c + b*c` on `RnsZq` at the paper
+    /// Distributivity `(a + b) * c = a*c + b*c` on `RnsZq` at a representative
     /// basis. Locks the ring axioms against future componentwise kernel
     /// regressions. Closes review item 23 (RnsZq side).
     #[test]
@@ -686,41 +686,9 @@ mod tests {
         assert!(c1 < 50.0, "m1 chi^2 = {c1}, counts = {counts1:?}");
     }
 
-    /// SplitMix64 — duplicate of the helper in `zq::element::tests` so the
-    /// uniformity tests don't need a cross-module dependency. Lift to a
-    /// shared `test_util` module if a third caller appears.
-    struct SplitMix64(u64);
+    use crate::test_util::SplitMix64;
 
-    impl SplitMix64 {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-    }
-
-    impl RngCore for SplitMix64 {
-        fn next_u32(&mut self) -> u32 {
-            self.next_u64() as u32
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn fill_bytes(&mut self, dst: &mut [u8]) {
-            for chunk in dst.chunks_mut(8) {
-                let bytes = self.next_u64().to_le_bytes();
-                chunk.copy_from_slice(&bytes[..chunk.len()]);
-            }
-        }
-        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), rand_core::Error> {
-            self.fill_bytes(dst);
-            Ok(())
-        }
-    }
-
-    // ----- §0.6 RNS centred-lift tests -----
+    // ----- RNS centred-lift tests -----
 
     #[test]
     fn rnszq_to_centered_i128_zero_is_zero() {

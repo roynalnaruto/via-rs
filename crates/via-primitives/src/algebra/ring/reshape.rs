@@ -1,8 +1,7 @@
-//! GPU-portable slice kernels for primitive §0.5 — ring embedding and
+//! GPU-portable slice kernels for ring embedding and
 //! projection between $R_{n', q}$ and $R_{n, q}$ where $n' \mid n$.
 //!
-//! Four kernels implement the four maps defined in `.docs/primitives.md`
-//! §0.5 (full derivation at `.docs/0.5-ring-embedding-and-projection.md`):
+//! Four kernels for the four embedding/projection maps:
 //!
 //! - [`embed_at_slice`] — $\iota_j^{n' \to n}$, single-slot embed. Places
 //!   each source coefficient at stride $d = n / n'$, offset $j$.
@@ -27,8 +26,8 @@
 //!
 //! The access pattern depends only on slice lengths and the slot index
 //! $j$, all of which are public protocol parameters at every call site
-//! (see §3.3 ring-switch key gen, §4.4 CRot slot extraction, §5.5
-//! `Extr`, §6.3 `SetupDB`, §7.1/§7.4 VIA-B repacking). Coefficient
+//! (see ring-switch key gen, CRot slot extraction, `extr`, `setup_db`,
+//! VIA-B repacking). Coefficient
 //! *values* are never branched on. The kernels are fully constant-time
 //! over secret data.
 //!

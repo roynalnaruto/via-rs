@@ -18,12 +18,12 @@
 //! | 0x00 | Uncompressed  |
 //! | 0x01 | PrgCompressed |
 //!
-//! # PrgCompressed mask-regeneration contract (pinned for the P5 cross-language KAT)
+//! # PrgCompressed mask-regeneration contract (pinned for the cross-language KAT)
 //!
 //! Seed → `Shake256Prg::new(seed)`, then for each coefficient position in
 //! row-major mask order (`masks[0][0..N], masks[1][0..N], …`) draw
 //! `prg.uniform_below(q)` (for RNS, one draw per limb, limb-0 first). This is
-//! byte-identical to the Python reference's `randbelow(q)` order.
+//! byte-identical to the reference's `randbelow(q)` order.
 
 use alloc::vec::Vec;
 
@@ -149,7 +149,7 @@ impl<const SEED_LEN: usize> PrgCompressed<SEED_LEN> {
     /// with the verbatim seed bytes; draws are `uniform_below(q)` in row-major
     /// mask order (`masks[0][0], masks[0][1], …, masks[RANK-1][N-1]`; for RNS,
     /// one draw per limb, limb-0 first). This order is byte-identical to the
-    /// Python reference and pinned for the P5 cross-language KAT.
+    /// reference and pinned for the cross-language KAT.
     ///
     /// # Panics
     ///
@@ -229,7 +229,7 @@ mod tests {
 
     /// The cross-language KAT contract: `regenerate_masks(seed, q, N)` must
     /// equal `[Shake256Prg::new(seed).uniform_below(q) for _ in 0..N]` (which in
-    /// turn matches Python `DeterministicSampler(seed).randbelow(q)`).
+    /// turn matches the reference `randbelow(q)` order).
     #[test]
     fn prg_mask_regen_matches_shake256prg_draw() {
         let q: u64 = 8_380_417; // VIA-C q3

@@ -16,12 +16,12 @@
 //! binary kernels cannot accept the same buffer as both `dst` and one of
 //! the operands in safe code. For the common `dst += rhs` / `dst *= rhs`
 //! pattern, copy the source into the destination first or expose an
-//! in-place variant from the polynomial ring layer (§0.3).
+//! in-place variant from the polynomial ring layer.
 //!
 //! # Length mismatch
 //!
 //! Every binary kernel panics if the slice lengths differ. This is a logic
-//! bug at the caller — the polynomial ring infrastructure (§0.3) enforces
+//! bug at the caller — the polynomial ring infrastructure enforces
 //! same-length invariants.
 
 use super::modulus::Modulus;
@@ -53,7 +53,7 @@ pub fn sub_slice<M: Modulus>(modulus: M, dst: &mut [u64], lhs: &[u64], rhs: &[u6
 /// Coefficient-wise modular multiply: `dst[i] = lhs[i] * rhs[i] mod q`.
 ///
 /// This is the Hadamard (pointwise) product used inside the NTT-evaluation
-/// form of $R_{n, q}$ multiplication (§0.4); it is **not** the polynomial
+/// form of $R_{n, q}$ multiplication; it is **not** the polynomial
 /// (negacyclic) multiplication of $R_{n, q}$.
 #[inline]
 pub fn mul_slice<M: Modulus>(modulus: M, dst: &mut [u64], lhs: &[u64], rhs: &[u64]) {
@@ -76,7 +76,7 @@ pub fn neg_slice<M: Modulus>(modulus: M, dst: &mut [u64], src: &[u64]) {
 /// Scalar multiply: `dst[i] = src[i] * scalar mod q`.
 ///
 /// Used everywhere a polynomial is scaled by a single ring element — e.g.
-/// gadget product (§2.4 paper §2.2) where each gadget digit multiplies an
+/// the gadget product, where each gadget digit multiplies an
 /// entire RLev sample.
 ///
 /// # Caller invariant
@@ -96,7 +96,7 @@ pub fn scalar_mul_slice<M: Modulus>(modulus: M, dst: &mut [u64], src: &[u64], sc
     }
 }
 
-/// §0.6 centred-lift kernel: `dst[i] = to_centered_i64(src[i], q)`.
+/// Centred-lift kernel: `dst[i] = to_centered_i64(src[i], q)`.
 ///
 /// Per-lane wrapper of [`Modulus::to_centered_i64`]. Each input lane
 /// must be in canonical $[0, q)$ form (debug-asserted by the trait
@@ -104,7 +104,7 @@ pub fn scalar_mul_slice<M: Modulus>(modulus: M, dst: &mut [u64], src: &[u64], sc
 /// $(-\lfloor q/2 \rfloor, \lfloor q/2 \rfloor]$.
 ///
 /// **Not constant-time** over input values. For secret-data inputs
-/// (paper §3.4 secret-key rekeying), use [`to_centered_i64_ct_slice`].
+/// (secret-key rekeying), use [`to_centered_i64_ct_slice`].
 ///
 /// # Panics
 ///
@@ -121,11 +121,11 @@ pub fn to_centered_i64_slice<M: Modulus>(modulus: M, dst: &mut [i64], src: &[u64
     }
 }
 
-/// Constant-time §0.6 centred-lift kernel. Same output as
+/// Constant-time centred-lift kernel. Same output as
 /// [`to_centered_i64_slice`]; the difference is only timing.
 ///
 /// Use this when the input values are **secrets** (e.g. coefficients
-/// of a secret-key polynomial in §3.4 rekeying). For RLWE-uniform
+/// of a secret-key polynomial in secret-key rekeying). For RLWE-uniform
 /// ciphertext coefficients or plaintext-being-decoded inputs, the
 /// non-CT [`to_centered_i64_slice`] is faster and equally safe.
 ///
@@ -207,7 +207,7 @@ mod tests {
     }
 
     /// Empty-slice kernels must no-op (no panic, no out-of-bounds). The
-    /// polynomial-ring layer at §0.3 will sometimes assemble zero-length
+    /// polynomial-ring layer will sometimes assemble zero-length
     /// views during recursive decomposition, so this contract matters.
     /// Closes review item 20 (zq side).
     #[test]
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(dst, [0i64, 1, 8, -8, -1]);
     }
 
-    /// CT slice matches non-CT slice across a sweep at a paper modulus.
+    /// CT slice matches non-CT slice across a sweep at a representative modulus.
     #[test]
     fn to_centered_i64_ct_slice_matches_non_ct_slice() {
         let m = DynModulus::new(8380417); // VIA-C q_3

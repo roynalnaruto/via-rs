@@ -1,24 +1,20 @@
-//! §6.2 RespComp — **paper-asymmetric** response compression (Answer step 7).
+//! RespComp — **asymmetric** response compression (Answer step 7).
 //!
-//! Paper Figure 7 specifies THREE steps:
+//! Three steps:
 //!   1. `mod_switch_sym` q2 → q3  (symmetric; both mask and body, stays at n1)
 //!   2. `ring_switch`    n1 → n2  @ q3  (input is **uniform q3** after step 1)
 //!   3. `mod_switch_asym(_, q3, q4)`  trailing **body-only** rescale → `(A@q3, ⌊q4·B/q3⌉)`
 //!
 //! Doing the asymmetric rescale **last** (after ring-switch, at degree n2)
-//! sidesteps the limitation that `resp_comp.py` cites for going symmetric — a
-//! mask@q3/body@q4 mismatch that `ring_switch` can't handle. So this Rust path
-//! is paper-faithful where the Python (`resp_comp.py`) is symmetric "for
-//! implementation simplicity". `Client::recover` decrypts with
+//! sidesteps the limitation of going symmetric — a mask@q3/body@q4 mismatch that
+//! `ring_switch` can't handle. `Client::recover` decrypts with
 //! `SecretKey::decrypt_asymmetric(S2@q3, q3, q4, p)`.
-//!
-//! `paper:via.pdf Figure 7 (§6.2)`; `via_c/server.py:230-236` (symmetric — compare only)
 
-use via_primitives::algebra::ring::RingPoly;
+use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::types::{ModSwitchedCiphertext, RLWECiphertext};
-use via_primitives::switching::RingSwitchKey;
+use via_primitives::switching::RingSwitchKeyEval;
 use via_primitives::switching::mod_switch::{mod_switch_asym, mod_switch_sym};
-use via_primitives::switching::ring_switch::ring_switch;
+use via_primitives::switching::ring_switch::ring_switch_eval;
 
 /// Paper-asymmetric RespComp: `RLWE_{S1}(M) @ (q2, n1)` → `ModSwitchedCT<n2, q3-mask, q4-body>`.
 ///
@@ -34,8 +30,8 @@ use via_primitives::switching::ring_switch::ring_switch;
 /// # Noise
 ///
 /// Three rescales + one ring-switch; correctness needs the total under
-/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure rides on the
-/// P2 SPIKE budget.
+/// `q4 / (2p)`. Toy params close (see tests); paper-scale closure follows from
+/// the noise analysis in the paper.
 ///
 /// # Panics
 ///
@@ -46,21 +42,19 @@ use via_primitives::switching::ring_switch::ring_switch;
 ///
 /// Operates on RLWE-uniform ciphertext coefficients; no secret data is branched
 /// on. `%`/division timing varies only on the public moduli.
-///
-/// `paper:via.pdf Figure 7`
 #[allow(non_camel_case_types)]
 pub fn resp_comp<
     const N1: usize,
     const N2: usize,
     R2: RingPoly<N1>,
     R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus>,
+    R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     const L: usize,
     const D: usize,
 >(
     ct: &RLWECiphertext<N1, R2>,
-    rsk: &RingSwitchKey<N1, N2, R3, L, D>,
+    rsk: &RingSwitchKeyEval<N1, N2, R3, L, D>,
     q3_mod: R3L::Modulus,
     q4_mod: R4::Modulus,
     base_rsk: u64,
@@ -70,7 +64,7 @@ pub fn resp_comp<
 
     // Step 2: ring-switch n1 → n2 @ q3 (uniform-q3 input — no asymmetry yet).
     let ct_q3_n2: RLWECiphertext<N2, R3> =
-        ring_switch::<N1, N2, R3L, L, D>(&ct_q3_n1, rsk, base_rsk);
+        ring_switch_eval::<N1, N2, R3L, L, D>(&ct_q3_n1, rsk, base_rsk);
 
     // Step 3: trailing asymmetric rescale — mask stays @ q3, body → q4.
     mod_switch_asym::<N2, R3, R3, R4>(&ct_q3_n2, q3_mod, q4_mod)
@@ -86,8 +80,8 @@ mod tests {
     use via_primitives::encryption::types::SecretKey;
     use via_primitives::sampling::distribution::Distribution;
     use via_primitives::sampling::prg::Shake256Prg;
-    use via_primitives::switching::gen_rsk;
     use via_primitives::switching::rekey::rekey_secret_key;
+    use via_primitives::switching::{RingSwitchKey, gen_rsk};
 
     type Rq<const N: usize> = Poly<N, DynModulus, Coefficient>;
 
@@ -115,6 +109,7 @@ mod tests {
         let s1_q3 = rekey_secret_key::<N1, Rq<N1>, Rq<N1>>(&s1_q2, q3);
         let rsk: RingSwitchKey<N1, N2, Rq<N2>, L, D> =
             gen_rsk(&s1_q3, &s2_q3, BASE, Distribution::Ternary, &mut prg);
+        let rsk_eval = rsk.to_eval();
 
         // Encrypt M (small coeffs in [0,p)) under S1 @ q2.
         let m_coeffs: [u64; N1] = core::array::from_fn(|i| (i as u64) % 16);
@@ -122,7 +117,7 @@ mod tests {
         let ct = s1_q2.encrypt(&encode(&pt, q2), Distribution::Ternary, &mut prg);
 
         let answer =
-            resp_comp::<N1, N2, Rq<N1>, Rq<N1>, Rq<N2>, Rq<N2>, L, D>(&ct, &rsk, q3, q4, BASE);
+            resp_comp::<N1, N2, Rq<N1>, Rq<N1>, Rq<N2>, Rq<N2>, L, D>(&ct, &rsk_eval, q3, q4, BASE);
 
         // decrypt_asymmetric(S2@q3, q3, q4, p) → slot-0 projection π_0(M).
         let recovered: Rq<N2> = s2_q3.decrypt_asymmetric(&answer, q3, q4, p);

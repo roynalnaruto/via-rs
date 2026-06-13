@@ -1,5 +1,4 @@
-//! §5.5 — `extr`: general-$d$ RLWE→MLWE coefficient extraction. See
-//! `.docs/primitives.md` §5.5.
+//! `extr`: general-$d$ RLWE→MLWE coefficient extraction.
 //!
 //! Given $\mathrm{RLWE}_S(M) = (A, B)$ in $R_{n, q}$ and a divisor $D \mid n$,
 //! [`extr`] outputs an $(n/D, D)$-MLWE encrypting $\pi_0^{n \to D}(M)$ under the
@@ -20,10 +19,10 @@
 //! plus $n/D - 1$ multiplications by $X$ in $R_{D, q}$ — **no key material and
 //! no noise growth** beyond the host RLWE's.
 //!
-//! The $D = 1$ case is the classical RLWE→LWE sample extraction (`via.pdf`
-//! §2.2): $X \equiv -1$ in $R_{1, q}$, so the $\cdot X$ becomes a negation and
+//! The $D = 1$ case is the classical RLWE→LWE sample extraction:
+//! $X \equiv -1$ in $R_{1, q}$, so the $\cdot X$ becomes a negation and
 //! the decryption telescopes to $M_0 + e_0$. General $D$ is the first half of
-//! VIA-B's `Repack_k` (§7.4); it has **no Python reference** and is validated by
+//! VIA-B's `Repack_k`; it is validated by
 //! the Rust round-trip + property tests below.
 
 use crate::algebra::ring::RingPoly;
@@ -43,16 +42,16 @@ impl<const N: usize, const D: usize, const RANK_OUT: usize> ExtrDims<N, D, RANK_
     };
 }
 
-/// §5.5 — RLWE→MLWE coefficient extraction (general $D$).
+/// RLWE→MLWE coefficient extraction (general $D$).
 ///
 /// `D` is the **output component degree**; the result is an
 /// $(N/D, D)$-MLWE encrypting $\pi_0^{N \to D}(M)$ under $\pi^{N \to D}(S)$. No
-/// key material is consumed. `D = 1` is classical sample extraction
-/// (`via.pdf` §2.2); general `D` is the first half of VIA-B `Repack_k` (§7.4).
+/// key material is consumed. `D = 1` is classical sample extraction;
+/// general `D` is the first half of VIA-B `Repack_k`.
 ///
 /// # Constant-time: No
 ///
-/// Operates on RLWE-uniform ciphertext coefficients (§0.6).
+/// Operates on RLWE-uniform ciphertext coefficients.
 ///
 /// # Panics
 ///

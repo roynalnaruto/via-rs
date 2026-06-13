@@ -1,25 +1,25 @@
-//! Layer-2 ciphertext datatypes — `.docs/primitives.md §2.1`.
+//! Ciphertext datatypes.
 //!
 //! Every type is generic over a polynomial backend
 //! `R: RingPoly<N>` so the same struct works for both the single-prime
 //! [`Poly`](crate::algebra::ring::element::Poly) and the RNS
 //! [`PolyRns`](crate::algebra::ring::rns_element::PolyRns) carriers. See
 //! [`crate::algebra::ring::abstraction`] for the trait, and
-//! [`super::aliases`] for ergonomic typedefs at the paper parameter sets.
+//! [`super::aliases`] for ergonomic typedefs at the standard parameter sets.
 
 use core::fmt;
 use core::marker::PhantomData;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 
 // ---------------------------------------------------------------------------
-// SecretKey — §2.1
+// SecretKey
 // ---------------------------------------------------------------------------
 
 /// A secret key — a single polynomial $S \in R_{n, q}$ sampled from one of
-/// the §1.3–§1.5 key distributions (ternary, bounded-uniform, or discrete
+/// the key distributions (ternary, bounded-uniform, or discrete
 /// Gaussian).
 ///
 /// VIA-C / VIA-B carry two keys $S_1 \in R_{n_1, q_1}$ and $S_2 \in R_{n_2,
@@ -38,7 +38,7 @@ pub struct SecretKey<const N: usize, R: RingPoly<N>> {
 
 impl<const N: usize, R: RingPoly<N>> SecretKey<N, R> {
     /// Wrap an existing polynomial as a secret key. Most callers should
-    /// instead use the `keygen` free function (Phase 2) which samples a
+    /// instead use the `keygen` free function which samples a
     /// fresh polynomial from the chosen key distribution.
     #[inline(always)]
     pub fn from_poly(poly: R) -> Self {
@@ -89,12 +89,12 @@ impl<const N: usize, R: RingPoly<N>> fmt::Debug for SecretKey<N, R> {
 }
 
 // ---------------------------------------------------------------------------
-// RLWECiphertext — §2.1
+// RLWECiphertext
 // ---------------------------------------------------------------------------
 
 /// An RLWE ciphertext $(A, B)$ where $A \in R_{n, q}$ is uniform and
 /// $B = A \cdot S + e + M'$ for an *already-encoded* message $M' = \Delta
-/// \cdot m$ with $\Delta = \lceil q / p \rceil$ (see §2.2.1). The
+/// \cdot m$ with $\Delta = \lceil q / p \rceil$. The
 /// `encrypt` primitive is agnostic to $\Delta$ because RLev re-uses it
 /// with gadget-scaled messages rather than $\Delta$-encoded ones.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -108,8 +108,7 @@ pub struct RLWECiphertext<const N: usize, R: RingPoly<N>> {
 
 impl<const N: usize, R: RingPoly<N>> RLWECiphertext<N, R> {
     /// Construct an RLWE ciphertext from its `mask` / `body` components.
-    /// Used by `encrypt` (Phase 3) and by the trivial-RLWE constructor
-    /// (Phase 4, §2.2.5).
+    /// Used by `encrypt` and by the trivial-RLWE constructor.
     #[inline(always)]
     pub fn new(mask: R, body: R) -> Self {
         Self { mask, body }
@@ -132,24 +131,23 @@ impl<const N: usize, R: RingPoly<N>> fmt::Debug for RLWECiphertext<N, R> {
 }
 
 // ---------------------------------------------------------------------------
-// RLevCiphertext — §2.1
+// RLevCiphertext
 // ---------------------------------------------------------------------------
 
 /// A tuple of $L$ RLWE ciphertexts encrypting the gadget-scaled messages
 /// $\bigl(g_i \cdot M\bigr)_{i = 1}^{L}$, where $g_i = \lceil q / B^i
-/// \rceil$ are the entries of the VIA-convention gadget vector (§2.3).
+/// \rceil$ are the entries of the VIA-convention gadget vector.
 ///
 /// **Note**: the gadget entries replace the $\Delta$ scaling — RLev does
 /// **not** go through `encode`.
 ///
 /// The gadget depth $L$ and base $B$ are tuned per call site (DMux ctrl,
-/// CMux sel, ring-switch, LWE-to-RLWE conv, RLWE-to-RGSW conv; see paper
-/// Tables 5-6). $L$ is a const generic parameter; $B$ is threaded through
-/// function calls.
+/// CMux sel, ring-switch, LWE-to-RLWE conv, RLWE-to-RGSW conv). $L$ is a
+/// const generic parameter; $B$ is threaded through function calls.
 #[derive(Clone, Copy)]
 pub struct RLevCiphertext<const N: usize, R: RingPoly<N>, const L: usize> {
     /// The $L$ RLWE samples, ordered MSB-first so that `samples[0]` pairs
-    /// with $g_0 = \lceil q / B \rceil$ (see §2.3 algorithm step 4).
+    /// with $g_0 = \lceil q / B \rceil$ (algorithm step 4).
     pub samples: [RLWECiphertext<N, R>; L],
 }
 
@@ -179,15 +177,61 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> fmt::Debug for RLevCipherte
 }
 
 // ---------------------------------------------------------------------------
-// RGSWCiphertext — §2.1
+// RLevEval — evaluation-form RLev key (T7 eval-key storage)
+// ---------------------------------------------------------------------------
+
+/// An RLev whose `L` samples are stored in **evaluation form** — each
+/// `(mask, body)` pre-transformed via the negacyclic NTT.
+///
+/// Derived once from a coefficient-form [`RLevCiphertext`] via
+/// [`RLevCiphertext::to_eval`](crate::encryption::RLevCiphertext::to_eval) so
+/// [`RLevEval::gadget_product`](crate::encryption::RLevEval::gadget_product) can
+/// skip the per-call `to_eval` of the (already-transformed) samples. This is the
+/// storage form for **static** keys — the conversion key, ring-switch key, and
+/// (T7 Phase B) the LWE→RLWE cascade keys — reused on every query.
+///
+/// `Copy` like [`RLevCiphertext`]. The NTT image of a secret key is itself
+/// secret, so it is `Zeroize`; owners that store it (e.g. `PreparedKeys`,
+/// [`RingSwitchKeyEval`](crate::switching::RingSwitchKeyEval)) are
+/// `ZeroizeOnDrop`.
+#[derive(Clone, Copy)]
+pub struct RLevEval<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> {
+    /// The `L` eval-form `(mask, body)` samples, MSB-first (same ordering as
+    /// [`RLevCiphertext::samples`]).
+    pub(crate) samples: [(R::Eval, R::Eval); L],
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> Zeroize
+    for RLevEval<N, R, L>
+{
+    fn zeroize(&mut self) {
+        for (mask, body) in &mut self.samples {
+            mask.zeroize();
+            body.zeroize();
+        }
+    }
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> fmt::Debug
+    for RLevEval<N, R, L>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RLevEval")
+            .field("N", &N)
+            .field("L", &L)
+            .finish_non_exhaustive()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RGSWCiphertext
 // ---------------------------------------------------------------------------
 
 /// A pair $\bigl(\mathrm{RLev}(-S \cdot M), \, \mathrm{RLev}(M)\bigr)$ —
-/// the homomorphic encoding consumed by the external product
-/// (§2.4).
+/// the homomorphic encoding consumed by the external product.
 ///
-/// The two RLev halves can use **different** gadget parameters: the paper
-/// Tables 5-6 list separate $(\ell, B)$ for `ctrl,1` vs `ctrl,2`, `sel,1`
+/// The two RLev halves can use **different** gadget parameters: separate
+/// $(\ell, B)$ for `ctrl,1` vs `ctrl,2`, `sel,1`
 /// vs `sel,2`, etc. So each half carries its own const-generic depth `L1`
 /// / `L2`; the bases are threaded through `encrypt_rgsw` and
 /// `external_product`.
@@ -231,7 +275,7 @@ impl<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize> fmt::Debu
 }
 
 // ---------------------------------------------------------------------------
-// ModSwitchedCiphertext — §2.1
+// ModSwitchedCiphertext
 // ---------------------------------------------------------------------------
 
 /// An $(A, B)$ pair where $A$ and $B$ may live at **different** moduli.
@@ -239,14 +283,13 @@ impl<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize> fmt::Debu
 /// Used in two places:
 ///
 /// - VIA's final answer (mask at $q_3$, body at $q_4$), returned by the
-///   asymmetric `ModSwitch` of the 6-step Answer pipeline (§3.2).
+///   asymmetric `ModSwitch` of the Answer pipeline.
 /// - VIA-C's `RespComp` output `(A, ⌊q_4 B / q_3⌋)` (mask at $q_3$, body
-///   at $q_4$ after the final body rescale; paper Figure 7).
+///   at $q_4$ after the final body rescale).
 ///
 /// The two backing polynomial types `RA` and `RB` are independent;
 /// nothing prevents them from being the same type at the same modulus
-/// (which would degenerate to a symmetric ModSwitch, the path taken by
-/// the Python reference's `via_c/resp_comp.py`).
+/// (which would degenerate to a symmetric ModSwitch).
 #[derive(Clone, Copy)]
 pub struct ModSwitchedCiphertext<const N: usize, RA: RingPoly<N>, RB: RingPoly<N>> {
     /// Mask, at modulus `RA::Modulus`.
@@ -304,7 +347,7 @@ mod tests {
     type RnsR = PolyRns<4, ConstRnsBasis<5, 11>, Coefficient>;
 
     // The smoke tests below only need to compile (and run zeroize). They
-    // don't assert correctness — that's Phase 2-8's job.
+    // don't assert correctness — that's the job of the dedicated KAT tests.
 
     #[test]
     fn secret_key_constructs_with_both_backends() {

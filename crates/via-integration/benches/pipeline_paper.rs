@@ -1,4 +1,4 @@
-//! Paper-scale (n2048 RNS, Appendix B) per-step + full-pipeline benchmarks —
+//! Paper-scale (n2048 RNS) per-step + full-pipeline benchmarks —
 //! the authoritative, opt-in suite (reduced sampling; minutes per run).
 //!
 //! Same isolation technique as `pipeline_toy` (build each step's input once by
@@ -15,7 +15,8 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    CascadeKey, LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed,
+    lwe_to_rlwe_rns_n2048_eval,
 };
 use via_primitives::encryption::types::{RGSWCiphertext, RLWECiphertext};
 use via_primitives::gates::{CRotDir, cmux_tree, crot, dmux_tree, mod_switch_rgsw};
@@ -26,7 +27,9 @@ use via_primitives::switching::gen_rsk;
 use via_primitives::switching::mod_switch::mod_switch_sym;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{CompressedQuery, KeyDist, PIRParams, PublicParams};
-use via_server::{answer_one_query, first_dim, query_decomp, resp_comp, setup_db};
+use via_server::{
+    PreparedDb, PreparedKeys, answer_one_query, first_dim, query_decomp, resp_comp, setup_db,
+};
 
 // ── Paper params (mirror crates/via-integration/tests/client_server_e2e_paper.rs) ──
 const N1: usize = 2048;
@@ -36,9 +39,24 @@ const L_QUERY: usize = 2;
 const L_CK: usize = 18;
 const L_RSK: usize = 8;
 const CK_BASE: u64 = 18;
-const NUM_ROWS: usize = 2;
-const NUM_COLS: usize = 2;
-const INDEX: usize = 15; // (α,β,γ)=(1,1,3) — every gate selecting.
+// num_crot is RING-fixed: log2(N1/N2) = log2(D) = 2. Independent of the grid.
+const NUM_CROT: usize = (N1 / N2).trailing_zeros() as usize;
+
+/// Paper grid dim (I or J) from env — default 2 preserves `just bench-paper` at
+/// 2×2. The `/benchmark` CI workflow sets `VIA_BENCH_ROWS=8`, `VIA_BENCH_COLS=16`
+/// to surface `first_dim`'s O(I·J) cost on a larger, asymmetric grid. Must stay a
+/// power of two (the DMux/CMux trees recurse one bit per layer).
+fn grid_dim(var: &str, default: usize) -> usize {
+    let v = std::env::var(var)
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .unwrap_or(default);
+    assert!(
+        v.is_power_of_two(),
+        "{var}={v} must be a power of two (DMux/CMux trees)"
+    );
+    v
+}
 
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2N1 = ViaCPolyQ2<N1>; // q2 @ n1
@@ -97,12 +115,16 @@ struct Fixture {
     client: PaperClient,
     pp: PaperPp,
     encoded_db: Vec<Vec<RpN1>>,
+    prepared_db: PreparedDb<N1, R2N1>,
     query: CompressedQuery<N1, 1, <R1 as RingPoly<N1>>::Projected<1>>,
     q1: ViaCQ1Rns,
     q2: ViaCQ2,
     q3: ViaCQ3,
     q4: ViaCQ4,
     p: ViaCP,
+    num_rows: usize,
+    num_cols: usize,
+    index: usize,
 }
 
 fn build_fixture() -> Fixture {
@@ -114,12 +136,17 @@ fn build_fixture() -> Fixture {
         ViaCP::default(),
     );
     let mut prg = Shake256Prg::new(b"via-c-bench-paper");
+    let num_rows = grid_dim("VIA_BENCH_ROWS", 2);
+    let num_cols = grid_dim("VIA_BENCH_COLS", 2);
+    // Last valid index → (γ,α,β) = (D-1, I-1, J-1): every DMux/CMux/CRot bit set
+    // (generalizes the old INDEX=15 at 2×2 → (1,1,3)).
+    let index = D * num_rows * num_cols - 1;
     let (client, pp) = PaperClient::setup(
         q1,
         q3,
         paper_params(),
-        NUM_ROWS,
-        NUM_COLS,
+        num_rows,
+        num_cols,
         CK_BASE,
         Distribution::Ternary,
         Distribution::Ternary,
@@ -129,36 +156,52 @@ fn build_fixture() -> Fixture {
         gen_rsk_closure,
     )
     .expect("client setup");
-    let records: Vec<Rec> = (0..D * NUM_ROWS * NUM_COLS).map(|m| record(m, p)).collect();
-    let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, NUM_ROWS, NUM_COLS, p);
-    let query = client.query(INDEX, &mut prg).expect("client query");
+    let records: Vec<Rec> = (0..D * num_rows * num_cols).map(|m| record(m, p)).collect();
+    let encoded_db = setup_db::<N1, N2, RpN1, Rec>(&records, num_rows, num_cols, p);
+    let prepared_db = PreparedDb::<N1, R2N1>::from_encoded(&encoded_db, q2);
+    let query = client.query(index, &mut prg).expect("client query");
     Fixture {
         client,
         pp,
         encoded_db,
+        prepared_db,
         query,
         q1,
         q2,
         q3,
         q4,
         p,
+        num_rows,
+        num_cols,
+        index,
     }
 }
 
 fn paper_benches(c: &mut Criterion) {
     let fx = build_fixture();
-    let cascade = lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>;
+    let cascade = lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>;
     let b1 = fx.pp.params.gadget_base_1;
     let b2 = fx.pp.params.gadget_base_2;
     let b_rsk = fx.pp.params.gadget_base_rsk;
     let ck_base = fx.pp.ck_base;
-    // Paper: I=J=2 (1 bit each), d=4 (2 bits).
-    let (num_dmux, num_cmux, num_crot) = (1usize, 1usize, 2usize);
+    // Grid-derived: num_dmux=log2(I), num_cmux=log2(J); num_crot is ring-fixed.
+    let (num_dmux, num_cmux, num_crot) = (
+        fx.num_rows.trailing_zeros() as usize,
+        fx.num_cols.trailing_zeros() as usize,
+        NUM_CROT,
+    );
+
+    // T7: the static keys are pre-transformed once (the answer path does this at setup).
+    let conv_key_eval = fx.pp.query_comp_key.rlwe_to_rgsw_key.to_eval();
+    let cascade_eval = fx.pp.query_comp_key.lwe_to_rlwe_key.to_eval_boxed();
+    let rsk_eval = fx.pp.ring_switch_key.to_eval();
+    let prepared_keys = PreparedKeys::from_public_params(&fx.pp);
 
     let run_qd = || {
-        query_decomp::<N1, R1, K, L_QUERY, L_CK, _>(
+        query_decomp::<N1, R1, _, L_QUERY, L_CK, _>(
             &fx.query.ciphertexts,
-            &fx.pp.query_comp_key,
+            &conv_key_eval,
+            &*cascade_eval,
             num_dmux,
             num_cmux,
             num_crot,
@@ -172,7 +215,7 @@ fn paper_benches(c: &mut Criterion) {
         delta_coeffs[0] = fx.pp.params.delta();
         let trivial = RLWECiphertext::trivial(fx.q1, &R1::from_u128_coeffs(fx.q1, &delta_coeffs));
         let zero_q1 = RLWECiphertext::new(R1::zero(fx.q1), R1::zero(fx.q1));
-        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; NUM_ROWS];
+        let mut out: Vec<RLWECiphertext<N1, R1>> = vec![zero_q1; fx.num_rows];
         dmux_tree(&dq.dmux_bits, trivial, &mut out, b1, b1);
         out
     };
@@ -182,22 +225,8 @@ fn paper_benches(c: &mut Criterion) {
             .map(|ct| mod_switch_sym::<N1, R1, R2N1>(ct, fx.q2))
             .collect::<Vec<RLWECiphertext<N1, R2N1>>>()
     };
-    let run_first_dim = |switched: &[RLWECiphertext<N1, R2N1>]| {
-        let db_q2: Vec<Vec<R2N1>> = fx
-            .encoded_db
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        let mut cc = [0u128; N1];
-                        cell.to_u128_coeffs(&mut cc);
-                        R2N1::from_u128_coeffs(fx.q2, &cc)
-                    })
-                    .collect()
-            })
-            .collect();
-        first_dim::<N1, R2N1>(switched, &db_q2, fx.q2)
-    };
+    let run_first_dim =
+        |switched: &[RLWECiphertext<N1, R2N1>]| first_dim::<N1, R2N1>(switched, &fx.prepared_db);
     let run_cmux = |dq: &via_protocol::DecompressedQuery<N1, R1, L_QUERY>,
                     mut fd: Vec<RLWECiphertext<N1, R2N1>>| {
         let cmux_q2: Vec<RGSWCiphertext<N1, R2N1, L_QUERY, L_QUERY>> = dq
@@ -218,11 +247,7 @@ fn paper_benches(c: &mut Criterion) {
     };
     let run_resp_comp = |rotated: &RLWECiphertext<N1, R2N1>| {
         resp_comp::<N1, N2, R2N1, R3N1, R3N2, R4N2, L_RSK, D>(
-            rotated,
-            &fx.pp.ring_switch_key,
-            fx.q3,
-            fx.q4,
-            b_rsk,
+            rotated, &rsk_eval, fx.q3, fx.q4, b_rsk,
         )
     };
 
@@ -243,8 +268,8 @@ fn paper_benches(c: &mut Criterion) {
                     fx.q1,
                     fx.q3,
                     paper_params(),
-                    NUM_ROWS,
-                    NUM_COLS,
+                    fx.num_rows,
+                    fx.num_cols,
                     CK_BASE,
                     Distribution::Ternary,
                     Distribution::Ternary,
@@ -260,7 +285,7 @@ fn paper_benches(c: &mut Criterion) {
     c.bench_function("paper/00_client_query", |b| {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-paper-query"),
-            |mut prg| black_box(fx.client.query(INDEX, &mut prg)),
+            |mut prg| black_box(fx.client.query(fx.index, &mut prg)),
             BatchSize::SmallInput,
         )
     });
@@ -272,6 +297,10 @@ fn paper_benches(c: &mut Criterion) {
     });
     c.bench_function("paper/04_first_dim", |b| {
         b.iter(|| black_box(run_first_dim(&switched)))
+    });
+    // One-time offline cost: the p→q2 lift + forward NTT of the whole DB.
+    c.bench_function("paper/04b_prepare_db", |b| {
+        b.iter(|| black_box(PreparedDb::<N1, R2N1>::from_encoded(&fx.encoded_db, fx.q2)))
     });
     c.bench_function("paper/05_cmux", |b| {
         b.iter_batched(
@@ -303,7 +332,7 @@ fn paper_benches(c: &mut Criterion) {
         b.iter_batched(
             || Shake256Prg::new(b"via-c-bench-paper-e2e"),
             |mut prg| {
-                let query = fx.client.query(INDEX, &mut prg).expect("client query");
+                let query = fx.client.query(fx.index, &mut prg).expect("client query");
                 let ans = answer_one_query::<
                     N1,
                     N2,
@@ -312,7 +341,6 @@ fn paper_benches(c: &mut Criterion) {
                     R3N1,
                     R3N2,
                     R4N2,
-                    RpN1,
                     K,
                     L_QUERY,
                     L_CK,
@@ -322,7 +350,8 @@ fn paper_benches(c: &mut Criterion) {
                 >(
                     &query,
                     &fx.pp,
-                    &fx.encoded_db,
+                    &fx.prepared_db,
+                    &prepared_keys,
                     fx.q1,
                     fx.q2,
                     fx.q3,

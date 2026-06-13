@@ -5,8 +5,8 @@
 //! slices — one per RNS prime — and dispatches to the underlying
 //! [`super::super::zq::ops`] kernel twice, once per component. The
 //! struct-of-arrays (SoA) layout matches the per-prime contiguous storage that
-//! the future polynomial-ring layer (§0.3) will use and that the per-prime NTT
-//! (§0.4) needs for $O(n)$ pointwise multiplication.
+//! the future polynomial-ring layer will use and that the per-prime NTT
+//! needs for $O(n)$ pointwise multiplication.
 //!
 //! All kernels operate in canonical reduced form: every input must lie within
 //! its prime range, and every output stays within its prime range.
@@ -17,13 +17,13 @@
 //! binary kernels cannot accept the same buffers as both `dst` and operand in
 //! safe code. For the common `dst += rhs` pattern, copy each source slice into
 //! the destination first or expose an in-place variant from the polynomial
-//! ring layer (§0.3).
+//! ring layer.
 //!
 //! # Length mismatch
 //!
 //! Every kernel panics if any pair of slices it touches differ in length.
 //! This is a logic bug at the caller — the polynomial ring infrastructure
-//! (§0.3) enforces same-length invariants.
+//! enforces same-length invariants.
 
 use super::super::zq;
 use super::basis::RnsBasis;
@@ -78,8 +78,8 @@ pub fn sub_slice<B: RnsBasis>(
 /// Coefficient-wise modular multiply (Hadamard / pointwise product) in
 /// $\mathbb{Z}_Q$.
 ///
-/// As at §0.1, this is the pointwise product used inside the NTT-evaluation
-/// form of $R_{n, q}$ multiplication (§0.4); it is **not** the polynomial
+/// As in the single-prime layer, this is the pointwise product used inside the NTT-evaluation
+/// form of $R_{n, q}$ multiplication; it is **not** the polynomial
 /// (negacyclic) multiplication of $R_{n, q}$.
 #[inline]
 pub fn mul_slice<B: RnsBasis>(
@@ -199,13 +199,13 @@ pub fn decompose_slice<B: RnsBasis>(basis: B, dst0: &mut [u64], dst1: &mut [u64]
     }
 }
 
-/// §0.6 centred-lift kernel for the composite $\mathbb{Z}_Q$:
+/// Centred-lift kernel for the composite $\mathbb{Z}_Q$:
 /// `dst[i] = to_centered_i128(reconstruct(src0[i], src1[i]), Q)`.
 ///
 /// Output range $(-\lfloor Q/2 \rfloor, \lfloor Q/2 \rfloor]$ in `i128`.
 ///
 /// **Not constant-time** over input values (branches on `v > Q/2`).
-/// For secret-data inputs (§3.4 secret-key rekeying, RNS variant),
+/// For secret-data inputs (secret-key rekeying, RNS variant),
 /// use [`to_centered_i128_ct_slice`].
 ///
 /// # Panics
@@ -236,7 +236,7 @@ pub fn to_centered_i128_slice<B: RnsBasis>(basis: B, dst: &mut [i128], src0: &[u
     }
 }
 
-/// Constant-time §0.6 centred-lift kernel for the composite
+/// Constant-time centred-lift kernel for the composite
 /// $\mathbb{Z}_Q$. Hand-rolled CT comparison on `u128` (sign-bit
 /// extraction), matching the per-element [`super::element::RnsZq::to_centered_i128_ct`].
 ///
@@ -621,7 +621,7 @@ mod tests {
         scalar_mul_slice(b, &mut dst0, &mut dst1, &src0, &src1, 0, 0);
     }
 
-    /// §0.6 RNS centred-lift slice agrees with per-element
+    /// RNS centred-lift slice agrees with per-element
     /// `RnsZq::to_centered_i128` across a sweep at the toy Z55 basis.
     #[test]
     fn to_centered_i128_slice_matches_per_element_z55() {
@@ -644,7 +644,7 @@ mod tests {
         }
     }
 
-    /// CT slice matches non-CT slice at paper VIA q_1 basis.
+    /// CT slice matches non-CT slice at the VIA q_1 basis.
     #[test]
     fn to_centered_i128_ct_slice_matches_non_ct_slice() {
         let b = paper::ViaQ1Rns::default();

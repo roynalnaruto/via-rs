@@ -1,21 +1,19 @@
-//! Cross-language KAT parity for the Layer-6 VIA-C protocol composites
-//! (§4.2 QueryComp, §4.3 RespComp).
+//! Cross-language KAT parity for the VIA-C protocol composites
+//! (QueryComp, RespComp).
 //!
 //! Each test reproduces — in Rust, with the same per-component seeds and PRG
-//! draw order — a setup that
-//! `.references/via-spec/scripts/gen_layer6_kats.py` ran in Python, then asserts
+//! draw order — a known setup, then asserts
 //! byte-for-byte equality against the generated `data::*` constants.
 //!
 //! These live in `via-integration` (not `via-primitives`) because the composites
 //! span crates: `kat_query_comp` drives the real `via-client` query path and
 //! `kat_resp_comp` the `via-server` RespComp.
 //!
-//! **Paper-over-spec.** `kat_resp_comp` checks the **paper's asymmetric** Figure-7
+//! **Asymmetric RespComp.** `kat_resp_comp` checks the **asymmetric**
 //! path (`mod_switch_sym → ring_switch → mod_switch_asym`), which is what Rust
-//! `resp_comp` implements. The Python reference `resp_comp.py` is deliberately
-//! *symmetric* and would NOT match — so the generator reconstructs the paper path
-//! from the reference's primitives instead (see the script's PAPER-over-spec
-//! note). Where a VIA variant diverges from the Python spec, the paper wins.
+//! `resp_comp` implements. A symmetric path would NOT match — so the
+//! generator reconstructs the asymmetric path from the underlying primitives
+//! instead.
 //!
 //! Regenerate the constants with `just regen-kats-layer6`.
 
@@ -39,7 +37,7 @@ mod data {
     include!("data/layer6_kats.rs");
 }
 
-// TOY parameters, matching gen_layer6_kats.py and client_server_e2e.rs.
+// TOY parameters, matching the KAT generator and client_server_e2e.rs.
 const N1: usize = 8;
 const N2: usize = 4;
 const D: usize = 2; // d = N1 / N2
@@ -148,7 +146,7 @@ fn kat_gen_rlwe_to_rgsw_key() {
 
 /// KAT C — `query_comp` via the **real** client path. The client's `S1` is the
 /// first keygen of `setup`, so seeding setup with `"qc-setup"` reproduces the
-/// Python `keygen("qc-setup")`; `query("qc-query")` then mirrors `query_comp`.
+/// expected `keygen("qc-setup")`; `query("qc-query")` then mirrors `query_comp`.
 /// Index 5 → (α,β,γ) = (0,1,1): a 0 DMux bit and 1 CMux/CRot bits.
 #[test]
 fn kat_query_comp() {
@@ -202,9 +200,9 @@ fn kat_query_comp() {
     }
 }
 
-/// KAT B — `resp_comp` on the **paper** asymmetric path (Figure 7). The generated
-/// answer is `(mask @ q3, body @ q4)`; the Python side reconstructs this path
-/// (its `resp_comp.py` is symmetric — see the module docs). This is the first
+/// KAT B — `resp_comp` on the **asymmetric** path. The generated
+/// answer is `(mask @ q3, body @ q4)`; the generator side reconstructs this path
+/// (the symmetric RespComp would not match — see the module docs). This is the first
 /// cross-language lock of `mod_switch_sym → ring_switch → mod_switch_asym`.
 #[test]
 fn kat_resp_comp() {
@@ -233,9 +231,11 @@ fn kat_resp_comp() {
     let rsk_prg = &mut Shake256Prg::new(b"layer6-kat-rc-rsk");
     let rsk =
         gen_rsk::<N1, N2, R8, R4, L_RSK, D>(&s1_q3, &sk2, B_RSK, Distribution::Ternary, rsk_prg);
+    let rsk_eval = rsk.to_eval();
 
-    // Paper path: sym q2→q3 → ring_switch n1→n2 @ q3 → asym q3→q4 (body only).
-    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk, q3, q4, B_RSK);
+    // Asymmetric path: sym q2→q3 → ring_switch n1→n2 @ q3 → asym q3→q4 (body only).
+    // (T7: resp_comp now consumes the pre-transformed RSK; bit-identical, KAT holds.)
+    let answer = resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(&ct, &rsk_eval, q3, q4, B_RSK);
 
     assert_coeffs(
         &answer.mask,

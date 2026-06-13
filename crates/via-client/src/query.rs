@@ -1,6 +1,6 @@
 //! `Client::query` — compress a flat database index into gadget-scaled LWEs.
 //!
-//! # PRG consumption order (P5 KAT contract)
+//! # PRG consumption order (KAT contract)
 //!
 //! For a fixed `prg`, `query` emits exactly
 //! `L_QUERY · (log₂I + log₂J + log₂d)` LWE ciphertexts in this order:
@@ -16,9 +16,7 @@
 //!
 //! Reversing the outer/inner loop, swapping a bit ordering, or swapping the
 //! mask/error draws inside `encrypt_lwe_raw` silently breaks byte-parity with
-//! the Python reference (`query_comp.py:250-258`).
-//!
-//! `paper:via_c/query_comp.py:180-260`
+//! the KAT vectors.
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::RingPoly;
@@ -73,8 +71,6 @@ fn push_bit_group<const N1: usize, R1, const L_QUERY: usize>(
 /// base must match the base the server applies to that RGSW's external product
 /// (DMux @ q1 with b1; CMux/CRot @ q2 with b2, the q1→q2 mod-switch preserving
 /// the base). `q1` is read from `sk1`.
-///
-/// `paper:via_c/query_comp.py:180-260`
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_compressed_query<const N1: usize, R1, const L_QUERY: usize>(
     index: usize,

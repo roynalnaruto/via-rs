@@ -1,17 +1,15 @@
-//! §4.5 deterministic rotation (Part 1) + §4.4 controlled rotation (Part 2).
-//!
-//! See `.docs/primitives.md` §4.4-§4.5.
+//! Deterministic rotation and controlled rotation.
 //!
 //! `rotate(ct, k)` multiplies both RLWE components by $X^k$ via
-//! [`crate::algebra::ring::RingPoly::mul_x_pow`]. `crot` (Part 2) layers
+//! [`crate::algebra::ring::RingPoly::mul_x_pow`]. `crot` layers
 //! RGSW-controlled rotation on top, parameterised by `CRotDir`.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::types::{RGSWCiphertext, RLWECiphertext};
 
 use super::mux::cmux;
 
-/// §4.5 — Rotate an RLWE ciphertext by $X^k$: returns $\mathrm{RLWE}(M \cdot
+/// Rotate an RLWE ciphertext by $X^k$: returns $\mathrm{RLWE}(M \cdot
 /// X^k)$.
 ///
 /// Both the mask $A$ and body $B$ are multiplied by $X^k$ via
@@ -20,12 +18,10 @@ use super::mux::cmux;
 /// negated when $i+k \ge N$, since $X^N \equiv -1$). The result decrypts to
 /// $M \cdot X^k$ under the same key.
 ///
-/// `paper:gates.py:63-81`
-///
 /// # Constant-time
 ///
 /// `mul_x_pow` is data-independent and `k` is a **public** loop/tree index.
-/// Encrypted-exponent rotation goes through §4.4 `crot`, not here.
+/// Encrypted-exponent rotation goes through `crot`, not here.
 ///
 /// # Example
 ///
@@ -60,15 +56,14 @@ pub fn rotate<const N: usize, R: RingPoly<N>>(
     RLWECiphertext::new(ct.mask.mul_x_pow(k), ct.body.mul_x_pow(k))
 }
 
-/// §4.4 — Per-bit rotation direction for [`crot`].
+/// Per-bit rotation direction for [`crot`].
 ///
 /// - `Forward` — rotate by $+2^i$: `rotate(result, 1 << i)` then
-///   `cmux(bit, result, rotated)`. Matches `gates.py:251-253`.
+///   `cmux(bit, result, rotated)`.
 /// - `SlotExtract` — rotate by $-2^i$ via the negacyclic identity
 ///   $X^{-2^i} \equiv -X^{N-2^i}$: `rotate(result, N - (1 << i))`, negate, then
 ///   CMux. Brings ring-slot $\gamma$ to slot 0 for downstream `ring_switch` /
-///   `project_at(0)` extraction (VIA-C Figure 8 Step 6). Matches
-///   `server.py:218-225`.
+///   `project_at(0)` extraction (the VIA-C slot-extraction step).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CRotDir {
     /// Positive rotation: result ← CMux(bit, result, $X^{2^i} \cdot$ result).
@@ -78,7 +73,7 @@ pub enum CRotDir {
     SlotExtract,
 }
 
-/// §4.4 — Controlled rotation: apply a sequence of RGSW-controlled rotations to
+/// Controlled rotation: apply a sequence of RGSW-controlled rotations to
 /// `ct`, one per `rotation_bits[i]`.
 ///
 /// With `dir = CRotDir::Forward` the result encrypts $M \cdot X^{\gamma}$,
@@ -86,12 +81,10 @@ pub enum CRotDir {
 /// encrypts $M \cdot X^{-\gamma}$ via $X^{-2^i} \equiv -X^{N-2^i} \pmod{X^N+1}$
 /// (negate the rotated ciphertext before the CMux — `Neg` is `Copy`-cheap).
 ///
-/// `paper:gates.py:227-254` (Forward), `paper:server.py:218-225` (SlotExtract).
-///
 /// # Two-base convention
 ///
 /// Like [`cmux`], `(base_neg_s_m, base_m)` feed the two RGSW halves; pass equal
-/// values to reproduce the Python single-`base` behaviour.
+/// values for the single-`base` behaviour.
 ///
 /// # Constant-time
 ///
@@ -132,7 +125,7 @@ pub enum CRotDir {
 /// let out = crot(CRotDir::Forward, &[bit], ct, 2, 2);
 /// assert_eq!(sk.decrypt::<RP>(&out, p), Poly::new(p, [0, 1, 0, 0]));
 /// ```
-pub fn crot<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn crot<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     dir: CRotDir,
     rotation_bits: &[RGSWCiphertext<N, R, L1, L2>],
     ct: RLWECiphertext<N, R>,
@@ -220,7 +213,7 @@ mod tests {
         assert_eq!(recovered, msg);
     }
 
-    // ----- §4.4 crot (Part 2) -----
+    // ----- crot (controlled rotation) -----
 
     fn toy_rgsw(
         sk: &SecretKey<4, RQ<4>>,

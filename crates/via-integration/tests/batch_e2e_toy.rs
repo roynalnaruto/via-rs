@@ -1,4 +1,4 @@
-//! Toy single-prime **VIA-B batch** client↔server e2e (P5 capstone).
+//! Toy single-prime **VIA-B batch** client↔server e2e capstone.
 //!
 //! Validates the whole VIA-B batch protocol through the real public APIs —
 //! `Client::{setup, batch_query, recover_batch}` and `Server::answer_batch` — at
@@ -13,14 +13,14 @@
 //! mechanics that the minimal n8/T2 tuple leaves as the identity (n8/T2 stays
 //! covered by the `repack_n8_t2` unit tests and the paper batch e2e).
 //!
-//! ## Modulus flow (q1 > q2) — the §3.5 key reuse across moduli
+//! ## Modulus flow (q1 > q2) — the cascade-key reuse across moduli
 //!
-//! The repack reuses the **q1** cascade keys (§3.5) but operates on the post-CRot
-//! ciphertexts, which VIA-C places at **q2** (`.docs/via-b.md` §4); a `key_switch`
+//! The repack reuses the **q1** cascade keys but operates on the post-CRot
+//! ciphertexts, which VIA-C places at **q2**; a `key_switch`
 //! across q1 ≠ q2 is a modulus mismatch. So the server **mod-switches the q1
 //! cascade-key suffix → q2** internally
 //! ([`repack_keys_n64_t8_from_cascade_modswitched`]) before repacking — the client
-//! still ships only the q1 keys, so §3.5's no-new-offline-payload holds. (Toy is
+//! still ships only the q1 keys, so the no-new-offline-payload property holds. (Toy is
 //! single-prime; the paper's RNS-q1 → single-prime-q2 *cross-type* mod-switch is
 //! the remaining extension.)
 #![cfg(feature = "via-b")]
@@ -31,7 +31,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64,
+    LweToRlweKeyN64, gen_lwe_to_rlwe_key_n64, lwe_to_rlwe_n64_eval,
     repack_keys_n64_t8_from_cascade_modswitched, repack_n64_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -75,7 +75,7 @@ type R16 = Poly<N2, DynModulus, Coefficient>;
 type R2 = Poly<N3, DynModulus, Coefficient>; // the record ring at n3
 type K = LweToRlweKeyN64<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R64, R16, L_QUERY, L_CK, L_RSK, D>;
-type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, R64, L_QUERY, L_CK, L_RSK, D>;
+type ToyBServer = ViaBServer<K, N1, N2, N3, R64, R64, R16, R16, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct degree-n3 record per flat index.
 fn record(m: usize, p: DynModulus) -> R2 {
@@ -160,7 +160,7 @@ fn build() -> Harness {
     let records: Vec<R2> = (0..D3 * NUM_ROWS * NUM_COLS)
         .map(|m| record(m, p))
         .collect();
-    let server = ToyBServer::setup::<R2>(&records, pp, q1, q2, q3, q4, p);
+    let server = ToyBServer::setup::<R64, R2>(&records, pp, q1, q2, q3, q4, p);
 
     Harness {
         client,
@@ -183,14 +183,14 @@ fn run_batch(h: &mut Harness, idxs: &[usize; T]) -> (Vec<R2>, Vec<R2>) {
         .server
         .answer_batch::<R64, T, _, _>(
             &batch,
-            // Repack closure (§3.5 across q1 ≠ q2): mod-switch the q1 cascade key
+            // Repack closure (cascade-key reuse across q1 ≠ q2): mod-switch the q1 cascade key
             // suffix → q2, then repack the q2 post-CRot ciphertexts at base CK_BASE.
             |rotateds: &[RLWECiphertext<N1, R64>], k: &K| {
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
                 let keys_q2 = repack_keys_n64_t8_from_cascade_modswitched(k, q2);
                 repack_n64_t8(arr, &keys_q2, CK_BASE)
             },
-            lwe_to_rlwe_n64::<DynModulus, L_CK>,
+            lwe_to_rlwe_n64_eval::<DynModulus, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<R2> = h

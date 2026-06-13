@@ -18,7 +18,7 @@ use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::encryption::SecretKey;
 use via_primitives::encryption::rlwe::encode;
 use via_primitives::sampling::{Distribution, Shake256Prg};
-use via_server::first_dim;
+use via_server::{PreparedDb, first_dim};
 
 const N: usize = 8;
 type R = Poly<N, DynModulus, Coefficient>;
@@ -100,7 +100,12 @@ fuzz_target!(|input: Input| {
         .map(|row| (0..j).map(|_| if row == t { one } else { zero }).collect())
         .collect();
 
-    let out = first_dim::<N, R>(&switched, &db, q);
+    // first_dim now consumes a PreparedDb (the p→q2 lift + forward NTT, once).
+    // Here the db is already at the working modulus q, so from_encoded is the
+    // identity (reinterpret at the same q; NTT is the identity for DynModulus) —
+    // first_dim's schoolbook MAC is unchanged.
+    let prepared = PreparedDb::<N, R>::from_encoded(&db, q);
+    let out = first_dim::<N, R>(&switched, &prepared);
     assert_eq!(out.len(), j, "first_dim must emit J ciphertexts");
 
     let mut expected = [0u64; N];

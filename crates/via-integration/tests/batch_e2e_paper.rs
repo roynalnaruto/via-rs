@@ -2,11 +2,11 @@
 //!
 //! The production paper path end to end through the real public APIs:
 //! `Client::{setup, batch_query, recover_batch}` + `Server::answer_batch`, at the
-//! paper rings/moduli (Appendix B): `n1 = 2048`, `n2 = 512`, `q1 ≈ 2^75` (2-prime
+//! paper rings/moduli: `n1 = 2048`, `n2 = 512`, `q1 ≈ 2^75` (2-prime
 //! RNS) ≫ `q2 ≈ 2^34` (single-prime) ≫ `q3 ≈ 2^23` ≫ `q4 = 2^12`, `p = 16`. The
 //! repack runs at the single-prime `q2` (`repack_poly_2048_t8`); its q2 key is
 //! derived from the RNS-`q1` cascade key by the **boxed cross-type** mod-switch
-//! `repack_keys_poly_2048_t8_from_rns_cascade_boxed` (the §3.5 key reuse — the
+//! `repack_keys_poly_2048_t8_from_rns_cascade_boxed` (cascade-key reuse — the
 //! client ships only the q1 key, the server derives q2).
 //!
 //! ## Batch size
@@ -28,7 +28,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
 use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048,
+    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
     repack_keys_poly_2048_t8_from_rns_cascade_boxed, repack_poly_2048_t8,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -54,7 +54,7 @@ const NUM_ROWS: usize = 2; // I
 const NUM_COLS: usize = 2; // J
 const STACK_MB: usize = 16;
 
-// Paper ring instantiation (Appendix B).
+// Paper ring instantiation.
 type R1 = ViaCPolyQ1Rns<N1>; // S1 @ q1-RNS, n1
 type R2 = ViaCPolyQ2<N1>; // q2 @ n1 (single-prime) — the post-CRot / repack ring
 type R3N1 = ViaCPolyQ3<N1>; // q3 @ n1 (mod_switch_sym intermediate + rekey target)
@@ -66,7 +66,7 @@ type Rp512 = ViaCPolyP<N2>; // p @ n2 (recover's degree-n2 plaintext)
 type K = LweToRlweKeyRnsN2048<ViaCQ1Rns, L_CK>;
 
 type PaperBClient = Client<N1, N2, R1, R3N2, L_QUERY, L_CK, L_RSK, D>;
-type PaperBServer = ViaBServer<K, N1, N2, N3, R1, R2, R3N2, R4N2, RpN1, L_QUERY, L_CK, L_RSK, D>;
+type PaperBServer = ViaBServer<K, N1, N2, N3, R1, R2, R3N2, R4N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// A distinct degree-n3 record per flat index.
 fn record(m: usize) -> Rec {
@@ -134,7 +134,7 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
 
     // --- Server setup: a DB of d3·I·J degree-n3 records (N_REC = N3) ---------
     let records: Vec<Rec> = (0..D3 * NUM_ROWS * NUM_COLS).map(record).collect();
-    let server = PaperBServer::setup::<Rec>(&records, pp, q1, q2, q3, q4, p);
+    let server = PaperBServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
 
     // --- Batch query → answer_batch → recover_batch --------------------------
     let batch = client
@@ -144,13 +144,13 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
         .answer_batch::<R3N1, T, _, _>(
             &batch,
             // Repack at single-prime q2: derive the q2 key (boxed, heap) from the
-            // RNS-q1 cascade key by cross-type mod-switch (§3.5), then pack.
+            // RNS-q1 cascade key by cross-type mod-switch (cascade-key reuse), then pack.
             |rotateds: &[RLWECiphertext<N1, R2>], k: &K| {
                 let q2_key = repack_keys_poly_2048_t8_from_rns_cascade_boxed(k, q2);
                 let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
                 repack_poly_2048_t8(arr, &*q2_key, CK_BASE)
             },
-            lwe_to_rlwe_rns_n2048::<ViaCQ1Rns, L_CK>,
+            lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>,
         )
         .expect("answer_batch");
     let recovered: Vec<Rec> = client

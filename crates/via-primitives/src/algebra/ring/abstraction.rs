@@ -1,15 +1,15 @@
 //! Backend-agnostic interface to a coefficient-form negacyclic ring polynomial.
 //!
 //! The [`RingPoly`] trait abstracts over the two concrete polynomial backends
-//! shipped by Layer 0:
+//! shipped by this crate:
 //!
 //! - [`super::element::Poly<N, M, Coefficient>`] — single-prime, used at
-//!   $q_2$, $q_3$, $q_4$, $p$ across every paper parameter set.
+//!   $q_2$, $q_3$, $q_4$, $p$ across every parameter set.
 //! - [`super::rns_element::PolyRns<N, B, Coefficient>`] — RNS, used at the
 //!   composite $q_1$ in realistic VIA-C / VIA-B parameters.
 //!
-//! Layer 2 (encryption types and primitive operations, see
-//! `.docs/primitives.md` §2) is generic over `R: RingPoly<N>`, so the same
+//! The encryption layer (encryption types and primitive operations) is generic over
+//! `R: RingPoly<N>`, so the same
 //! ciphertext-level code instantiates against either backend. The trait is
 //! **sealed** via a private supertrait: only the two crate-internal
 //! polynomial types may implement it.
@@ -21,11 +21,11 @@
 //! exposed by `RingPoly` (centred-coefficient extraction, monomial-basis
 //! scalar access, `from_centered_i64s`) are only meaningful in the
 //! coefficient basis; placing them on a form-parametric trait would be a
-//! lie at every `Evaluation` call site. Layer 2 today lives entirely in
-//! coefficient form (the Python reference does too, and the §0.4 NTT body
-//! is currently `unimplemented!()`). When eval-form ciphertexts become
-//! useful — e.g. once the NTT body lands and we want to keep ciphertexts
-//! in eval form across many homomorphic operations — a sibling
+//! lie at every `Evaluation` call site. The encryption layer today lives entirely in
+//! coefficient form. The negacyclic NTT
+//! body itself is implemented and tested; what remains coefficient-only is the
+//! encryption-layer *usage*. When eval-form ciphertexts become useful — i.e. once we
+//! keep ciphertexts in eval form across many homomorphic operations — a sibling
 //! `RingPolyEval<N>` trait will be introduced for the form-neutral subset.
 //!
 //! ## Associated-type story
@@ -38,10 +38,10 @@
 //!   in the RNS case. Surfaced as `RingPoly::Scalar`.
 //! - The *centred* lift of a coefficient is `i64` for single-prime moduli
 //!   (which fit in 63 bits) and `i128` for RNS moduli (which can reach
-//!   $\sim 2^{75}$ at paper VIA-C parameters; see `.docs/primitives.md` §0.6
-//!   "RNS variant"). Surfaced as `RingPoly::CenteredScalar`.
+//!   $\sim 2^{75}$ at VIA-C parameters; the RNS centred-lift
+//!   variant). Surfaced as `RingPoly::CenteredScalar`.
 //!
-//! Layer-2 algorithms that read centred coefficients (`encode`, gadget
+//! Encryption-layer algorithms that read centred coefficients (`encode`, gadget
 //! decomposition, key-switch noise inspection) parameterise over
 //! `R::CenteredScalar`; arithmetic on this scalar is delegated to either
 //! existing `i64` helpers (single-prime path) or the upcoming `i128` /
@@ -99,7 +99,8 @@ pub trait RingPoly<const N: usize>:
 
     /// The result type of [`Self::project_at`]: the same backend at the
     /// smaller ring degree `N_SMALL`, over the *same* modulus, scalar, and
-    /// centred-scalar types. The equality bounds let §3.3 RingSwitch combine
+    /// centred-scalar types. The equality bounds let
+    /// [`ring_switch`](mod@crate::switching::ring_switch) combine
     /// projected masks and RSK samples generically across both backends —
     /// `Poly<N_SMALL, M, _>` for single-prime, `PolyRns<N_SMALL, B, _>` for
     /// RNS.
@@ -113,10 +114,11 @@ pub trait RingPoly<const N: usize>:
     /// The result type of [`Self::embed_at`]: the same backend at the
     /// *larger* ring degree `N_LARGE`, over the *same* modulus, scalar, and
     /// centred-scalar types. The enlarging-direction dual of
-    /// [`Self::Projected`]. The equality bounds let §5.1 `embed_mlwe` and §5.2
+    /// [`Self::Projected`]. The equality bounds let
+    /// [`crate::conversion::mlwe_ops::embed_mlwe`] and
     /// `conv_step` lift an $R_{n, q}$ ciphertext into $R_{n \cdot d, q}$
     /// generically across both backends — `Poly<N_LARGE, M, _>` for
-    /// single-prime, `PolyRns<N_LARGE, B, _>` for RNS — and §7.1 `Embed_d`
+    /// single-prime, `PolyRns<N_LARGE, B, _>` for RNS — and `embed_d`
     /// (VIA-B) pack `d` inputs at arbitrary slots.
     type Embedded<const N_LARGE: usize>: RingPoly<
             N_LARGE,
@@ -146,9 +148,9 @@ pub trait RingPoly<const N: usize>:
     /// Lift a length-$N$ vector of centred `i128` samples into a
     /// coefficient-form polynomial in $\mathbb{Z}_q$. The `i128`-wide
     /// counterpart of [`Self::from_centered_i64s`]: it is the natural
-    /// constructor for the §3.4 secret-key rekeying path when the *source*
+    /// constructor for the secret-key rekeying path when the *source*
     /// key lives at the RNS-composite $q_1$ (whose centred coefficients are
-    /// `i128`, see §0.6 "RNS variant").
+    /// `i128`, the RNS centred-lift variant).
     ///
     /// For single-prime targets each sample must fit in `i64` (the centred
     /// lift of a small key is bounded by $\|S\|_\infty \ll 2^{63}$); the
@@ -175,7 +177,7 @@ pub trait RingPoly<const N: usize>:
     fn to_centered_coeffs(&self, dst: &mut [Self::CenteredScalar; N]);
 
     /// Constant-time variant of [`Self::to_centered_coeffs`]. Use when the
-    /// polynomial coefficients depend on a secret key (e.g. §3.4 rekeying).
+    /// polynomial coefficients depend on a secret key (e.g. secret-key rekeying).
     fn to_centered_coeffs_ct(&self, dst: &mut [Self::CenteredScalar; N]);
 
     /// Read the scalar at index `i` (coefficient of $X^i$).
@@ -189,7 +191,7 @@ pub trait RingPoly<const N: usize>:
     /// basis $B$ this is the composite $Q = q^{(0)} \cdot q^{(1)}$ — see
     /// [`crate::algebra::rns::basis::RnsBasis::big_q`].
     ///
-    /// Used by Layer-2 `encode`/`decode` (§2.2) to compute $\Delta =
+    /// Used by `encode`/`decode` to compute $\Delta =
     /// \lceil q / p \rceil$ and to express the centred lift uniformly across
     /// backends.
     fn modulus_value(modulus: Self::Modulus) -> u128;
@@ -210,17 +212,17 @@ pub trait RingPoly<const N: usize>:
     /// polynomials this is the `i64` centred lift up-cast to `i128`.
     ///
     /// **Not constant-time** over input values; used at decoding /
-    /// noise-measurement boundaries (§0.6).
+    /// noise-measurement boundaries.
     fn to_centered_i128_coeffs(&self, dst: &mut [i128; N]);
 
     /// Deterministic rotation: return $X^k \cdot \mathrm{self}$ in
-    /// $R_{N, q}$ (§4.5). Coefficient at position $i$ moves to
+    /// $R_{N, q}$. Coefficient at position $i$ moves to
     /// $(i + k) \bmod N$ with a negacyclic sign flip when $i + k \ge N$
-    /// ($X^N \equiv -1$). Used by §3.3 RingSwitch / §4.4 CRot.
+    /// ($X^N \equiv -1$). Used by [`ring_switch`](mod@crate::switching::ring_switch) / `CRot`.
     ///
     /// `k` is a **public** parameter (a loop induction variable); the
     /// implementation may branch on it. Do **not** pass a secret-derived
-    /// `k` — route encrypted-exponent rotation through §4.4 `CRot`.
+    /// `k` — route encrypted-exponent rotation through `CRot`.
     ///
     /// ```rust
     /// use via_primitives::algebra::ring::abstraction::RingPoly;
@@ -243,7 +245,7 @@ pub trait RingPoly<const N: usize>:
     /// arbitrary slot — extract slot `slot` of `self` into the smaller ring
     /// $R_{N_\text{small}, q}$. Coefficient at position $d \cdot i + slot$
     /// (with $d = N / N_\text{small}$) becomes coefficient $i$ of the
-    /// output. Pure index manipulation (§0.5); no algebra dependency.
+    /// output. Pure index manipulation; no algebra dependency.
     ///
     /// # Panics
     ///
@@ -253,7 +255,7 @@ pub trait RingPoly<const N: usize>:
     fn project_at<const N_SMALL: usize>(&self, slot: usize) -> Self::Projected<N_SMALL>;
 
     /// Single-slot embedding $\iota_{\mathrm{slot}}^{N \to N_\text{large}}$ —
-    /// the enlarging dual of [`Self::project_at`] (§0.5). Coefficient $i$ of
+    /// the enlarging dual of [`Self::project_at`]. Coefficient $i$ of
     /// `self` becomes coefficient $d \cdot i + \mathrm{slot}$ of the output
     /// (with $d = N_\text{large} / N$); every other coefficient is zero. Pure
     /// index manipulation — no algebra dependency. `slot` is a **public**

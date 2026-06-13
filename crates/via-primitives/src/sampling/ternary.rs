@@ -1,4 +1,4 @@
-//! Primitive §1.3 — ternary sampler over $\{-1, 0, 1\}$.
+//! Ternary sampler over $\{-1, 0, 1\}$.
 //!
 //! Per-coefficient call to [`Shake256Prg::uniform_below`] with bound 3, then
 //! a fixed map `{0, 1, 2} -> {0, 1, -1}`.
@@ -15,15 +15,15 @@
 //! Secret-key distribution $\chi_{S, 1}$ for $S_1$ in some parameter sets, and
 //! the default RLWE error distribution in toy / debugging parameter sets where
 //! the noise budget is generous. Production VIA-C / VIA-B use Gaussian errors
-//! instead (see §1.5).
+//! instead (see the discrete Gaussian sampler).
 
 use crate::sampling::prg::Shake256Prg;
 
 /// Fill `out` with coefficients sampled uniformly from $\{-1, 0, 1\}$.
 ///
 /// Each output is one [`Shake256Prg::uniform_below`] draw at bound 3, mapped
-/// `0 -> 0`, `1 -> 1`, `2 -> -1`. The PRG byte budget matches the Python
-/// reference's `DeterministicSampler::ternary_poly(n)` exactly.
+/// `0 -> 0`, `1 -> 1`, `2 -> -1`. The PRG byte budget is one `uniform_below`
+/// draw per coefficient.
 ///
 /// Outputs are signed `i8`. Callers that need the coefficients lifted into a
 /// modulus $[0, q)$ should go through the
@@ -57,10 +57,10 @@ pub fn ternary(prg: &mut Shake256Prg, out: &mut [i8]) {
 mod tests {
     use super::*;
 
-    /// First 16 outputs of `DeterministicSampler(b"test").ternary_poly(16)`.
+    /// First 16 outputs of `ternary_poly(16)` on seed `b"test"`.
     const TEST_SEED_TP_N16: [i8; 16] = [1, -1, 1, -1, -1, 0, -1, -1, 1, -1, -1, 0, -1, 0, 1, -1];
 
-    /// First 16 outputs of `DeterministicSampler(b"").ternary_poly(16)`.
+    /// First 16 outputs of `ternary_poly(16)` on seed `b""`.
     const EMPTY_SEED_TP_N16: [i8; 16] = [1, 1, 1, 0, 0, 0, 1, 0, 1, 1, -1, 1, 0, 0, 1, 0];
 
     #[test]
@@ -128,8 +128,8 @@ mod tests {
         // re-mapping uniform_below(3) outputs to a different signed triple
         // would invalidate every downstream test vector. The first output of
         // ternary(b"test", _) is 1 only if randbelow(3) returned 1 first.
-        // We additionally check that the second output, which the reference
-        // says is -1, corresponds to randbelow(3) returning 2.
+        // We additionally check that the second output, which is -1,
+        // corresponds to randbelow(3) returning 2.
         //
         // randbelow(3) outputs for seed b"test" (per prg.rs tests):
         //   [1, 2, 1, 2, 2, 0, 2, 2, ...]

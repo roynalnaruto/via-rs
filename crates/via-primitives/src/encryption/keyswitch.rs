@@ -1,4 +1,4 @@
-//! Key switching — `.docs/primitives.md` §2.4.
+//! Key switching.
 //!
 //! Convert an RLWE ciphertext from one secret key to another:
 //!
@@ -18,17 +18,17 @@
 //! makes the `A · S` term cancel exactly, leaving only `M + small_noise`
 //! decryptable under `S'`.
 //!
-//! Phase 8 is the thinnest phase of Layer 2 — the body of `key_switch`
-//! is three operator calls. Layer 3 (ring switching) and Layer 5
-//! (LWE-to-RLWE cascade) both build on this primitive.
+//! Key switching is a thin primitive — the body of [`RLevCiphertext::key_switch`]
+//! is three operator calls. Ring switching ([`ring_switch`](mod@crate::switching::ring_switch))
+//! and the LWE-to-RLWE cascade ([`crate::conversion`]) both build on it.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::sampling::distribution::Distribution;
 use crate::sampling::prg::Shake256Prg;
 
-use super::types::{RLWECiphertext, RLevCiphertext, SecretKey};
+use super::types::{RLWECiphertext, RLevCiphertext, RLevEval, SecretKey};
 
-/// §2.4 — Generate a key-switching key `ksk = RLev_{dst_sk}(src_sk.poly)`:
+/// Generate a key-switching key `ksk = RLev_{dst_sk}(src_sk.poly)`:
 /// an RLev encryption of the **source** secret-key polynomial under the
 /// **destination** secret key.
 ///
@@ -52,7 +52,7 @@ pub fn gen_ksk<const N: usize, R: RingPoly<N>, const L: usize>(
 }
 
 impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
-    /// §2.4 — Switch `ct` from the source secret key (under which `ct`
+    /// Switch `ct` from the source secret key (under which `ct`
     /// was encrypted) to the destination secret key (the key that
     /// `self` was generated for via [`gen_ksk`]).
     ///
@@ -64,7 +64,7 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
     ///
     /// # Algorithm
     ///
-    /// Standard formula (`rlwe.py:427-433`):
+    /// Standard formula:
     ///
     /// $$
     /// c' \;=\; (0, B) - (A \boxdot \mathrm{ksk}) \;=\; (-A', B - B')
@@ -79,9 +79,23 @@ impl<const N: usize, R: RingPoly<N>, const L: usize> RLevCiphertext<N, R, L> {
     /// `e + Σ d_i · e_i + δ · S` where `δ` is the gadget reconstruction
     /// error per coefficient and `e_i` are the per-level RLev errors.
     /// The dominant term `||S||_1 · (g_min/2 + L·B/4)` mirrors the
-    /// external-product noise model (Phase 7) but lacks the `m1`
+    /// external-product noise model but lacks the `m1`
     /// multiplier — so the budget is `N` times less tight than for
     /// external product.
+    pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R>
+    where
+        R: RingPolyEval<N>,
+    {
+        let product = self.gadget_product(&ct.mask, base);
+        RLWECiphertext::new(-product.mask, ct.body - product.body)
+    }
+}
+
+impl<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L: usize> RLevEval<N, R, L> {
+    /// Eval-key variant of [`RLevCiphertext::key_switch`] (T7): `self` is the
+    /// **pre-transformed** key-switching key, so the per-call `to_eval` of its
+    /// samples is skipped. Bit-identical to the coefficient-form `key_switch`
+    /// (the NTT is exact). Used by the eval-form conversion cascade.
     pub fn key_switch(&self, ct: &RLWECiphertext<N, R>, base: u64) -> RLWECiphertext<N, R> {
         let product = self.gadget_product(&ct.mask, base);
         RLWECiphertext::new(-product.mask, ct.body - product.body)
@@ -201,7 +215,7 @@ mod tests {
         );
     }
 
-    /// Paper-class single-prime: VIA-C `q₂` ≈ 2³⁴, p=256, ring-switch
+    /// Realistic single-prime: VIA-C `q₂` ≈ 2³⁴, p=256, ring-switch
     /// gadget `(L=8, B=8)` with σ=4 Gaussian errors. Confirms the
     /// algebra at realistic noise levels.
     #[test]
@@ -249,7 +263,7 @@ mod tests {
         }
     }
 
-    /// **Paper-class RNS** at the gadget params Layer-3 ring-switching
+    /// **Realistic RNS** at the gadget params ring-switching
     /// uses: VIA-C `q₁` (Q ≈ 2⁷⁵) at `(L=8, B=8)`, p=2, σ=4 Gaussian.
     /// End-to-end through the RNS gadget-product path inside the key
     /// switch.

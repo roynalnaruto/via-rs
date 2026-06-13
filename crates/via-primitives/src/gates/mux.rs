@@ -1,36 +1,31 @@
-//! §4.1 CMux + §4.2 DMux (Part 1) and §4.3 CMux/DMux trees (Part 2).
-//!
-//! See `.docs/primitives.md` §4.1-§4.3 and `.docs/via.pdf` Algorithms 1-2.
+//! CMux and DMux gates plus their recursive CMux/DMux trees.
 //!
 //! All gates are thin wrappers over
 //! [`crate::encryption::RGSWCiphertext::external_product`]. The trees are
 //! slice-based (no allocation): `cmux_tree` reduces in place, `dmux_tree`
 //! writes into a caller-provided buffer.
 //!
-//! ## Two-base API vs. Python single-base
+//! ## Two-base API
 //!
-//! The Python reference passes a single `(base, depth)` pair. The Rust API
-//! mirrors `external_product` and accepts **two** bases `(base_neg_s_m,
-//! base_m)` — one per RGSW RLev half (paper Tables 5-6 list distinct `(L,B)`
-//! per half). Passing `base_neg_s_m == base_m` reproduces Python exactly.
+//! The Rust API mirrors `external_product` and accepts **two** bases
+//! `(base_neg_s_m, base_m)` — one per RGSW RLev half (the two halves may use
+//! distinct `(L,B)`). Passing `base_neg_s_m == base_m` recovers the
+//! single-base behaviour.
 
-use crate::algebra::ring::RingPoly;
+use crate::algebra::ring::{RingPoly, RingPolyEval};
 use crate::encryption::types::{RGSWCiphertext, RLWECiphertext};
 
-/// §4.1 — Homomorphic 1-of-2 multiplexer: returns `ct0` when the encrypted bit
+/// Homomorphic 1-of-2 multiplexer: returns `ct0` when the encrypted bit
 /// is 0, `ct1` when it is 1.
 ///
 /// Computes $c_0 + \mathrm{RGSW}(b) \boxtimes (c_1 - c_0)$: when $b = 0$ the
 /// external product is $\approx 0$ (leaving $c_0$); when $b = 1$ it is
 /// $\approx c_1 - c_0$ (yielding $c_1$).
 ///
-/// `paper:gates.py:84-116`
+/// # Two bases
 ///
-/// # Two-base divergence from Python
-///
-/// Python passes one `(base, depth)`; this function threads `(base_neg_s_m,
-/// base_m)` to match `external_product`. Pass equal values to reproduce
-/// Python's symmetric behaviour.
+/// This function threads `(base_neg_s_m, base_m)` to match `external_product`.
+/// Pass equal values for the symmetric single-base behaviour.
 ///
 /// # Noise
 ///
@@ -77,7 +72,7 @@ use crate::encryption::types::{RGSWCiphertext, RLWECiphertext};
 /// let recovered: RP = sk.decrypt(&out, p);
 /// assert_eq!(recovered, msg0);
 /// ```
-pub fn cmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn cmux<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     select_bit: &RGSWCiphertext<N, R, L1, L2>,
     ct0: &RLWECiphertext<N, R>,
     ct1: &RLWECiphertext<N, R>,
@@ -88,15 +83,13 @@ pub fn cmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
     *ct0 + select_bit.external_product(&diff, base_neg_s_m, base_m)
 }
 
-/// §4.2 — Homomorphic 1-to-2 demultiplexer: routes `ct` to position `b`.
+/// Homomorphic 1-to-2 demultiplexer: routes `ct` to position `b`.
 ///
 /// Returns `(result0, result1)` where `result0` decrypts to $M \cdot (1 - b)$
 /// and `result1` to $M \cdot b$. Computed as `product = RGSW(b) ⊠ ct`,
 /// `result0 = ct - product`, `result1 = product`.
 ///
-/// `paper:gates.py:119-149`
-///
-/// # Two-base divergence / Constant-time
+/// # Two bases / Constant-time
 ///
 /// Same as [`cmux`]: `(base_neg_s_m, base_m)` per half; the external product
 /// always runs; no secret branch.
@@ -133,7 +126,7 @@ pub fn cmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
 /// assert_eq!(sk.decrypt::<RP>(&r0, p), msg);
 /// assert_eq!(sk.decrypt::<RP>(&r1, p), Poly::new(p, [0, 0, 0, 0]));
 /// ```
-pub fn dmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn dmux<const N: usize, R: RingPoly<N> + RingPolyEval<N>, const L1: usize, const L2: usize>(
     control_bit: &RGSWCiphertext<N, R, L1, L2>,
     ct: &RLWECiphertext<N, R>,
     base_neg_s_m: u64,
@@ -143,12 +136,10 @@ pub fn dmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
     (*ct - product, product)
 }
 
-/// §4.3 — Homomorphic 1-of-$2^m$ selection via a binary CMux tree (VIA
-/// Algorithm 1). Returns the input at index $\sum_i b_i \cdot 2^i$
+/// Homomorphic 1-of-$2^m$ selection via a binary CMux tree.
+/// Returns the input at index $\sum_i b_i \cdot 2^i$
 /// (`select_bits[0]` = LSB; the *reverse* of [`dmux_tree`]'s order). Reduces
 /// `inputs` **in place**; the returned ciphertext is `inputs[0]`.
-///
-/// `paper:gates.py:152-190`
 ///
 /// # Panics
 ///
@@ -173,7 +164,12 @@ pub fn dmux<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
 ///
 /// No — see [`cmux`]; the gadget-decomposition path is data-dependent only on
 /// public ciphertext coefficients.
-pub fn cmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn cmux_tree<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L1: usize,
+    const L2: usize,
+>(
     select_bits: &[RGSWCiphertext<N, R, L1, L2>],
     inputs: &mut [RLWECiphertext<N, R>],
     base_neg_s_m: u64,
@@ -201,14 +197,12 @@ pub fn cmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usiz
     inputs[0]
 }
 
-/// §4.3 — Homomorphic 1-to-$2^m$ distribution via a binary DMux tree (VIA
-/// Algorithm 2). Fills `out` so `out[k]` carries $M$ when
+/// Homomorphic 1-to-$2^m$ distribution via a binary DMux tree.
+/// Fills `out` so `out[k]` carries $M$ when
 /// **$k = \sum_i b_i \cdot 2^{m-1-i}$** — i.e. `control_bits[0]` is the **MSB**
 /// of the output index (the *reverse* of [`cmux_tree`]'s LSB-first order); all
 /// other slots decrypt to 0. For `control_bits = [RGSW(1), RGSW(0)]`, $m=2$:
-/// $k = 1·2 + 0·1 = 2$. Verified against `test_gates.py:454-491`.
-///
-/// `paper:gates.py:193-224`
+/// $k = 1·2 + 0·1 = 2$.
 ///
 /// # Panics
 ///
@@ -225,7 +219,12 @@ pub fn cmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usiz
 ///
 /// Output at depth `m` carries `m` chained external products:
 /// `m·(‖S‖₁·σ_e + L·B/4) < q/(2p)`, same budget as [`cmux_tree`].
-pub fn dmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usize>(
+pub fn dmux_tree<
+    const N: usize,
+    R: RingPoly<N> + RingPolyEval<N>,
+    const L1: usize,
+    const L2: usize,
+>(
     control_bits: &[RGSWCiphertext<N, R, L1, L2>],
     input: RLWECiphertext<N, R>,
     out: &mut [RLWECiphertext<N, R>],
@@ -254,6 +253,7 @@ pub fn dmux_tree<const N: usize, R: RingPoly<N>, const L1: usize, const L2: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::ring::RingPoly;
     use crate::algebra::ring::element::Poly;
     use crate::algebra::ring::form::Coefficient;
     use crate::algebra::zq::modulus::PowerOfTwoModulus;
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(sk.decrypt::<RP<4>>(&out, p), Poly::new(p, [0, 0, 1, 0]));
     }
 
-    // ----- §4.3 trees (Part 2) -----
+    // ----- CMux / DMux trees -----
 
     // Four messages, each a 1 at a distinct position.
     fn four_inputs(sk: &SecretKey<4, RQ<4>>) -> [RLWECiphertext<4, RQ<4>>; 4] {

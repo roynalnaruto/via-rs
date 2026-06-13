@@ -1,10 +1,10 @@
-//! §5.1 — MLWE embedding, RLWE↔MLWE conversions, and LWE encrypt/decrypt.
+//! MLWE embedding, RLWE↔MLWE conversions, and LWE encrypt/decrypt.
 //!
-//! See `.docs/primitives.md` §5.1. These compose the §0.5 ring embedding
-//! ([`RingPoly::embed_at`]) with the Layer-2 ciphertext types. [`encrypt_lwe`]
-//! / [`decrypt_lwe`] are the testing helpers that let the §5.3 cascade be
+//! These compose the ring embedding
+//! ([`RingPoly::embed_at`]) with the encryption-layer ciphertext types. [`encrypt_lwe`]
+//! / [`decrypt_lwe`] are the testing helpers that let the cascade be
 //! exercised end-to-end (the production query path uses a $\Delta$-free LWE
-//! encryption that lands in Layer 6).
+//! encryption that lands in the protocol layer).
 
 use crate::algebra::ring::RingPoly;
 use crate::algebra::ring::element::Poly;
@@ -22,7 +22,7 @@ use crate::sampling::prg::Shake256Prg;
 // LweDot — sealed conversion-internal bridge to the per-prime CT kernel.
 // ---------------------------------------------------------------------------
 
-/// Conversion-internal bridge (sealed) for the §5.1 LWE body dot product.
+/// Conversion-internal bridge (sealed) for the LWE body dot product.
 ///
 /// Computes $\bigl(\sum_i a_i \cdot s_i\bigr) \bmod q$ on raw residues via the
 /// constant-time flat-slice kernel
@@ -39,8 +39,8 @@ pub trait LweDot<const N: usize>: RingPoly<N> {
     /// $\bigl(\sum_i \mathrm{masks}_i \cdot \mathrm{key}_i\bigr) \bmod q$ as a
     /// degree-1 ring element. `masks` is the length-$N$ mask polynomial (its
     /// $N$ coefficients are the LWE mask scalars); `key` is the degree-$N$
-    /// secret key. Both are read as canonical residues — exactly as the Python
-    /// reference computes the body (`pir/primitives/mlwe.py:149-153`).
+    /// secret key. Both are read as canonical residues, the standard way to
+    /// compute the LWE body.
     fn lwe_dot(masks: &Self, key: &Self) -> Self::Projected<1>;
 }
 
@@ -68,17 +68,17 @@ impl<const N: usize, B: RnsBasis> LweDot<N> for PolyRns<N, B, Coefficient> {
 }
 
 // ---------------------------------------------------------------------------
-// §5.1 — MLWE embedding and RLWE↔MLWE conversions.
+// MLWE embedding and RLWE↔MLWE conversions.
 // ---------------------------------------------------------------------------
 
-/// §5.1 — embed an $(m, n)$-MLWE into an $(m, N_\text{large})$-MLWE by applying
+/// Embed an $(m, n)$-MLWE into an $(m, N_\text{large})$-MLWE by applying
 /// $\iota_0$ ([`RingPoly::embed_at`] at slot 0) to every mask and the body.
 ///
-/// Because $\iota_0$ is a ring homomorphism ($X \mapsto Y^d$, see
-/// `.docs/primitives.md` §0.5), the result preserves the message under the
-/// correspondingly embedded key $\iota_0(\mathbf{S})$. `paper:mlwe.py:41-62`.
+/// Because $\iota_0$ is a ring homomorphism ($X \mapsto Y^d$), the result
+/// preserves the message under the
+/// correspondingly embedded key $\iota_0(\mathbf{S})$.
 ///
-/// VIA-B note: this is the $d = 1$, slot-0 case of §7.1 `Embed_d`; the
+/// VIA-B note: this is the $d = 1$, slot-0 case of `Embed_d`; the
 /// multi-input `Embed_d` will compose [`RingPoly::embed_at`] over slots
 /// $0, \ldots, d-1$ — no change to this function or the trait is needed.
 pub fn embed_mlwe<const RANK: usize, const N: usize, const N_LARGE: usize, R, RL>(
@@ -92,7 +92,7 @@ where
     MLWECiphertext::new(masks, ct.body.embed_at::<N_LARGE>(0))
 }
 
-/// Wrap an [`RLWECiphertext`] as a rank-1 [`MLWECiphertext`]. `paper:mlwe.py:65-77`.
+/// Wrap an [`RLWECiphertext`] as a rank-1 [`MLWECiphertext`].
 pub fn rlwe_to_mlwe<const N: usize, R: RingPoly<N>>(
     ct: &RLWECiphertext<N, R>,
 ) -> MLWECiphertext<1, N, R> {
@@ -101,7 +101,7 @@ pub fn rlwe_to_mlwe<const N: usize, R: RingPoly<N>>(
 
 /// Unwrap a rank-1 [`MLWECiphertext`] to an [`RLWECiphertext`]. The `RANK = 1`
 /// const-generic makes "rank must be 1" a compile-time fact — there is no
-/// runtime `ValueError` as in `paper:mlwe.py:80-99`.
+/// runtime rank check.
 pub fn mlwe_to_rlwe<const N: usize, R: RingPoly<N>>(
     ct: &MLWECiphertext<1, N, R>,
 ) -> RLWECiphertext<N, R> {
@@ -109,22 +109,22 @@ pub fn mlwe_to_rlwe<const N: usize, R: RingPoly<N>>(
 }
 
 // ---------------------------------------------------------------------------
-// §5.1 — LWE encryption / decryption (an (n, 1)-MLWE).
+// LWE encryption / decryption (an (n, 1)-MLWE).
 // ---------------------------------------------------------------------------
 
-/// §5.1 — encrypt a scalar `message` $\in [0, p)$ as an $(n, 1)$-MLWE (LWE)
+/// Encrypt a scalar `message` $\in [0, p)$ as an $(n, 1)$-MLWE (LWE)
 /// under the degree-$n$ secret key `sk`.
 ///
 /// The body is $B = \bigl(\sum_i a_i \cdot s_i\bigr) + e + \Delta \cdot m$ with
 /// $\Delta = \lceil q / p \rceil$; the dot product runs through the
 /// constant-time kernel via [`LweDot`]. The $n$ uniform mask scalars are stored
-/// as $n$ degree-1 polynomials. `paper:mlwe.py:102-156`.
+/// as $n$ degree-1 polynomials.
 ///
 /// # PRG consumption order
 ///
 /// `n` uniform mask scalars first (one [`RingPoly::random_uniform`] over the
-/// degree-$n$ ring draws the same $n$ values, in order, as Python's $n$
-/// `randbelow(q)` calls), then **one** error sample — matching `mlwe.py:138-147`.
+/// degree-$n$ ring draws the same $n$ values, in order, as $n$
+/// `randbelow(q)` calls), then **one** error sample.
 ///
 /// # Constant-time
 ///
@@ -156,11 +156,11 @@ pub fn encrypt_lwe<const NLWE: usize, R: LweDot<NLWE>>(
     prg: &mut Shake256Prg,
 ) -> MLWECiphertext<NLWE, 1, R::Projected<1>> {
     let q_mod = RingPoly::modulus(sk.poly());
-    // 1. n uniform mask scalars (Python: n × randbelow(q)), held as one deg-N poly.
+    // 1. n uniform mask scalars (n × randbelow(q)), held as one deg-N poly.
     let masks_poly = R::random_uniform(q_mod, prg);
     // 2. dot = Σ aᵢ·sᵢ mod q (degree 1), via the constant-time kernel.
     let dot = R::lwe_dot(&masks_poly, sk.poly());
-    // 3. one error sample (Python: ternary_poly(1) / discrete_gaussian_poly(1)).
+    // 3. one error sample (ternary_poly(1) / discrete_gaussian_poly(1)).
     let mut error_sample = [0i64; 1];
     error_dist.sample_into(prg, &mut error_sample);
     let error = <R::Projected<1> as RingPoly<1>>::from_centered_i64s(q_mod, &error_sample);
@@ -182,7 +182,7 @@ pub fn encrypt_lwe<const NLWE: usize, R: LweDot<NLWE>>(
 /// $g_i = \lceil q_1 / B^i \rceil$ the gadget value and $b$ the query bit) as a
 /// raw LWE sample; the gadget scaling already places the value where the
 /// downstream `rlwe_to_rgsw` expects it, so no plaintext $\Delta$ is applied.
-/// The message is `u128` because at the paper $q_1 \approx 2^{75}$ the
+/// The message is `u128` because at $q_1 \approx 2^{75}$ the
 /// gadget-scaled $b \cdot g_i$ exceeds `u64` for small $i$.
 ///
 /// `body = \sum_i a_i s_i + e + (\text{message} \bmod q)`; the `n` mask scalars
@@ -245,10 +245,10 @@ pub fn encrypt_lwe_raw<const NLWE: usize, R: LweDot<NLWE>>(
     MLWECiphertext::new(masks, body)
 }
 
-/// §5.1 — decrypt an $(n, 1)$-MLWE to a scalar in $[0, p)$:
+/// Decrypt an $(n, 1)$-MLWE to a scalar in $[0, p)$:
 /// $\mathrm{decode}\bigl(B - \sum_i a_i \cdot s_i\bigr)$. The decode rounding
 /// mirrors [`crate::encryption::decode`] exactly (centre, then
-/// `(p·c + q/2).div_euclid(q)`, then `rem_euclid(p)`). `paper:mlwe.py:159-192`.
+/// `(p·c + q/2).div_euclid(q)`, then `rem_euclid(p)`).
 pub fn decrypt_lwe<const NLWE: usize, R: LweDot<NLWE>>(
     ct: &MLWECiphertext<NLWE, 1, R::Projected<1>>,
     sk: &SecretKey<NLWE, R>,
@@ -265,7 +265,7 @@ pub fn decrypt_lwe<const NLWE: usize, R: LweDot<NLWE>>(
     let masks_poly = R::from_u128_coeffs(q_mod, &mask_coeffs);
     let dot = R::lwe_dot(&masks_poly, sk.poly());
     let noisy = ct.body - dot;
-    // Decode the single coefficient (integer-only, Python-compatible rounding).
+    // Decode the single coefficient (integer-only rounding).
     let q = <R as RingPoly<NLWE>>::modulus_value(q_mod) as i128;
     let p_i = i128::from(p);
     let mut centered = [0i128; 1];
@@ -283,7 +283,7 @@ mod tests {
     type R8 = Poly<8, ConstModulus<65537>, Coefficient>;
     type R4 = Poly<4, ConstModulus<65537>, Coefficient>;
 
-    // -- §5.1 embed_mlwe / conversions ------------------------------------
+    // -- embed_mlwe / conversions -----------------------------------------
 
     #[test]
     fn embed_doubles_dimension_and_preserves_rank() {
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(back.body, rlwe.body);
     }
 
-    // -- §5.1 encrypt_lwe / decrypt_lwe -----------------------------------
+    // -- encrypt_lwe / decrypt_lwe ----------------------------------------
 
     #[test]
     fn encrypt_lwe_produces_rank_n_degree_1() {
@@ -391,7 +391,7 @@ mod tests {
         }
     }
 
-    // -- §5.1 encrypt_lwe_raw (Δ-free) ------------------------------------
+    // -- encrypt_lwe_raw (Δ-free) -----------------------------------------
 
     /// `encrypt_lwe_raw(sk, Δ·m mod q, …)` must produce a bit-identical
     /// ciphertext to `encrypt_lwe(sk, m, p, …)` under the same PRG seed — this

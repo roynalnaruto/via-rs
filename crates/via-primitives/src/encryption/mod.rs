@@ -1,15 +1,15 @@
-//! Layer 2 — Encryption types and primitive operations.
+//! Encryption types and primitive operations.
 //!
 //! This module hosts the ciphertext datatypes and the basic cryptographic
-//! operations on them, as specified in `.docs/primitives.md §2`:
+//! operations on them:
 //!
-//! - §2.1 — ciphertext types: [`SecretKey`], [`RLWECiphertext`],
+//! - ciphertext types: [`SecretKey`], [`RLWECiphertext`],
 //!   [`RLevCiphertext`], [`RGSWCiphertext`], [`MLWECiphertext`],
 //!   [`ModSwitchedCiphertext`].
-//! - §2.2 — `keygen`, `encode`, `decode`, `encrypt`, `decrypt` (Phase 2-3, TBD).
-//! - §2.2.5 — auxiliary RLWE primitives (Phase 4, TBD).
-//! - §2.3 — gadget vector and decomposition (VIA convention, Phase 5, TBD).
-//! - §2.4 — gadget product, external product, key switch (Phase 7-8, TBD).
+//! - `keygen`, `encode`, `decode`, `encrypt`, `decrypt`.
+//! - auxiliary RLWE primitives.
+//! - gadget vector and decomposition (VIA convention).
+//! - gadget product, external product, key switch.
 //!
 //! ## Backend abstraction
 //!
@@ -17,19 +17,25 @@
 //! ([`crate::algebra::ring::RingPoly`]). The trait is implemented by both
 //! the single-prime [`crate::algebra::ring::element::Poly<N, M, Coefficient>`]
 //! and the RNS [`crate::algebra::ring::rns_element::PolyRns<N, B, Coefficient>`].
-//! Layer 2 algorithms are written once and instantiate against either
+//! The encryption algorithms are written once and instantiate against either
 //! backend.
 //!
 //! Convenience type aliases for the paper parameter sets live in
 //! [`aliases`].
 //!
-//! ## Coefficient form only
+//! ## Coefficient form only (for now)
 //!
-//! All Layer-2 ciphertexts hold coefficient-form polynomials. The §0.4 NTT
-//! body is currently `unimplemented!()`, and the Python reference at
-//! `.references/via-spec/pir/` also operates in coefficient form throughout,
-//! so this is both convenient and faithful to the reproducibility contract.
-//! An evaluation-form path may be added once NTT lands.
+//! All encryption-layer ciphertexts hold coefficient-form polynomials, and
+//! every polynomial multiply here takes the schoolbook negacyclic path. The
+//! reference is coefficient-form throughout, so KAT parity is unaffected.
+//!
+//! This is a *wiring* gap, not a missing primitive: the negacyclic NTT in
+//! `algebra::ring::ntt` is fully implemented and tested on both backends
+//! (forward + inverse; single-prime `Poly` and RNS `PolyRns`), and the
+//! `into_eval()` / `into_coeff()` form conversions are live. The pending
+//! optimisation is to keep ciphertexts in evaluation form across the
+//! gadget-product / external-product hot loops so the `O(N log N)` transform
+//! cost is amortised over many multiplies.
 //!
 //! ## Example — full encrypt/decrypt round-trip
 //!
@@ -67,13 +73,13 @@
 //!     assert_eq!(m.coeff(i), recovered_via_decode.coeff(i));
 //! }
 //!
-//! // Phase-6 primitive: encrypt a raw message as an RLev (no Δ encoding).
+//! // RLev primitive: encrypt a raw message as an RLev (no Δ encoding).
 //! // `samples[i]` decrypts to `g_i · m`; the full meaning is recovered by
-//! // Phase-7's `gadget_product`.
+//! // `gadget_product`.
 //! let m_raw = Ciphertext::new(PowerOfTwoModulus, [0, 1, 7, 15]);
 //! let _rlev = sk.encrypt_rlev::<4>(&m_raw, 2, Distribution::Ternary, &mut prg);
 //!
-//! // Phase-8 primitive: generate a key-switching key and convert a
+//! // Key-switch primitive: generate a key-switching key and convert a
 //! // ciphertext from one secret key to another.
 //! let dst_sk = SecretKey::<4, Ciphertext>::keygen(
 //!     PowerOfTwoModulus,
@@ -102,9 +108,11 @@ pub use gadget::{
 };
 pub use mlwe::MLWECiphertext;
 pub use rlwe::{decode, encode};
-pub use types::{ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext, RLevCiphertext, SecretKey};
+pub use types::{
+    ModSwitchedCiphertext, RGSWCiphertext, RLWECiphertext, RLevCiphertext, RLevEval, SecretKey,
+};
 
 /// Backward-compatible re-export: `encryption::aliases` still resolves to the
 /// top-level [`crate::params`] module (relocated there so the paper-parameter
-/// aliases can name Layer-3 types without an upward-layer import).
+/// aliases can name switching-layer types without an upward-layer import).
 pub use crate::params as aliases;
