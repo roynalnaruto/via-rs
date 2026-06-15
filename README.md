@@ -4,9 +4,11 @@ A pure-Rust, `no_std` implementation of the **VIA** family of single-server
 Private Information Retrieval (PIR) schemes — [Liu, Wang & Zhang (2025)](https://eprint.iacr.org/2025/2074).
 
 > 📖 **[Full documentation →](https://roynalnaruto.github.io/via-rs/)**
-> A from-first-principles intro to VIA (no crypto background needed) plus an
-> implementation/architecture analysis and audit. This README is the quick
-> path for developers who want to clone, build, and test.
+> A from-first-principles intro to VIA (no crypto background needed), an
+> implementation/architecture analysis, a
+> [parameters reference](https://roynalnaruto.github.io/via-rs/params.html)
+> reconciling the paper / code / review-thread values, and an audit. This
+> README is the quick path for developers who want to clone, build, and test.
 
 ### Overview 
 
