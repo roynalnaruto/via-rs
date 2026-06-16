@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Intro to VIA</title>
+        <link rel="stylesheet" href="style.css" />
+        <script type="module">
+            import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: "neutral",
+                securityLevel: "loose",
+            });
+        </script>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false },
+                    ],
+                })
+            "
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html"
+                    >VIA &middot; Documentation</a
+                >
+                <nav>
+                    <a href="intro.html" class="on">Intro to VIA</a>
+                    <a href="architecture.html">Architecture</a>
+                    <a href="implementation.html">Implementation details</a>
+                    <a href="params.html">Parameters</a>
+                    <a href="audit.html">Audit</a>
+                    <a
+                        href="https://github.com/roynalnaruto/via-rs"
+                        target="_blank"
+                        rel="noopener"
+                        >Repo &#8599;</a
+                    >
+                </nav>
+            </div>
+        </header>
+        <div class="wrap">
+            <h1 class="page-title">Intro to VIA: a chain of forced moves</h1>
+            <section class="intro">
+                <p>
+                    Private Information Retrieval (PIR) asks a seemingly
+                    impossible question: how can a client fetch record \(i\)
+                    from an \(N\)-record server database
+                    <em>without the server learning \(i\)</em>? VIA is a
+                    collection of cryptographic
+                    <a
+                        href="https://github.com/0xalizk/PIR-Eng-Notes/tree/main/research#pir-scheme-classification-taxonomy"
+                        >schemes</a
+                    >
+                    that make that possible.
+                </p>
+
+                <p>
+                    This intro goes over VIA not as a list of features but as a
+                    sequence of forced moves: start
+                    from the dumbest scheme that works, find what is wrong with
+                    it, fix that, then notice the fix has created a new problem,
+                    and repeat. VIA is where the chain terminates.
+                </p>
+
+                <p>
+                    <em>Scope.</em> Moves 0&ndash;3 build
+                    <strong>base VIA</strong> &mdash; the construction every
+                    variant shares &mdash; whose headline is that it needs
+                    <strong>no offline phase</strong>: no one-time "hint"
+                    download (a big precomputed summary of the database that
+                    older single-server schemes make you fetch before your first
+                    query). Move 4 adds a <strong>C</strong>ompression refinement called
+                    <strong>VIA-C</strong>; the <strong>b</strong>atch variant
+                    <strong>VIA-B</strong> layers extra batch-repacking
+                    machinery on top of VIA-C and is out of scope here.
+                </p>
+
+                <h3>Move 0 — the only obviously-correct scheme</h3>
+                <p>
+                    Send the client the entire database. The server learns
+                    nothing about \(i\) because the client asked for all of it.
+                    It is correct and perfectly private — and it moves \(O(N)\)
+                    bytes, which is hopeless at scale. Everything that follows
+                    is an attempt to keep this privacy while making the server
+                    do the selecting, without ever seeing what it selected.
+                </p>
+
+                <h3>Move 1 — hand the server an encrypted selector</h3>
+                <p>
+                    Represent the request as a <strong>one-hot vector</strong>:
+                    a \(1\) at position \(i\) and \(0\) elsewhere — say
+                    \([0,0,1,0]\) to ask for record \(2\) of four. Treat the
+                    database as a matrix \(D\) whose rows are the records and
+                    multiply the two: the vector-times-matrix product multiplies
+                    each record by its bit and adds the results. For the
+                    four-record case that is \(0\!\cdot\! r_0 + 0\!\cdot\! r_1 +
+                    1\!\cdot\! r_2 + 0\!\cdot\! r_3 = r_2\) — every record
+                    annihilated except the one asked for. The product is a
+                    single record, not an \(N\)-wide blend. But the vector
+                    states \(i\) outright, so we must encrypt it with a scheme
+                    the server can still compute on.
+                </p>
+
+                <figure class="fig">
+                    <svg
+                        viewBox="0 0 520 130"
+                        role="img"
+                        aria-label="Multiplying the one-hot query [0,0,1,0] by the database matrix D gives 0 times r0 plus 0 times r1 plus 1 times r2 plus 0 times r3, which sums to r2 — a single record."
+                    >
+                        <g font-size="12" text-anchor="middle">
+                            <rect
+                                x="24"
+                                y="48"
+                                width="24"
+                                height="22"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="36" y="63">0</text>
+                            <rect
+                                x="48"
+                                y="48"
+                                width="24"
+                                height="22"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="60" y="63">0</text>
+                            <rect
+                                x="72"
+                                y="48"
+                                width="24"
+                                height="22"
+                                rx="3"
+                                fill="#e8f7ee"
+                                stroke="#1f9d6b"
+                            />
+                            <text x="84" y="63" fill="#1f9d6b">1</text>
+                            <rect
+                                x="96"
+                                y="48"
+                                width="24"
+                                height="22"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="108" y="63">0</text>
+                        </g>
+                        <text
+                            x="72"
+                            y="88"
+                            font-size="10.5"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            query (one-hot)
+                        </text>
+                        <text
+                            x="134"
+                            y="64"
+                            font-size="15"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            &#215;
+                        </text>
+                        <g font-size="12" text-anchor="middle">
+                            <rect
+                                x="151"
+                                y="29"
+                                width="44"
+                                height="15"
+                                rx="2"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="173" y="41">r0</text>
+                            <rect
+                                x="151"
+                                y="46"
+                                width="44"
+                                height="15"
+                                rx="2"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="173" y="58">r1</text>
+                            <rect
+                                x="151"
+                                y="63"
+                                width="44"
+                                height="15"
+                                rx="2"
+                                fill="#e8f7ee"
+                                stroke="#1f9d6b"
+                            />
+                            <text x="173" y="75" fill="#1f9d6b">r2</text>
+                            <rect
+                                x="151"
+                                y="80"
+                                width="44"
+                                height="15"
+                                rx="2"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text x="173" y="92">r3</text>
+                        </g>
+                        <text
+                            x="173"
+                            y="112"
+                            font-size="10.5"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            database D
+                        </text>
+                        <text
+                            x="210"
+                            y="64"
+                            font-size="15"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            =
+                        </text>
+                        <g font-size="12.5">
+                            <text x="226" y="64" fill="#9aa4b2">0&#183;r0</text>
+                            <text x="263" y="64" fill="#5b6472">+</text>
+                            <text x="277" y="64" fill="#9aa4b2">0&#183;r1</text>
+                            <text x="314" y="64" fill="#5b6472">+</text>
+                            <text
+                                x="328"
+                                y="64"
+                                fill="#1f9d6b"
+                                font-weight="700"
+                            >
+                                1&#183;r2
+                            </text>
+                            <text x="365" y="64" fill="#5b6472">+</text>
+                            <text x="379" y="64" fill="#9aa4b2">0&#183;r3</text>
+                        </g>
+                        <text
+                            x="430"
+                            y="64"
+                            font-size="15"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            =
+                        </text>
+                        <rect
+                            x="448"
+                            y="51"
+                            width="34"
+                            height="24"
+                            rx="3"
+                            fill="#e8f7ee"
+                            stroke="#1f9d6b"
+                            stroke-width="1.5"
+                        />
+                        <text
+                            x="465"
+                            y="68"
+                            font-size="13"
+                            text-anchor="middle"
+                            fill="#1f9d6b"
+                            font-weight="700"
+                        >
+                            r2
+                        </text>
+                        <text
+                            x="465"
+                            y="88"
+                            font-size="10.5"
+                            text-anchor="middle"
+                            fill="#1f9d6b"
+                        >
+                            record i
+                        </text>
+                    </svg>
+                </figure>
+
+                <p>
+                    VIA's encryption is <strong>LWE</strong> (Learning With
+                    Errors). An LWE ciphertext is literally one linear equation
+                    in a long secret vector \(S\): \[ B \;=\; A\cdot S \;+\; E
+                    \;+\; \Delta\, m \pmod q, \] where \(A\) is a public random
+                    vector, \(m\) is the message, \(E\) is a small random
+                    <strong>error</strong>, and \(\Delta = q/p\) is a scaling
+                    factor that lifts \(m\) to a large value \(\Delta m\) so the
+                    small error sits harmlessly <em>below</em> it (the worked
+                    example below makes that "room underneath" visible). Anyone
+                    holding \(S\) computes \(B - A\cdot S = \Delta m + E\) and
+                    reads \(m\) off the top; anyone <em>without</em> \(S\) sees
+                    only the pair \((A, B)\), which — because \(E\) is random —
+                    looks exactly like two random numbers, with no test that
+                    tells a real ciphertext from noise (cryptographers call this
+                    "computationally indistinguishable"). Recovering \(S\) or
+                    \(m\) from many such equations <em>is</em> the
+                    Learning-With-Errors problem, believed hard even for quantum
+                    computers. So "encrypted" means exactly this: trivially
+                    readable with the key, provably noise-like without it.
+                </p>
+
+                <p>
+                    This is also where <strong>privacy</strong> comes from, and
+                    it is worth stating up front because the rest of the tour is
+                    about correctness: the server runs every step that follows
+                    on these ciphertexts and <em>never holds \(S\)</em>. To it,
+                    the query, the half-built selectors, and the final answer
+                    are all just noise. That — not any single gadget below — is
+                    what hides which record you wanted; everything else here is
+                    about keeping the computation <em>correct</em> without ever
+                    lifting that veil.
+                </p>
+
+                <p>
+                    Decryption is "subtract \(A\cdot S\), then round to the
+                    nearest multiple of \(\Delta\)." That rounding is the catch
+                    that drives the entire design: it returns the right answer
+                    only while the error stays under half a step, \(|E| <
+                    \Delta/2\). Call that inequality the
+                    <strong>noise budget</strong>. And every
+                    <strong>homomorphic</strong> operation — every computation
+                    the server does on ciphertexts — spends some of it, because
+                    each one makes \(E\) grow.
+                </p>
+
+                <div class="example">
+                    <h4>
+                        Worked example: how noise accumulates, and what happens
+                        when it overflows
+                    </h4>
+                    <p>
+                        Take tiny numbers: modulus \(q = 64\), plaintext modulus
+                        \(p = 2\) (so \(m\) is a single bit), giving \(\Delta =
+                        q/p = 32\). A bit \(m=1\) is stored as the value
+                        \(\Delta\cdot 1 + E = 32 + E\); decryption asks "is this
+                        value nearer \(0\) or nearer \(32\)?" It answers \(1\)
+                        as long as the value stays inside \((16, 48)\) — i.e. as
+                        long as \(|E| < \Delta/2 = 16\).
+                    </p>
+                    <p>
+                        <strong>Accumulation.</strong>
+                        <em>Adding two ciphertexts adds their two errors</em>. A
+                        <em>fresh</em> ciphertext might hold only \(E = 3\) (value
+                        \(35\), comfortably inside the safe band). But the
+                        server's whole job is to add ciphertexts together: sum
+                        \(k\) of them, each carrying an error of about \(3\), and
+                        by that rule the result's error can be as large as
+                        \(3 + 3 + \dots = 3k\). So the error grows with
+                        <em>how many terms you sum</em>: eight such terms already
+                        push \(E\) to \(8\times 3 = 24\), and the stored value
+                        becomes \(32 + 24 = 56\). (This is not hypothetical — it
+                        is exactly what a one-hot selector does: it sums one term
+                        per database row, so a bigger database means more terms
+                        and more error.)
+                    </p>
+                    <figure class="fig">
+                        <svg
+                            viewBox="0 0 760 190"
+                            role="img"
+                            aria-label="Decryption number line: a value at 35 (error 3) decodes to 1, but a value at 56 (error 24) has crossed the boundary at 48 and decodes wrongly to 0."
+                        >
+                            <rect
+                                x="40"
+                                y="78"
+                                width="160"
+                                height="34"
+                                fill="#eaf2fb"
+                            />
+                            <rect
+                                x="200"
+                                y="78"
+                                width="320"
+                                height="34"
+                                fill="#e8f7ee"
+                            />
+                            <rect
+                                x="520"
+                                y="78"
+                                width="160"
+                                height="34"
+                                fill="#eaf2fb"
+                            />
+                            <line
+                                x1="40"
+                                y1="95"
+                                x2="700"
+                                y2="95"
+                                stroke="#1a1d23"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                x1="200"
+                                y1="62"
+                                x2="200"
+                                y2="130"
+                                stroke="#c0392b"
+                                stroke-width="1.2"
+                                stroke-dasharray="4 3"
+                            />
+                            <line
+                                x1="520"
+                                y1="62"
+                                x2="520"
+                                y2="130"
+                                stroke="#c0392b"
+                                stroke-width="1.2"
+                                stroke-dasharray="4 3"
+                            />
+                            <line
+                                x1="40"
+                                y1="90"
+                                x2="40"
+                                y2="100"
+                                stroke="#1a1d23"
+                            />
+                            <line
+                                x1="360"
+                                y1="88"
+                                x2="360"
+                                y2="102"
+                                stroke="#1a1d23"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                x1="680"
+                                y1="90"
+                                x2="680"
+                                y2="100"
+                                stroke="#1a1d23"
+                            />
+                            <text
+                                x="40"
+                                y="126"
+                                font-size="12"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                0
+                            </text>
+                            <text
+                                x="360"
+                                y="126"
+                                font-size="12"
+                                text-anchor="middle"
+                                fill="#1a1d23"
+                            >
+                                32 = &#916;&#183;1
+                            </text>
+                            <text
+                                x="680"
+                                y="126"
+                                font-size="12"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                64 &#8801; 0
+                            </text>
+                            <text
+                                x="120"
+                                y="146"
+                                font-size="11.5"
+                                text-anchor="middle"
+                                fill="#2b5dd1"
+                            >
+                                decodes m = 0
+                            </text>
+                            <text
+                                x="360"
+                                y="146"
+                                font-size="11.5"
+                                text-anchor="middle"
+                                fill="#1f9d6b"
+                            >
+                                decodes m = 1
+                            </text>
+                            <text
+                                x="600"
+                                y="146"
+                                font-size="11.5"
+                                text-anchor="middle"
+                                fill="#2b5dd1"
+                            >
+                                decodes m = 0
+                            </text>
+                            <!-- symmetric safe-band bracket 16..48 around 32 -->
+                            <line
+                                x1="200"
+                                y1="52"
+                                x2="520"
+                                y2="52"
+                                stroke="#5b6472"
+                                stroke-width="1"
+                            />
+                            <line
+                                x1="200"
+                                y1="48"
+                                x2="200"
+                                y2="56"
+                                stroke="#5b6472"
+                            />
+                            <line
+                                x1="360"
+                                y1="48"
+                                x2="360"
+                                y2="56"
+                                stroke="#5b6472"
+                            />
+                            <line
+                                x1="520"
+                                y1="48"
+                                x2="520"
+                                y2="56"
+                                stroke="#5b6472"
+                            />
+                            <text
+                                x="360"
+                                y="44"
+                                font-size="11"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                correct while |E| &lt; &#916;/2 = 16 (either
+                                side of 32)
+                            </text>
+                            <circle cx="390" cy="95" r="6" fill="#1f9d6b" />
+                            <text
+                                x="390"
+                                y="173"
+                                font-size="12"
+                                text-anchor="middle"
+                                fill="#1f9d6b"
+                            >
+                                fresh: 32+3 = 35 &#10003; &#8594; 1
+                            </text>
+                            <circle cx="600" cy="95" r="6" fill="#c0392b" />
+                            <text
+                                x="600"
+                                y="173"
+                                font-size="12"
+                                text-anchor="middle"
+                                fill="#c0392b"
+                            >
+                                overflowed: 32+24 = 56 &#10007; &#8594; 0
+                            </text>
+                        </svg>
+                        <figcaption>
+                            The decryption "ruler" for \(q=64,\ \Delta=32\). A
+                            value decodes to the slot it rounds to. Stay within
+                            \(\Delta/2=16\) of \(32\) (green band) and the bit
+                            reads \(1\); drift past \(48\) and it rounds up to
+                            \(64\equiv0\) and reads \(0\).
+                        </figcaption>
+                    </figure>
+                    <p>
+                        <strong
+                            >Overflow returns the wrong value —
+                            silently.</strong
+                        >
+                        At \(E=24\) the value \(56\) has crossed the boundary at
+                        \(48\); it is now nearer to \(64\equiv 0\) than to
+                        \(32\), so decryption rounds it to \(0\). The bit has
+                        silently flipped from \(1\) to \(0\). Nothing raises an
+                        error — the arithmetic is all valid mod \(q\) — so the
+                        client simply receives the wrong record with no way to
+                        tell. That is why noise is <em>the</em> hard constraint,
+                        not a nuisance: the same picture holds at realistic
+                        scale (with \(\Delta\) in the hundreds and a budget half
+                        of that). It also exposes Move 1's second flaw: error
+                        grows with the number of terms summed, so a length-\(N\)
+                        selector flips the bit on any sizable database. Move 1
+                        loses on both counts — \(N\) to upload
+                        <em>and</em> noise that scales with \(N\).
+                    </p>
+                </div>
+
+                <h3>
+                    Move 2 — send the index in binary, expand it server-side
+                </h3>
+                <p>
+                    Lay the database out as an \(I\times J\) grid, so a record's
+                    address splits into a row \(\alpha\) and a column \(\beta\)
+                    (a third index \(\gamma\) picks a slot inside the record —
+                    Move 3). Move 2 is only about selecting the
+                    <strong>row</strong>. Here is the trick: instead of sending
+                    an \(I\)-entry one-hot vector, the client sends \(\alpha\) in
+                    <em>binary</em> — just \(\log_2 I\) encrypted bits — and the
+                    server <strong>rebuilds</strong> the one-hot row selector
+                    from those bits itself, using a tree of
+                    <strong>DMux</strong> gates.
+                </p>
+                <p>
+                    A <strong>DMux</strong> ("de-multiplexer") gate takes one
+                    ciphertext and one encrypted control bit and emits
+                    <em>two</em> ciphertexts: it sends the input down one of the
+                    two outputs and puts \(\text{enc}(0)\) on the other — the bit
+                    decides which side gets the input. Wire \(\log_2 I\) of these
+                    into a binary tree, one level per address bit: drop a single
+                    \(\text{enc}(1)\) in at the root, and at each level the next
+                    bit of \(\alpha\) steers that live payload down one branch
+                    while every other branch fills with \(\text{enc}(0)\). After
+                    the last level, the \(I\) leaves are all \(\text{enc}(0)\)
+                    except the one at address \(\alpha\), which holds
+                    \(\text{enc}(1)\) — that row of leaves <em>is</em> the
+                    encrypted one-hot selector, rebuilt from \(\log_2 I\) bits.
+                </p>
+
+                <figure class="fig">
+                    <pre class="mermaid">
+graph TD
+  R["root payload = enc(1)"]
+  R -->|"high bit b₁ = 0"| N0["enc(0)"]
+  R -->|"high bit b₁ = 1 ✓"| N1["enc(1)"]
+  N0 --> L0["row 0 → enc(0)"]
+  N0 --> L1["row 1 → enc(0)"]
+  N1 -->|"low bit b₀ = 0 ✓"| L2["row 2 → enc(1)"]
+  N1 -->|"low bit b₀ = 1"| L3["row 3 → enc(0)"]
+  classDef live fill:#e8f7ee,stroke:#1f9d6b,stroke-width:2px;
+  classDef dead fill:#f5f7fa,stroke:#cdd5df,color:#9aa4b2;
+  class R,N1,L2 live;
+  class N0,L0,L1,L3 dead;
+</pre
+                    >
+                    <figcaption>
+                        DMux tree for \(I=4\), routing to row \(\alpha = 2\)
+                        (binary \(10\)). The high bit \(b_1\) picks the right
+                        subtree, the low bit \(b_0\) picks the left leaf inside
+                        it (✓ = the live path); every other branch fills with
+                        \(\text{enc}(0)\). The four leaves are the encrypted
+                        one-hot selector \([0,0,1,0]\) — rebuilt by the server
+                        from just \(\log_2 4 = 2\) bits.
+                    </figcaption>
+                </figure>
+
+                <p>
+                    Now the server holds an encrypted one-hot column: \(I\)
+                    ciphertexts, all encrypting \(0\) except the \(\alpha\)-th,
+                    which encrypts \(1\). Reading out row \(\alpha\) is then
+                    almost mechanical — multiply each database row by its
+                    matching ciphertext and add the results. The database rows
+                    are ordinary <em>plaintext</em>, so "plaintext row
+                    \(\times\) encrypted bit" is the cheap kind of
+                    multiplication: every row but the \(\alpha\)-th is
+                    multiplied by an encryption of \(0\) and vanishes, while row
+                    \(\alpha\) is multiplied by an encryption of \(1\) and
+                    survives. The server ends up holding an encryption of
+                    exactly the row the client asked for, having never learned
+                    which one. (VIA calls this the
+                    <strong>first-dimension</strong> step.)
+                </p>
+
+                <figure class="fig">
+                    <svg
+                        viewBox="0 0 600 250"
+                        role="img"
+                        aria-label="First dimension: an encrypted one-hot selector times the plaintext database rows; rows multiplied by encrypted 0 vanish, the row multiplied by encrypted 1 survives, and summing yields an encryption of the wanted row."
+                    >
+                        <text
+                            x="300"
+                            y="22"
+                            font-size="12.5"
+                            text-anchor="middle"
+                            fill="#1a1d23"
+                        >
+                            First dimension: (encrypted one-hot) &#215;
+                            (plaintext database), then add
+                        </text>
+                        <text
+                            x="57"
+                            y="44"
+                            font-size="11"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            selector
+                        </text>
+                        <text
+                            x="165"
+                            y="44"
+                            font-size="11"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            plaintext DB
+                        </text>
+                        <text
+                            x="400"
+                            y="44"
+                            font-size="11"
+                            text-anchor="middle"
+                            fill="#5b6472"
+                        >
+                            product
+                        </text>
+                        <!-- rows -->
+                        <g font-size="11.5">
+                            <!-- row 0 -->
+                            <rect
+                                x="40"
+                                y="56"
+                                width="34"
+                                height="24"
+                                rx="3"
+                                fill="#eaf2fb"
+                                stroke="#cdd5df"
+                            />
+                            <text x="57" y="72" text-anchor="middle">0</text>
+                            <text
+                                x="86"
+                                y="72"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                &#215;
+                            </text>
+                            <rect
+                                x="100"
+                                y="56"
+                                width="120"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="160"
+                                y="72"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                db row 0
+                            </text>
+                            <text
+                                x="232"
+                                y="72"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                =
+                            </text>
+                            <rect
+                                x="250"
+                                y="56"
+                                width="210"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="355"
+                                y="72"
+                                text-anchor="middle"
+                                fill="#9aa4b2"
+                            >
+                                &#215;0 &#8594; enc(0), vanishes
+                            </text>
+                            <!-- row 1 -->
+                            <rect
+                                x="40"
+                                y="92"
+                                width="34"
+                                height="24"
+                                rx="3"
+                                fill="#eaf2fb"
+                                stroke="#cdd5df"
+                            />
+                            <text x="57" y="108" text-anchor="middle">0</text>
+                            <text
+                                x="86"
+                                y="108"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                &#215;
+                            </text>
+                            <rect
+                                x="100"
+                                y="92"
+                                width="120"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="160"
+                                y="108"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                db row 1
+                            </text>
+                            <text
+                                x="232"
+                                y="108"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                =
+                            </text>
+                            <rect
+                                x="250"
+                                y="92"
+                                width="210"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="355"
+                                y="108"
+                                text-anchor="middle"
+                                fill="#9aa4b2"
+                            >
+                                &#215;0 &#8594; enc(0), vanishes
+                            </text>
+                            <!-- row 2 (live) -->
+                            <rect
+                                x="40"
+                                y="128"
+                                width="34"
+                                height="24"
+                                rx="3"
+                                fill="#e8f7ee"
+                                stroke="#1f9d6b"
+                                stroke-width="1.5"
+                            />
+                            <text
+                                x="57"
+                                y="144"
+                                text-anchor="middle"
+                                fill="#1f9d6b"
+                            >
+                                1
+                            </text>
+                            <text
+                                x="86"
+                                y="144"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                &#215;
+                            </text>
+                            <rect
+                                x="100"
+                                y="128"
+                                width="120"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="160"
+                                y="144"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                db row 2
+                            </text>
+                            <text
+                                x="232"
+                                y="144"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                =
+                            </text>
+                            <rect
+                                x="250"
+                                y="128"
+                                width="210"
+                                height="24"
+                                rx="3"
+                                fill="#e8f7ee"
+                                stroke="#1f9d6b"
+                                stroke-width="1.5"
+                            />
+                            <text
+                                x="355"
+                                y="144"
+                                text-anchor="middle"
+                                fill="#1f9d6b"
+                            >
+                                &#215;1 &#8594; db row 2 survives
+                            </text>
+                            <!-- row 3 -->
+                            <rect
+                                x="40"
+                                y="164"
+                                width="34"
+                                height="24"
+                                rx="3"
+                                fill="#eaf2fb"
+                                stroke="#cdd5df"
+                            />
+                            <text x="57" y="180" text-anchor="middle">0</text>
+                            <text
+                                x="86"
+                                y="180"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                &#215;
+                            </text>
+                            <rect
+                                x="100"
+                                y="164"
+                                width="120"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="160"
+                                y="180"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                db row 3
+                            </text>
+                            <text
+                                x="232"
+                                y="180"
+                                text-anchor="middle"
+                                fill="#5b6472"
+                            >
+                                =
+                            </text>
+                            <rect
+                                x="250"
+                                y="164"
+                                width="210"
+                                height="24"
+                                rx="3"
+                                fill="#f5f7fa"
+                                stroke="#cdd5df"
+                            />
+                            <text
+                                x="355"
+                                y="180"
+                                text-anchor="middle"
+                                fill="#9aa4b2"
+                            >
+                                &#215;0 &#8594; enc(0), vanishes
+                            </text>
+                        </g>
+                        <!-- sum brace + output -->
+                        <path
+                            d="M470,58 q10,0 10,10 v44 q0,10 10,10 q-10,0 -10,10 v44 q0,10 -10,10"
+                            fill="none"
+                            stroke="#5b6472"
+                        />
+                        <text
+                            x="300"
+                            y="222"
+                            font-size="12"
+                            text-anchor="middle"
+                            fill="#1a1d23"
+                        >
+                            &#931; (add all four) &#8594; an encryption of db
+                            row 2 &#8212; the server never learns it was row 2
+                        </text>
+                    </svg>
+                    <figcaption>
+                        The first-dimension step makes "select without seeing"
+                        concrete: the encrypted selector zeroes out every row
+                        but the chosen one, and the multiplications are the
+                        cheap plaintext&#215;ciphertext kind. The server holds
+                        the answer encrypted and is none the wiser about
+                        \(\alpha\).
+                    </figcaption>
+                </figure>
+
+                <p>
+                    A symmetric tree of <strong>CMux</strong> gates — a CMux is
+                    the mirror image of a DMux: given two ciphertexts and an
+                    encrypted control bit, it outputs whichever one the bit
+                    selects — then folds the \(J\) columns of that row down to
+                    the single target cell. Finally a controlled rotation
+                    (<strong>CRot</strong>) cyclically shifts the packed slots
+                    so that coefficient-slot \(\gamma\) lands in the readable
+                    position.
+                </p>
+
+                <p>
+                    The payoff is all in the noise. A DMux tree is \(\log_2 I\)
+                    levels deep, and — take this on faith for one more Move;
+                    Move 3 earns it — each level adds only a fixed amount of
+                    <strong>noise variance</strong>. Swapping a length-\(I\)
+                    selector for \(\log_2 I\) control bits turns noise that grew
+                    with \(I\) into noise that grows with \(\log_2 I\): the
+                    single most important budgeting move in the design. (The
+                    earlier "coefficient expansion" technique that VIA replaces
+                    built the selector in a way whose noise variance grew
+                    <em>quadratically</em> — exactly the trap Move 2 sidesteps.)
+                </p>
+
+                <h3>Move 3 — make "multiply by an encrypted bit" cheap</h3>
+                <p>
+                    Move 2 leaned on an operation it never justified:
+                    multiplying a ciphertext by an <em>encrypted</em> bit,
+                    cheaply. The danger case is multiplying two
+                    <em>encrypted</em> values directly — there the two error
+                    terms cross-multiply, so the result's noise is roughly the
+                    <em>product</em> of the inputs', and it grows
+                    multiplicatively. A tree of such multiplications would blow
+                    the budget after a couple of levels (red curve below).
+                    (Multiplying an encrypted value by ordinary plaintext, as
+                    the first-dimension step does, is <em>not</em> the problem —
+                    that one is cheap.)
+                </p>
+
+                <figure class="fig">
+                    <svg
+                        viewBox="0 0 620 215"
+                        role="img"
+                        aria-label="Two noise-growth curves versus a budget line: the additive RGSW external product stays low; naive ciphertext-times-ciphertext grows multiplicatively and crosses the budget within a few operations."
+                    >
+                        <line
+                            x1="60"
+                            y1="25"
+                            x2="60"
+                            y2="180"
+                            stroke="#1a1d23"
+                        />
+                        <line
+                            x1="60"
+                            y1="180"
+                            x2="595"
+                            y2="180"
+                            stroke="#1a1d23"
+                        />
+                        <text
+                            x="32"
+                            y="105"
+                            font-size="11"
+                            fill="#5b6472"
+                            transform="rotate(-90 32 105)"
+                            text-anchor="middle"
+                        >
+                            noise
+                        </text>
+                        <text
+                            x="327"
+                            y="205"
+                            font-size="11"
+                            fill="#5b6472"
+                            text-anchor="middle"
+                        >
+                            gate operations (tree levels) &#8594;
+                        </text>
+                        <!-- x ticks -->
+                        <g font-size="10" fill="#5b6472" text-anchor="middle">
+                            <line
+                                x1="150"
+                                y1="177"
+                                x2="150"
+                                y2="183"
+                                stroke="#1a1d23"
+                            />
+                            <text x="150" y="195">1</text>
+                            <line
+                                x1="240"
+                                y1="177"
+                                x2="240"
+                                y2="183"
+                                stroke="#1a1d23"
+                            />
+                            <text x="240" y="195">2</text>
+                            <line
+                                x1="330"
+                                y1="177"
+                                x2="330"
+                                y2="183"
+                                stroke="#1a1d23"
+                            />
+                            <text x="330" y="195">3</text>
+                            <line
+                                x1="420"
+                                y1="177"
+                                x2="420"
+                                y2="183"
+                                stroke="#1a1d23"
+                            />
+                            <text x="420" y="195">4</text>
+                            <line
+                                x1="510"
+                                y1="177"
+                                x2="510"
+                                y2="183"
+                                stroke="#1a1d23"
+                            />
+                            <text x="510" y="195">5</text>
+                        </g>
+                        <!-- budget -->
+                        <line
+                            x1="60"
+                            y1="52"
+                            x2="595"
+                            y2="52"
+                            stroke="#c0392b"
+                            stroke-width="1.2"
+                            stroke-dasharray="5 4"
+                        />
+                        <text
+                            x="593"
+                            y="46"
+                            font-size="11"
+                            fill="#c0392b"
+                            text-anchor="end"
+                        >
+                            noise budget &#8212; decryption fails above
+                        </text>
+                        <!-- additive -->
+                        <polyline
+                            points="60,168 150,160 240,153 330,147 420,141 510,135 590,130"
+                            fill="none"
+                            stroke="#1f9d6b"
+                            stroke-width="2.5"
+                        />
+                        <text x="330" y="150" font-size="11.5" fill="#1f9d6b">
+                            additive &#8212; RGSW external product
+                        </text>
+                        <!-- multiplicative -->
+                        <polyline
+                            points="60,166 150,156 240,140 330,116 400,80 450,52 480,28"
+                            fill="none"
+                            stroke="#c0392b"
+                            stroke-width="2.5"
+                        />
+                        <text x="110" y="40" font-size="11.5" fill="#c0392b">
+                            multiplicative &#8212; na&#239;ve ciphertext &#215;
+                            ciphertext
+                        </text>
+                    </svg>
+                    <figcaption>
+                        Why the gate primitive matters. Naïve ciphertext
+                        multiplication compounds noise and crosses the budget
+                        within a few operations; the RGSW external product adds
+                        only a fixed amount per gate, so a whole tree of them
+                        stays safe.
+                    </figcaption>
+                </figure>
+
+                <p>
+                    The fix is a special, bulkier ciphertext called
+                    <strong>RGSW</strong> that supports the
+                    <strong>external product</strong> \(\text{RGSW} \otimes
+                    \text{RLWE} \to \text{RLWE}\): it multiplies a ciphertext by
+                    an encrypted bit while adding only a fixed amount of noise
+                    (green curve). Two ingredients make it work.
+                </p>
+                <p>
+                    First, <strong>RLWE</strong> — LWE lifted from single
+                    numbers up to whole polynomials. Instead of one secret
+                    number, the secret is now a degree-\(n\) polynomial (its
+                    coefficients taken mod \(q\)); the set of all such
+                    polynomials, with ordinary add-and-multiply, is what
+                    cryptographers call a <strong>ring</strong>, written
+                    \(R_{n,q}\). The practical win is packing and speed: one
+                    RLWE ciphertext carries \(n\) message values at once, and
+                    two of them multiply far faster than you'd expect — the
+                    schoolbook way of multiplying two degree-\(n\) polynomials
+                    costs about \(n^2\) steps, while a classic
+                    fast-multiplication trick (the
+                    <strong>Number-Theoretic Transform</strong>, a cousin of the
+                    FFT from signal processing) cuts that to about \(n\log n\).
+                    That speedup is what makes it practical to operate on
+                    thousands of packed values inside a single ciphertext.
+                </p>
+                <p>
+                    Second, <strong>gadget decomposition</strong>, which is what
+                    keeps the multiplication's noise additive. Rather than
+                    multiply by one big mod-\(q\) value (big value &rarr; big
+                    noise), the gadget writes that value in a small base \(B\)
+                    as \(\ell\) little "digits" — the same idea as storing a big
+                    integer as an array of machine words — and multiplies digit
+                    by digit. Because every partial product is small, so is the
+                    noise each contributes. (VIA uses an
+                    <em>approximate</em> gadget decomposition: it drops the
+                    least-significant digits, accepting a tiny reconstruction
+                    error that is simply folded into the noise budget, in
+                    exchange for speed.) With RGSW and the external product in
+                    hand, the DMux and CMux gates of Move 2 are exactly the
+                    additive-noise gates the trees needed — settling the IOU
+                    from Move 2.
+                </p>
+
+                <h3>Move 4 — stop shipping big gate-keys</h3>
+                <p>
+                    RGSW ciphertexts are large — they are bundles of many RLWE
+                    ciphertexts. Transmitting the control bits as RGSW (the
+                    "gate-keys" the trees consume) re-inflates the query we
+                    worked to shrink. The fix, in the variant called
+                    <strong>VIA-C</strong>: the client sends only tiny LWE
+                    ciphertexts of the index bits, and the server rebuilds the
+                    full RGSW gate-keys itself, in two homomorphic re-encoding
+                    steps — an <strong>LWE→RLWE conversion</strong> followed by
+                    an <strong>RLWE→RGSW conversion</strong>.
+                </p>
+
+                <figure class="fig">
+                    <pre class="mermaid">
+graph LR
+  Q["client sends<br/>tiny LWE ciphertexts of the index bits<br/>about &#8467; log N numbers"]
+  Q --> C1["server: LWE to RLWE conversion"]
+  C1 --> C2["RLWE to RGSW conversion"]
+  C2 --> G["full-size RGSW gate-keys<br/>rebuilt on the server"]
+  G --> T["feed the DMux / CMux / CRot trees (Move 2)"]
+  classDef a fill:#e8f7ee,stroke:#1f9d6b;
+  classDef b fill:#eaf2fb,stroke:#2b5dd1;
+  class Q a; class C1,C2,G,T b;
+</pre>
+                    <figcaption>
+                        VIA-C moves the cost of building gate-keys from the wire
+                        to the server: a logarithmic-size query is decompressed
+                        back into RGSW on the server side. (Green = on the
+                        client; blue = on the server.)
+                    </figcaption>
+                </figure>
+
+                <p>
+                    These conversions are the same family of operation as
+                    <strong>key-, ring-, and modulus-switching</strong>: using
+                    public "switching keys," the server can move a ciphertext to
+                    a different secret key, a smaller ring, or a smaller modulus
+                    <em>without decrypting it</em>, re-expressing the same
+                    hidden value under new parameters. A conversion just changes
+                    a ciphertext's shape (LWE → RLWE → RGSW) while preserving
+                    what it hides — which is why the server can rebuild
+                    gate-keys it could never have read.
+                </p>
+                <p>
+                    The per-query upload collapses to about \(\ell\cdot\log N\)
+                    numbers (\(\ell\) is the gadget digit-count from Move 3).
+                    Two costs come with this. First, the conversion and
+                    switching keys are themselves a one-time setup payload the
+                    client supplies up front, so VIA-C — unlike base VIA, which
+                    sends nothing ahead of time — does reintroduce a modest
+                    amount of <em>offline</em> communication; the zero-offline
+                    headline stays base VIA's. Second, supplying keys that
+                    encrypt key material asks for one extra, mild assumption —
+                    <strong>circular security</strong>: that it stays safe to
+                    encrypt a secret under a key related to that same secret,
+                    which is exactly what these conversion keys do (base VIA,
+                    sending no keys, doesn't need it). What VIA-C buys for these
+                    two costs is a dramatically smaller cost on every query that
+                    follows.
+                </p>
+
+                <h3>
+                    Move 5 — pay for the conversions, then balance the whole
+                    ledger
+                </h3>
+                <p>
+                    Re-encoding is not free: each conversion injects noise, so a
+                    careless LWE→RLWE step would bankrupt the budget on its own.
+                    VIA's central technical contribution is a conversion whose
+                    <strong>noise variance</strong> grows only as \(O(n\log
+                    n)\), where the prior method's grew as \(O(n^3)\) — and that
+                    frugality is exactly what makes Move 4 affordable rather
+                    than ruinous. (<em>Why</em> the new method is so much
+                    quieter is the paper's main result and beyond our scope
+                    here; take it as an asserted result, not one we prove.)
+                </p>
+                <p>
+                    With every step's cost bounded, correctness reduces to one
+                    accounting question: is the total noise accumulated across
+                    conversion → DMux tree → first-dimension sum → CMux tree →
+                    CRot → response compression still below \(\Delta/2\) when
+                    the client finally rounds? VIA keeps the answer "yes" with a
+                    <strong>descending modulus chain</strong> \(q_1 > q_2 > q_3
+                    > q_4\). A modulus switch rescales a ciphertext to a smaller
+                    modulus and, in doing so, scales its noise down too —
+                    shrinking the data and buying back budget at once. A ring
+                    switch likewise compresses the answer into a smaller ring
+                    before it travels back.
+                </p>
+
+                <figure class="fig">
+                    <svg
+                        viewBox="0 0 660 220"
+                        role="img"
+                        aria-label="Noise ledger: error climbs across the pipeline stages, with the first-dimension sum the steepest rise; modulus and ring switches step it back down so the final value lands just under the decryption threshold."
+                    >
+                        <line
+                            x1="60"
+                            y1="30"
+                            x2="60"
+                            y2="185"
+                            stroke="#1a1d23"
+                        />
+                        <line
+                            x1="60"
+                            y1="185"
+                            x2="630"
+                            y2="185"
+                            stroke="#1a1d23"
+                        />
+                        <text
+                            x="34"
+                            y="108"
+                            font-size="11"
+                            fill="#5b6472"
+                            transform="rotate(-90 34 108)"
+                            text-anchor="middle"
+                        >
+                            noise
+                        </text>
+                        <line
+                            x1="60"
+                            y1="46"
+                            x2="630"
+                            y2="46"
+                            stroke="#c0392b"
+                            stroke-width="1.2"
+                            stroke-dasharray="5 4"
+                        />
+                        <text
+                            x="628"
+                            y="40"
+                            font-size="11"
+                            fill="#c0392b"
+                            text-anchor="end"
+                        >
+                            decryption threshold &#916;/2
+                        </text>
+                        <polyline
+                            points="60,178 110,166 190,151 250,151 250,169 330,72 410,62 470,56 520,56 520,118 590,118 630,118"
+                            fill="none"
+                            stroke="#2b5dd1"
+                            stroke-width="2.5"
+                        />
+                        <!-- mod-switch drop (label ABOVE the arrow) -->
+                        <line
+                            x1="250"
+                            y1="151"
+                            x2="250"
+                            y2="167"
+                            stroke="#1f9d6b"
+                            stroke-width="2"
+                        />
+                        <polygon
+                            points="246,163 254,163 250,169"
+                            fill="#1f9d6b"
+                        />
+                        <text
+                            x="250"
+                            y="142"
+                            font-size="10"
+                            fill="#1f9d6b"
+                            text-anchor="middle"
+                        >
+                            mod-switch &#8595;
+                        </text>
+                        <!-- ring-switch drop -->
+                        <line
+                            x1="520"
+                            y1="56"
+                            x2="520"
+                            y2="116"
+                            stroke="#1f9d6b"
+                            stroke-width="2"
+                        />
+                        <polygon
+                            points="516,112 524,112 520,118"
+                            fill="#1f9d6b"
+                        />
+                        <text
+                            x="530"
+                            y="88"
+                            font-size="10"
+                            fill="#1f9d6b"
+                            text-anchor="start"
+                        >
+                            ring-switch &#8595;
+                        </text>
+                        <!-- stage labels -->
+                        <g font-size="10" fill="#5b6472" text-anchor="middle">
+                            <text x="110" y="202">convert</text>
+                            <text x="190" y="202">DMux</text>
+                            <text x="335" y="202">first-dim</text>
+                            <text x="425" y="202">CMux</text>
+                            <text x="475" y="213">CRot</text>
+                            <text x="600" y="202">decode</text>
+                        </g>
+                    </svg>
+                    <figcaption>
+                        The noise ledger. Error climbs as the server works — the
+                        first-dimension sum is the steepest rise — but
+                        well-timed modulus and ring switches knock it back down,
+                        so the final value lands <em>just</em> under
+                        \(\Delta/2\) and the record decrypts correctly.
+                    </figcaption>
+                </figure>
+
+                <p>
+                    And travel back it does: the server returns this final,
+                    compressed ciphertext, and the client — the only party
+                    holding \(S\) — decrypts it with the very same "round to the
+                    nearest \(\Delta\)" rule from Move 1. That last rounding is
+                    the reason the whole budget had to stay under \(\Delta/2\)
+                    in the first place.
+                </p>
+
+                <h3>Why it all holds together</h3>
+                <p>
+                    Each primitive is the forced answer to the previous step's
+                    flaw — the one-hot selector, the binary index plus DMux
+                    tree, the RGSW external product, the LWE→RLWE→RGSW
+                    conversion, and the low-noise conversion with its modulus
+                    ledger — and the chain ends with the right record decrypted,
+                    just under budget. Privacy, meanwhile, was secured back in
+                    Move 1 and never spent: because every value the server
+                    touches is a ciphertext it cannot read, it processes the
+                    entire query while learning nothing about \(i\). Formally,
+                    under the RLWE hardness assumption and its module variant
+                    MLWE (plus the circular-security assumption that Move 4
+                    introduced), the query is provably indistinguishable from
+                    random. VIA is simply what you get when you keep fixing the
+                    problem your last fix created — without ever letting the
+                    server see.
+                </p>
+            </section>
+        </div>
+    </body>
+</html>

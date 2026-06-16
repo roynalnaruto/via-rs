@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Implementation details</title>
+        <link rel="stylesheet" href="style.css" />
+        <script type="module">
+            import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: "neutral",
+                securityLevel: "loose",
+            });
+        </script>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false },
+                    ],
+                })
+            "
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html"
+                    >VIA &middot; Documentation</a
+                >
+                <nav>
+                    <a href="intro.html">Intro to VIA</a>
+                    <a href="architecture.html">Architecture</a>
+                    <a href="implementation.html" class="on"
+                        >Implementation details</a
+                    >
+                    <a href="params.html">Parameters</a>
+                    <a href="audit.html">Audit</a>
+                    <a
+                        href="https://github.com/roynalnaruto/via-rs"
+                        target="_blank"
+                        rel="noopener"
+                        >Repo &#8599;</a
+                    >
+                </nav>
+            </div>
+        </header>
+        <div class="wrap">
+            <h1 class="page-title">
+                Implementation details &mdash; architecture &amp; analysis
+            </h1>
+
+            <p class="legend">
+                <span
+                    ><span
+                        class="tag tag-paper"
+                        title="Stated in the paper. Hover a paper tag for its section/page; full citation in the footnotes."
+                        >paper</span
+                    >
+                    stated in the paper</span
+                >
+                <span
+                    ><span
+                        class="tag tag-code"
+                        title="Observed in via-rs; the green tag and file:line refs link to the exact source line."
+                        >code</span
+                    >
+                    observed in <code>via-rs</code></span
+                >
+                <span
+                    ><span class="tag tag-infer">inference</span> LLM
+                    reasoning</span
+                >
+                <span
+                    ><span class="tag tag-flag">unverified</span> could not
+                    confirm</span
+                >
+            </p>
+
+            <p class="toc" id="toc" style="margin-top: 28px">
+                <a href="#construction">Construction</a> &middot;
+                <a href="#architecture">Architecture</a> &middot;
+                <a href="#build">Build &amp; test</a> &middot;
+                <a href="#footnotes">Footnotes</a> &middot;
+                <a href="audit.html">Audit &#8599;</a>
+            </p>
+            <h3 id="summary">Summary</h3>
+            <p>
+                VIA is a lattice (RLWE/MLWE) single-server PIR family whose
+                headline trick is to
+                <em>eliminate the offline/preprocessing phase</em> while keeping
+                online communication at \(\tilde O(\log N)\). It does this by
+                replacing the usual "coefficient-expansion" query-expansion step
+                with a <strong>DMux tree</strong> (logarithmic-depth homomorphic
+                de-multiplexers) and, in the VIA-C variant, a new
+                <strong>LWE&rarr;RLWE conversion</strong> that compresses the
+                whole query into a handful of \(\mathbb Z_{q_1}\) elements.<sup
+                    ><a href="#fn1" id="ref1">1</a></sup
+                >
+            </p>
+
+            <p>
+                The <code>via-rs</code> repository is a clean,
+                <code>no_std</code>, layered Rust
+                <em>port of a Python reference</em>.<sup
+                    ><a href="#fn2" id="ref2">2</a></sup
+                >
+                Its primitive stack (algebra &rarr; sampling &rarr; encryption
+                &rarr; switching &rarr; gates &rarr; conversion) maps faithfully
+                to the paper's §2&ndash;§5, and a real
+                <code>Query&rarr;Answer&rarr;Recover</code> round-trip passes at
+                both toy and (release-only) paper-scale parameters &mdash;
+                verified here, 693/693 tests green.<sup
+                    ><a href="#fn3" id="ref3">3</a></sup
+                >
+                <strong>VIA-C and VIA-B are implemented</strong> (VIA-B behind
+                the <code>via-b</code> cargo feature, merged after the original
+                audit); plain VIA is not.<sup
+                    ><a href="#fn4" id="ref4">4</a></sup
+                >
+            </p>
+
+            <p>
+                This page describes the codebase <em>as built</em> &mdash; the
+                construction it implements, its crate/layer architecture, the
+                primitive&rarr;paper map, and the build/test status. The
+                correctness and security <strong>audit</strong> &mdash;
+                severity-ranked findings for VIA-C and VIA-B, the paper-vs-code
+                parameter and noise-budget divergences, and the open questions
+                &mdash; now lives on its own page:
+                <a href="audit.html">Audit &#8599;</a>. In brief it confirms the
+                concerns external reviewers (Yue et al.) raised in the
+                <em>VIA Security</em> thread, and refutes two suspected ones.
+            </p>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h3 id="construction">The scheme — variants &amp; construction</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Variant</th>
+                        <th>Offline comm.</th>
+                        <th>Online comm.</th>
+                        <th>Key idea</th>
+                        <th>In <code>via-rs</code>?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>VIA</strong></td>
+                        <td>none</td>
+                        <td>\(\tilde O(1)\)</td>
+                        <td>
+                            DMux tree replaces coefficient expansion; fresh
+                            control bits + ring-switch <em>before</em> CMux
+                        </td>
+                        <td>
+                            <span class="tag tag-flag">no</span> not implemented
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>VIA-C</strong></td>
+                        <td>allowed (public params)</td>
+                        <td>\(O(\log N)\)</td>
+                        <td>
+                            VIA + LWE&rarr;RLWE / RLWE&rarr;RGSW query
+                            compression; ring-switch <em>inside</em> response
+                            compression
+                        </td>
+                        <td>
+                            <span class="tag tag-code">yes</span> fully built
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>VIA-B</strong></td>
+                        <td>allowed</td>
+                        <td>batched</td>
+                        <td>
+                            VIA-C + homomorphic repacking (MLWEs&rarr;RLWE) for
+                            many small records
+                        </td>
+                        <td>
+                            <span class="tag tag-code">yes</span> implemented
+                            (feature <code>via-b</code>)
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="key">
+                Sources: paper Figures 4 (VIA), 8 (VIA-C), 9 (VIA-B).<sup
+                    ><a href="#fn1" id="ref1c">1</a></sup
+                >
+                Implementation scope confirmed by grep: the pipeline is
+                monomorphised against VIA-C presets and no Figure-4 / repacking
+                code paths exist <em>at the audited commit
+                <code>9575286</code></em> — VIA-B repacking landed later
+                (PR #10).<sup><a href="#fn4" id="ref4b">4</a></sup>
+            </p>
+
+            <h4>Database layout &amp; query decomposition</h4>
+            <p>
+                <span
+                    class="tag tag-paper"
+                    title="Liu et al. (2025), §3.1 (Database structure), p.8 — the database is encoded as an I×J grid of ring polynomials. [fn 9]"
+                    >paper</span
+                >
+                The database \(X\) is encoded as an \(I\times J\) grid of
+                \(R_{n_1,p}\) polynomials, each cell packing \(d = n_1/n_2\)
+                records.<sup><a href="#fn9" id="ref9">5</a></sup>
+                <a
+                    class="tag tag-code"
+                    href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/decompose.rs#L29-L61"
+                    target="_blank"
+                    rel="noopener"
+                    title="crates/via-client/src/decompose.rs:29-61"
+                    >code</a
+                >
+                The client splits an index as \(\texttt{idx} = \gamma\,(IJ) +
+                \alpha J + \beta\) into \((\alpha,\beta,\gamma)\) = (row,
+                column, slot); \(\alpha\) drives DMux (MSB-first), \(\beta\)
+                drives CMux (LSB-first), \(\gamma\) drives CRot.<sup
+                    ><a href="#fn10" id="ref10">6</a></sup
+                >
+            </p>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h3 id="architecture">Architecture — as built</h3>
+
+            <h4>Crate &amp; layer dependency graph</h4>
+            <pre class="mermaid">
+graph TD
+  subgraph PRIM["via-primitives (no_std)"]
+    L0["Layer 0 algebra: zq, rns CRT, ring NTT"]
+    L1["Layer 1 sampling: SHAKE-256 PRG, uniform, ternary, Gaussian"]
+    L2["Layer 2 encryption: SecretKey, RLWE, RLev, RGSW, MLWE, gadget, keyswitch"]
+    L3["Layer 3 switching: mod-switch, ring-switch, rekey"]
+    L4["Layer 4 gates: CMux, DMux, trees, CRot, RLWE-to-RGSW"]
+    L5["Layer 5 conversion: LWE-to-RLWE cascade, MLWE embed, Extr_d"]
+    L0 --> L1 --> L2 --> L3 --> L4 --> L5
+    L2 --> L4
+  end
+  subgraph PROTO["via-protocol"]
+    P1["PIRParams and presets TOY / REALISTIC"]
+    P2["wire: Query, Answer, keys (serialization partial)"]
+  end
+  CL["via-client: setup, query idx, recover"]
+  SV["via-server: setup_db, query_decomp, first_dim, answer, resp_comp"]
+  INT["via-integration: e2e tests, KATs, benches"]
+  PRIM --> PROTO
+  PROTO --> CL
+  PROTO --> SV
+  PRIM --> CL
+  PRIM --> SV
+  CL --> INT
+  SV --> INT
+  </pre
+            >
+
+            <h4>VIA-C end-to-end sequence</h4>
+            <pre class="mermaid">
+sequenceDiagram
+  participant C as Client
+  participant S as Server DB I x J
+  Note over C: setup yields keys s, S1, S2 and public params pp_qck, pp_rck
+  C->>C: split idx into alpha row, beta col, gamma slot, then encrypt bits as LWE at q1
+  C->>S: query = L log N LWE ciphertexts
+  Note over S: Answer pipeline, Figure 8
+  S->>S: 1. QueryDecomp LWE to RLWE to RGSW yields C_ctrl, C_sel, C_rot
+  S->>S: 2. DMux tree on C_ctrl yields one-hot rows at q1
+  S->>S: 3. ModSwitch q1 to q2
+  S->>S: 4. First dimension sum over i of c_i times db at i,j at q2
+  S->>S: 5. CMux tree on C_sel selects column
+  S->>S: 6. CRot on C_rot rotates to slot gamma
+  S->>S: 7. RespComp ModSwitch q2 to q3, RingSwitch n1 to n2, scale to q4
+  S->>C: answer = mask at q3, body at q4
+  C->>C: Recover m = round of p times B' minus round of q4 A' S2 / q3, all over q4, mod p
+  </pre
+            >
+
+            <h4>Answer noise/modulus journey</h4>
+            <pre class="mermaid">
+flowchart TD
+  A["LWE at q1 (compressed query bits)"]
+  B["RGSW gate keys at q1: C_ctrl, C_sel, C_rot"]
+  C["one-hot rows at q1 (noise + theta_DMux times log I)"]
+  D["rows at q2"]
+  E["column sums at q2 (noise times I n1 p^2 / 4, dominant term)"]
+  F["selected column at q2 (noise + theta_CMux times log J)"]
+  G["rotated to slot at q2"]
+  H["answer, small ring n2 at q4 (decodes iff theta_ans under Delta/2 = 128)"]
+  A -->|"LWE-to-RLWE-to-RGSW decompress"| B
+  B -->|"DMux tree x log I"| C
+  C -->|"ModSwitch q1 to q2"| D
+  D -->|"FirstDim sum of c times db, x I"| E
+  E -->|"CMux tree x log J"| F
+  F -->|"CRot"| G
+  G -->|"RespComp: q2 to q3, RingSwitch n1 to n2, q3 to q4"| H
+  style E fill:#fdecea,stroke:#c0392b
+  style H fill:#eafaf1,stroke:#1f9d6b
+  </pre
+            >
+            <p class="key">
+                Modulus chain \(q_1{>}q_2{>}q_3{>}q_4{>}p\); step labels follow
+                Appendix C's variance recursion.<sup
+                    ><a href="#fn11" id="ref11">8</a></sup
+                >
+                The <em>first-dimension</em> \(\times I\,n_1\,p^2/4\) term (red)
+                and the per-level \(\log I,\log J\) additions are where the
+                budget is spent; the answer (green) decodes only if the
+                accumulated variance stays under \(\Delta/2\).
+            </p>
+
+            <h4>Primitive &rarr; paper map</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Primitive</th>
+                        <th>Where (code)</th>
+                        <th>Paper §</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Ring \(R_{n,q}\), NTT, RNS \(q_1\)</td>
+                        <td><code>algebra/{zq,rns,ring}</code></td>
+                        <td>§2, §0</td>
+                        <td>
+                            2-prime RNS for \(q_1\approx2^{75}\); const &amp;
+                            runtime modulus impls
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>RLWE / RLev / RGSW / MLWE</td>
+                        <td>
+                            <code>encryption/{rlwe,rlev,rgsw,mlwe}.rs</code>
+                        </td>
+                        <td>§2.1&ndash;§2.3</td>
+                        <td>
+                            RLev = \(\ell\) RLWE at gadget powers; RGSW = pair
+                            of RLev
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Gadget decomposition (approximate)</td>
+                        <td><code>encryption/gadget.rs</code></td>
+                        <td>§2.3 / [40]</td>
+                        <td>
+                            signed-balanced digits; reconstruction error
+                            absorbed into noise<sup
+                                ><a href="#fn7" id="ref7b">7</a></sup
+                            >
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CMux / DMux + trees</td>
+                        <td><code>gates/mux.rs</code></td>
+                        <td>§3.1, Lemma C.1/C.2</td>
+                        <td>
+                            external-product based; <code>cmux_tree</code> /
+                            <code>dmux_tree</code> allocation-free
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CRot (controlled rotation)</td>
+                        <td><code>gates/rotate.rs</code></td>
+                        <td>§4.2</td>
+                        <td>RGSW-controlled \(X^{-\gamma}\) rotation</td>
+                    </tr>
+                    <tr>
+                        <td>RLWE&rarr;RGSW conversion</td>
+                        <td><code>gates/convert.rs</code></td>
+                        <td>§4.2 / [45]</td>
+                        <td>gadget product with RLev of \(S^2\)</td>
+                    </tr>
+                    <tr>
+                        <td>LWE&rarr;RLWE conversion cascade</td>
+                        <td>
+                            <code>conversion/{conv,cascade,extract}.rs</code>
+                        </td>
+                        <td>§4.1, Lemma 4.1/4.2</td>
+                        <td>iterated MLWE-to-MLWE; \(O(n\log n)\) noise</td>
+                    </tr>
+                    <tr>
+                        <td>Mod-switch / ring-switch / rekey</td>
+                        <td><code>switching/*</code></td>
+                        <td>§2.4, §3.3</td>
+                        <td>
+                            ring-switch is a homomorphic projection
+                            \(n_1\!\to\!n_2\)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Sampling (PRG, ternary, Gaussian)</td>
+                        <td><code>sampling/*</code></td>
+                        <td>§1.1&ndash;§1.6</td>
+                        <td>
+                            SHAKE-256 counter PRG; Box-Muller Gaussian (only
+                            float path)
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h3 id="build">Build &amp; test status</h3>
+            <p>
+                <a
+                    class="tag tag-code"
+                    href="https://github.com/roynalnaruto/via-rs/tree/957528620c1770dccb6fd642f7759d2dd3010050"
+                    target="_blank"
+                    rel="noopener"
+                    title="via-rs @ 9575286 — cargo test --workspace"
+                    >code</a
+                >
+                Built and run on Rust stable 1.96.0.
+                <code>cargo test --workspace</code> &mdash;
+                <strong>693 passed, 0 failed, 4 ignored</strong>.<sup
+                    ><a href="#fn25" id="ref25">9</a></sup
+                >
+            </p>
+            <ul>
+                <li>
+                    <a
+                        class="tag tag-code"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/tests/e2e_toy.rs#L170-L209"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-server/tests/e2e_toy.rs:170-209"
+                        >code</a
+                    >
+                    Toy-parameter <code>Query→Answer→Recover</code> round-trips
+                    pass and assert <code>recovered == record[i]</code> across
+                    all indices (<code>e2e_toy.rs</code>,
+                    <code>client_server_e2e.rs</code>).<sup
+                        ><a href="#fn3" id="ref3b">3</a></sup
+                    >
+                </li>
+                <li>
+                    <a
+                        class="tag tag-code"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/layer6_kats.rs"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-integration/tests/layer6_kats.rs"
+                        >code</a
+                    >
+                    Cross-language byte-parity KATs
+                    (<code>layer3/4/5/6_kats</code>) pin primitive outputs
+                    against Python-generated constants &mdash; all pass.<sup
+                        ><a href="#fn26" id="ref26">10</a></sup
+                    >
+                </li>
+                <li>
+                    <a
+                        class="tag tag-code"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L146"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-integration/tests/client_server_e2e_paper.rs:146"
+                        >code</a
+                    >
+                    The ignored tests are the heavy paper-scale (n2048 RNS)
+                    cases;
+                    <code
+                        >cargo test --release -p via-integration --test
+                        client_server_e2e_paper -- --ignored</code
+                    >
+                    → <strong>2 passed in 35.7s</strong> (<code
+                        >client_server_e2e_paper_scale_index_15</code
+                    >
+                    recovers the right record at n1=2048/n2=512, q1≈2^75).<sup
+                        ><a href="#fn15" id="ref15b">11</a></sup
+                    >
+                </li>
+                <li>
+                    <a
+                        class="tag tag-code"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/fuzz/Cargo.toml"
+                        target="_blank"
+                        rel="noopener"
+                        title="fuzz/Cargo.toml (9 fuzz targets)"
+                        >code</a
+                    >
+                    A <code>cargo-fuzz</code> harness covers 9 areas (zq, rns,
+                    sampling, switching, encryption, gates, conversion, ring,
+                    protocol).<sup><a href="#fn27" id="ref27">12</a></sup>
+                </li>
+                <li>
+                    <span class="tag tag-infer">inference</span> The green
+                    paper-scale round-trip confirms the pipeline
+                    <em>computes</em> correctly at paper dimensions, but it runs
+                    ternary keys on a 2×2 DB, so it does
+                    <strong>not</strong> witness the \(2^{-40}\) noise-budget
+                    claim at paper σ/dimensions (A3).
+                </li>
+            </ul>
+
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h3 id="footnotes">Footnotes</h3>
+            <ol class="footnotes">
+                <li id="fn1">
+                    <a
+                        href="https://eprint.iacr.org/2025/2074"
+                        target="_blank"
+                        rel="noopener"
+                        >Liu et al. (2025)</a
+                    >
+                    (local: via-paper.pdf) §1 Introduction &amp; §3.1, p.1,8 —
+                    "VIA substitutes coefficient expansion techniques with DMux
+                    … introducing only logarithmic noise variance"; Figures
+                    4/8/9 give the three constructions. <a href="#ref1">↩</a>
+                    <a href="#ref1c">↩</a>
+                </li>
+                <li id="fn2">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L13-L17"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-protocol/src/presets.rs:13-17"
+                        >protocol/presets.rs</a
+                    >
+                    and many provenance comments (e.g.
+                    <code>client.py:117</code>, <code>server.py:196</code>,
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/src/resp_comp.rs#L1-L15"
+                        target="_blank"
+                        rel="noopener"
+                        title="resp_comp.rs:1-15"
+                        ><code>server/resp_comp.rs</code></a
+                    >) reference a Python reference;
+                    <code>find … *.py</code> over the tree returns only a CI
+                    script — the Python source is not in this checkout.
+                    <a href="#ref2">↩</a>
+                </li>
+                <li id="fn3">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/tests/e2e_toy.rs#L170-L209"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-server/tests/e2e_toy.rs:170-209"
+                        >server/e2e_toy.rs</a
+                    >
+                    and
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e.rs#L143-L173"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-integration/tests/client_server_e2e.rs:143-173"
+                        >integration/client_server_e2e.rs</a
+                    >
+                    — full-index
+                    <code>assert_eq!(recover(query(i)), record[i])</code> at toy
+                    params. <a href="#ref3">↩</a> <a href="#ref3b">↩</a>
+                </li>
+                <li id="fn4">
+                    grep over crates/{client,server,protocol}: pipeline
+                    monomorphised against <code>ViaCPublicParams</code>; no
+                    Figure-4 (ring-switch-before-CMux) path, no
+                    <code>repack</code>/<code>via_b</code>/MLWEs→RLWE. "VIA-B
+                    (Layer 7) will wrap it" —
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/src/answer.rs#L6"
+                        target="_blank"
+                        rel="noopener"
+                        title="answer.rs:6,282"
+                        >server/answer.rs</a
+                    >. <em>Accurate as of commit <code>9575286</code>; VIA-B
+                    repacking (<code>repack</code>/<code>via_b</code>) was
+                    subsequently merged in PR #10 and postdates this audit.</em>
+                    <a href="#ref4">↩</a> <a href="#ref4b">↩</a>
+                </li>
+                <li id="fn9">
+                    <a
+                        href="https://eprint.iacr.org/2025/2074"
+                        target="_blank"
+                        rel="noopener"
+                        >Liu et al. (2025)</a
+                    >
+                    (local: via-paper.pdf) §3.1 (Database structure), p.8 —
+                    \(db[i,j]=\iota_{n_2\to n_1}((X_{kIJ+iJ+j})_k)\), grid
+                    \(I\times J\). <a href="#ref9">↩</a>
+                </li>
+                <li id="fn10">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/decompose.rs#L29-L61"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-client/src/decompose.rs:29-61"
+                        >client/decompose.rs</a
+                    >
+                    — <code>index = γ·(I·J)+α·J+β</code>; DMux bits MSB-first,
+                    CMux/CRot bits LSB-first. <a href="#ref10">↩</a>
+                </li>
+                <li id="fn7">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/gadget.rs#L1-L15"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-primitives/src/encryption/gadget.rs:1-15"
+                        >primitives/gadget.rs</a
+                    >
+                    — "signed-balanced digits in \((-B/2,B/2]\) … the '≈' hides
+                    a reconstruction error bounded by
+                    \(\mathrm{round}(q/B^L)/2\)." <a href="#ref7b">↩</a>
+                </li>
+                <li id="fn11">
+                    <a
+                        href="https://eprint.iacr.org/2025/2074"
+                        target="_blank"
+                        rel="noopener"
+                        >Liu et al. (2025)</a
+                    >
+                    (local: via-paper.pdf) Appendix C.2, p.25-27 — the per-step
+                    variance recursion
+                    (θctrl→θdmux→θms→θfirst→θcmux→θcrot→θrep→θans) and condition
+                    \(\lVert
+                    E_{\text{final}}\rVert_\infty\le\lfloor(q_3-q_4)/p\rceil/2-1\).
+                    <a href="#ref11">↩</a>
+                </li>
+                <li id="fn25">
+                    Executed in this environment after installing rustup/stable
+                    (1.96.0): <code>cargo test --workspace</code> → 693 passed /
+                    0 failed / 4 ignored across the workspace crates' unit,
+                    integration, and doctest targets. <a href="#ref25">↩</a>
+                </li>
+                <li id="fn26">
+                    crates/via-primitives/tests/{layer3,layer4,layer5}_kats.rs
+                    and crates/via-integration/tests/layer6_kats.rs —
+                    byte-equality vs embedded Python-generated constants.
+                    <a href="#ref26">↩</a>
+                </li>
+                <li id="fn15">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-integration/tests/client_server_e2e_paper.rs#L42-L43"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-integration/tests/client_server_e2e_paper.rs:42-43"
+                        >integration/client_server_e2e_paper.rs</a
+                    >
+                    (NUM_ROWS=2,NUM_COLS=2), :69-71 (Distribution::Ternary),
+                    :146 (<code>#[ignore]</code>). Both ignored tests pass in
+                    release (verified, 35.7s). <a href="#ref15b">↩</a>
+                </li>
+                <li id="fn27">
+                    via-rs/fuzz/fuzz_targets/{zq,rns,sampling,switching,encryption,gates,conversion,ring,protocol}
+                    and fuzz/Cargo.toml target list. <a href="#ref27">↩</a>
+                </li>
+            </ol>
+        </div>
+    </body>
+</html>

@@ -20,7 +20,7 @@ use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
 use via_primitives::conversion::{
-    LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8,
+    LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
     repack_keys_n8_t2_from_cascade_modswitched, repack_n8_t2,
 };
 use via_primitives::encryption::types::RLWECiphertext;
@@ -56,7 +56,7 @@ type R4 = Poly<N2, DynModulus, Coefficient>;
 type R2 = Poly<N3, DynModulus, Coefficient>;
 type K = LweToRlweKeyN8<DynModulus, L_CK>;
 type ToyClient = Client<N1, N2, R8, R4, L_QUERY, L_CK, L_RSK, D>;
-type ToyBServer = ViaBServer<K, N1, N2, N3, R8, R8, R4, R4, R8, L_QUERY, L_CK, L_RSK, D>;
+type ToyBServer = ViaBServer<K, N1, N2, N3, R8, R8, R4, R4, L_QUERY, L_CK, L_RSK, D>;
 
 #[derive(Debug)]
 struct Input {
@@ -148,14 +148,17 @@ fuzz_target!(|input: Input| {
     .expect("client setup");
 
     let records: Vec<R2> = input.records.iter().map(|c| R2::new(p, *c)).collect();
-    let server = ToyBServer::setup::<R2>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+
+    let server = ToyBServer::setup::<R8, R2>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
         .expect("server setup");
 
     let batch = client
         .batch_query::<T, N3>(&input.idxs, &mut prg)
         .expect("batch_query");
+
     // cascade + repack are the server backend's behaviour now.
     let answer = server.answer_batch::<T>(&batch).expect("answer_batch");
+
     let recovered: Vec<R2> = client
         .recover_batch::<R4, R4, R4, N3, T>(&answer, q3, q4, p)
         .expect("recover_batch");
