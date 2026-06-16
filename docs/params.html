@@ -37,6 +37,7 @@
                 >
                 <nav>
                     <a href="intro.html">Intro to VIA</a>
+                    <a href="architecture.html">Architecture</a>
                     <a href="implementation.html">Implementation details</a>
                     <a href="params.html" class="on">Parameters</a>
                     <a href="audit.html">Audit</a>
@@ -118,7 +119,6 @@
                 <thead>
                     <tr>
                         <th>Artifact</th>
-                        <th>Party</th>
                         <th>What it is</th>
                     </tr>
                 </thead>
@@ -132,7 +132,6 @@
                                 >Paper</a
                             >
                         </td>
-                        <td>authors (Liu/Wang/Zhang)</td>
                         <td>
                             the claims: 110-bit security, \(2^{-40}\) correctness
                         </td>
@@ -146,7 +145,6 @@
                                 >owniai/VIA</a
                             >
                         </td>
-                        <td>authors</td>
                         <td>
                             their own C++ / Intel-HEXL implementation &mdash;
                             <strong>the implementation the review measured</strong>
@@ -162,10 +160,9 @@
                                 >via-spec</a
                             >
                         </td>
-                        <td>Turan (a reviewer)</td>
                         <td>
                             a Python reference implementation (VIA + VIA-C);
-                            <strong>via-rs ports this</strong>
+                            <strong>an anchor for via-rs implementation</strong>
                         </td>
                     </tr>
                     <tr>
@@ -177,7 +174,6 @@
                                 >Security review</a
                             >
                         </td>
-                        <td>Yue et al. (Turan, Yue, Keewoo; Yue Chen)</td>
                         <td>
                             audits the <em>paper</em>, using owniai/VIA as the
                             implementation evidence; carries the authors' May-11
@@ -193,7 +189,6 @@
                                 >via-rs</a
                             >
                         </td>
-                        <td>Rohit</td>
                         <td>
                             the Rust port of via-spec &mdash; <strong>what this
                             site audits</strong>; adds VIA-B
