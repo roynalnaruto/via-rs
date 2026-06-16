@@ -2,3 +2,6 @@ target/
 .references/
 .docs/
 .planning/
+
+# Packaged Claude skill artifact (kept in-repo for convenience, not tracked)
+*.skill

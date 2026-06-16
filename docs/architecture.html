@@ -1,0 +1,1300 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Architecture (abstract scheme)</title>
+        <link rel="stylesheet" href="style.css" />
+        <script
+            src="https://unpkg.com/react@18/umd/react.production.min.js"
+            crossorigin
+        ></script>
+        <script
+            src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+            crossorigin
+        ></script>
+        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html"
+                    >VIA &middot; Documentation</a
+                >
+                <nav>
+                    <a href="intro.html">Intro to VIA</a>
+                    <a href="architecture.html" class="on">Architecture</a>
+                    <a href="implementation.html">Implementation details</a>
+                    <a href="params.html">Parameters</a>
+                    <a href="audit.html">Audit</a>
+                    <a
+                        href="https://github.com/roynalnaruto/via-rs"
+                        target="_blank"
+                        rel="noopener"
+                        >Repo &#8599;</a
+                    >
+                </nav>
+            </div>
+        </header>
+        <div id="root"></div>
+
+        <script type="text/babel">
+            const { useState } = React;
+
+            // ─── Palette ──────────────────────────────────────────────
+            const C = {
+                bg: "#ffffff",
+                bgAlt: "#f8f9fb",
+                bgTint: "#f2f5f9",
+                border: "#d4dce8",
+                client: "#1d4ed8",
+                clientBg: "#eff6ff",
+                server: "#15803d",
+                serverBg: "#f0fdf4",
+                crypto: "#b45309",
+                cryptoBg: "#fffbeb",
+                state: "#6d28d9",
+                stateBg: "#f5f3ff",
+                msg: "#0e7490",
+                msgBg: "#ecfeff",
+                neutral: "#374151",
+                dim: "#9ca3af",
+                dimMid: "#6b7280",
+                black: "#111827",
+                grid: "#e9eef5",
+            };
+            const FONT = "'IBM Plex Mono','Fira Code',monospace";
+            const SANS =
+                "'IBM Plex Sans','Segoe UI',-apple-system,sans-serif";
+            const css = `
+              @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+              #root *{box-sizing:border-box;}
+              .tab-btn{cursor:pointer;border:none;background:none;font-family:${SANS};transition:all .15s;}
+              .tab-btn:hover{background:#f0f4ff;}
+              .node-g{cursor:default;}
+              .node-g:hover .node-rect{filter:brightness(0.97);}
+              .dm-card{border:1px solid ${C.border};border-radius:8px;overflow:hidden;}
+              .dm-card table{border-collapse:collapse;width:100%;}
+              .dm-card th,.dm-card td{padding:6px 11px;text-align:left;border-top:1px solid ${C.border};font-size:11px;font-family:${FONT};}
+              .dm-card td{color:${C.neutral};}
+              .dm-card td.k{color:${C.black};white-space:nowrap;}
+            `;
+
+            const TABS = [
+                "① Architecture",
+                "② Primitive stack",
+                "③ Setup (offline)",
+                "④ Query → Answer",
+                "⑤ Data model",
+            ];
+
+            // ─── shared SVG helpers ───────────────────────────────────
+            function Grid({ w, h, step = 24 }) {
+                const L = [];
+                for (let i = 0; i <= h / step; i++)
+                    L.push(
+                        <line
+                            key={"h" + i}
+                            x1={0}
+                            y1={i * step}
+                            x2={w}
+                            y2={i * step}
+                            stroke={C.grid}
+                            strokeWidth={0.5}
+                        />,
+                    );
+                for (let i = 0; i <= w / step; i++)
+                    L.push(
+                        <line
+                            key={"v" + i}
+                            x1={i * step}
+                            y1={0}
+                            x2={i * step}
+                            y2={h}
+                            stroke={C.grid}
+                            strokeWidth={0.5}
+                        />,
+                    );
+                return <g>{L}</g>;
+            }
+            function ArrowMarker({ id, color }) {
+                return (
+                    <marker
+                        id={id}
+                        markerWidth={8}
+                        markerHeight={8}
+                        refX={7}
+                        refY={4}
+                        orient="auto"
+                    >
+                        <polygon points="0 1, 8 4, 0 7" fill={color} />
+                    </marker>
+                );
+            }
+
+            // ─── generic node+edge diagram with hover detail ──────────
+            function FlowDiagram({ W, H, zones, nodes, edges, legend, note }) {
+                const [hov, setHov] = useState(null);
+                const map = Object.fromEntries(nodes.map((n) => [n.id, n]));
+                const ctr = (id) => {
+                    const n = map[id];
+                    return { x: n.x + n.w / 2, y: n.y + n.h / 2 };
+                };
+                function pts(e) {
+                    const a = map[e.from],
+                        b = map[e.to];
+                    const ac = ctr(e.from),
+                        bc = ctr(e.to);
+                    const dx = bc.x - ac.x,
+                        dy = bc.y - ac.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const nx = dx / len,
+                        ny = dy / len;
+                    return {
+                        x1: ac.x + (nx * a.w) / 2,
+                        y1: ac.y + (ny * a.h) / 2,
+                        x2: bc.x - (nx * b.w) / 2,
+                        y2: bc.y - (ny * b.h) / 2,
+                    };
+                }
+                return (
+                    <div style={{ position: "relative", fontFamily: FONT }}>
+                        {(zones || []).map((z, i) => (
+                            <div
+                                key={i}
+                                style={{
+                                    position: "absolute",
+                                    left: z.x,
+                                    top: z.y,
+                                    color: z.color,
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    letterSpacing: 1.4,
+                                    width: z.w || 190,
+                                    borderBottom: `1px solid ${z.color}30`,
+                                    paddingBottom: 2,
+                                }}
+                            >
+                                {z.label}
+                            </div>
+                        ))}
+                        <svg width={W} height={H} style={{ display: "block", maxWidth: "100%" }}>
+                            <Grid w={W} h={H} />
+                            <defs>
+                                {edges.map((e, i) => (
+                                    <ArrowMarker
+                                        key={i}
+                                        id={"ar" + i}
+                                        color={e.color}
+                                    />
+                                ))}
+                            </defs>
+                            {(zones || []).map(
+                                (z, i) =>
+                                    z.box && (
+                                        <rect
+                                            key={i}
+                                            x={z.box.x}
+                                            y={z.box.y}
+                                            width={z.box.w}
+                                            height={z.box.h}
+                                            rx={5}
+                                            fill="none"
+                                            stroke={z.color}
+                                            strokeWidth={1}
+                                            strokeDasharray="6 3"
+                                            opacity={0.3}
+                                        />
+                                    ),
+                            )}
+                            {edges.map((e, i) => {
+                                const { x1, y1, x2, y2 } = pts(e);
+                                const mx = (x1 + x2) / 2,
+                                    my = (y1 + y2) / 2;
+                                const on = hov === e.from || hov === e.to;
+                                const dash =
+                                    e.style === "dot"
+                                        ? "2 4"
+                                        : e.style === "dash"
+                                          ? "7 3"
+                                          : "none";
+                                return (
+                                    <g key={i}>
+                                        <line
+                                            x1={x1}
+                                            y1={y1}
+                                            x2={x2}
+                                            y2={y2}
+                                            stroke={e.color}
+                                            strokeWidth={on ? 2.2 : 1.2}
+                                            strokeDasharray={dash}
+                                            markerEnd={`url(#ar${i})`}
+                                            opacity={on ? 1 : 0.5}
+                                        />
+                                        {e.label && (
+                                            <text
+                                                x={mx}
+                                                y={my - 3}
+                                                fill={e.color}
+                                                fontSize={8}
+                                                textAnchor="middle"
+                                                fontFamily={FONT}
+                                                opacity={on ? 1 : 0.62}
+                                            >
+                                                {e.label}
+                                            </text>
+                                        )}
+                                    </g>
+                                );
+                            })}
+                            {nodes.map((n) => {
+                                const on = hov === n.id;
+                                return (
+                                    <g
+                                        key={n.id}
+                                        className="node-g"
+                                        onMouseEnter={() => setHov(n.id)}
+                                        onMouseLeave={() => setHov(null)}
+                                    >
+                                        <rect
+                                            className="node-rect"
+                                            x={n.x}
+                                            y={n.y}
+                                            width={n.w}
+                                            height={n.h}
+                                            rx={5}
+                                            fill={n.bg}
+                                            stroke={on ? n.color : C.border}
+                                            strokeWidth={on ? 2 : 1}
+                                            style={{
+                                                filter: on
+                                                    ? `drop-shadow(0 2px 8px ${n.color}33)`
+                                                    : "none",
+                                            }}
+                                        />
+                                        <rect
+                                            x={n.x}
+                                            y={n.y}
+                                            width={n.w}
+                                            height={17}
+                                            rx={5}
+                                            fill={n.color + "14"}
+                                        />
+                                        <text
+                                            x={n.x + n.w / 2}
+                                            y={n.y + 12}
+                                            fill={n.color}
+                                            fontSize={9.5}
+                                            fontWeight={700}
+                                            textAnchor="middle"
+                                            fontFamily={FONT}
+                                        >
+                                            {n.label}
+                                        </text>
+                                        {n.sub && (
+                                            <text
+                                                x={n.x + n.w / 2}
+                                                y={n.y + 30}
+                                                fill={C.dimMid}
+                                                fontSize={8}
+                                                textAnchor="middle"
+                                                fontFamily={FONT}
+                                            >
+                                                {n.sub}
+                                            </text>
+                                        )}
+                                        {n.h >= 44 && (
+                                            <text
+                                                x={n.x + n.w / 2}
+                                                y={n.y + (n.sub ? 42 : 34)}
+                                                fill={n.color}
+                                                fontSize={7.5}
+                                                textAnchor="middle"
+                                                fontFamily={FONT}
+                                                opacity={0.75}
+                                            >
+                                                hover ⓘ
+                                            </text>
+                                        )}
+                                    </g>
+                                );
+                            })}
+                        </svg>
+                        {hov &&
+                            map[hov] &&
+                            map[hov].info &&
+                            (() => {
+                                const n = map[hov];
+                                const tipX = n.x + n.w + 14;
+                                return (
+                                    <div
+                                        style={{
+                                            position: "absolute",
+                                            left:
+                                                tipX > W - 250
+                                                    ? Math.max(8, n.x - 252)
+                                                    : tipX,
+                                            top: Math.min(n.y, H - 150),
+                                            background: C.bg,
+                                            border: `1.5px solid ${n.color}55`,
+                                            borderRadius: 7,
+                                            padding: "10px 13px",
+                                            width: 244,
+                                            boxShadow:
+                                                "0 6px 20px rgba(0,0,0,0.13)",
+                                            zIndex: 30,
+                                            fontFamily: FONT,
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                color: n.color,
+                                                fontSize: 11,
+                                                fontWeight: 700,
+                                                marginBottom: 5,
+                                            }}
+                                        >
+                                            {n.label}
+                                        </div>
+                                        {n.info.map((m, i) => (
+                                            <div
+                                                key={i}
+                                                style={{
+                                                    color: C.neutral,
+                                                    fontSize: 9.5,
+                                                    lineHeight: 1.55,
+                                                    borderLeft: `2px solid ${n.color}33`,
+                                                    paddingLeft: 8,
+                                                    marginBottom: 3,
+                                                }}
+                                            >
+                                                {m}
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        {legend && (
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 18,
+                                    marginTop: 10,
+                                    paddingLeft: 4,
+                                    fontFamily: FONT,
+                                }}
+                            >
+                                {legend.map((l, i) => (
+                                    <div
+                                        key={i}
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 6,
+                                        }}
+                                    >
+                                        <svg width={26} height={10}>
+                                            <defs>
+                                                <ArrowMarker
+                                                    id={"lg" + i}
+                                                    color={l.color}
+                                                />
+                                            </defs>
+                                            <line
+                                                x1={2}
+                                                y1={5}
+                                                x2={20}
+                                                y2={5}
+                                                stroke={l.color}
+                                                strokeWidth={1.6}
+                                                strokeDasharray={l.dash || "none"}
+                                                markerEnd={`url(#lg${i})`}
+                                            />
+                                        </svg>
+                                        <span
+                                            style={{
+                                                color: C.dimMid,
+                                                fontSize: 9,
+                                            }}
+                                        >
+                                            {l.label}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {note && (
+                            <p
+                                style={{
+                                    fontFamily: SANS,
+                                    fontSize: 12,
+                                    color: C.dimMid,
+                                    marginTop: 12,
+                                    maxWidth: 760,
+                                    lineHeight: 1.5,
+                                }}
+                            >
+                                {note}
+                            </p>
+                        )}
+                    </div>
+                );
+            }
+
+            // small helper: stack items down a column
+            function col(items, x, w, y0, h, gap) {
+                return items.map((it, i) => ({
+                    ...it,
+                    x,
+                    w,
+                    h,
+                    y: y0 + i * (h + gap),
+                }));
+            }
+
+            // ════════════════ ① ARCHITECTURE ════════════════
+            function TabArch() {
+                const clientBoxes = col(
+                    [
+                        {
+                            id: "idx",
+                            label: "Index decomposition",
+                            sub: "i → α,β,γ",
+                            color: C.client,
+                            bg: C.clientBg,
+                            info: [
+                                "i = γ·IJ + α·J + β  →  (row α, col β, slot γ)",
+                                "public, noiseless; never transmitted",
+                            ],
+                        },
+                        {
+                            id: "qenc",
+                            label: "Query encoder",
+                            sub: "encrypt the bits",
+                            color: C.client,
+                            bg: C.clientBg,
+                            info: [
+                                "(α,β,γ) → { LWE@q1(bit) }  (≈ ℓ·log N elts)",
+                                "where privacy lives — semantic security hides i",
+                            ],
+                        },
+                        {
+                            id: "kgen",
+                            label: "Key generator",
+                            sub: "offline pp",
+                            color: C.client,
+                            bg: C.clientBg,
+                            info: [
+                                "s → pp = { cascade keys, ring-switch key, RLWE→RGSW key }",
+                                "key-dependent (encodes s, s²) ⇒ circular/KDM assumption",
+                            ],
+                        },
+                        {
+                            id: "rec",
+                            label: "Recover / decode",
+                            sub: "decrypt-and-round",
+                            color: C.client,
+                            bg: C.clientBg,
+                            info: [
+                                "Answer → X[i] = round((p/q4)(body − mask·s2)) mod p",
+                                "VIA-B: also deinterleave T records",
+                            ],
+                        },
+                    ],
+                    24,
+                    156,
+                    78,
+                    50,
+                    18,
+                );
+                const cryptoBoxes = col(
+                    [
+                        {
+                            id: "rlwe",
+                            label: "RLWE / MLWE",
+                            sub: "base ciphertext",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "Enc(s,m) = (a, a·s + e + Δm),  Δ = q/p",
+                                "semantic security ≡ RLWE/MLWE hardness",
+                            ],
+                        },
+                        {
+                            id: "ext",
+                            label: "External product ⊡",
+                            sub: "the one multiply",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "RGSW(μ) ⊡ RLWE(m) → RLWE(μ·m)",
+                                "additive noise — why depth stays in budget",
+                                "needs gadget decomposition + RLev/RGSW",
+                            ],
+                        },
+                        {
+                            id: "gates",
+                            label: "Gates",
+                            sub: "DMux · CMux · CRot",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "DMux: route by encrypted bit (→ one-hot)",
+                                "CMux: select by encrypted bit",
+                                "CRot: rotate by encrypted amount",
+                                "all built from the external product",
+                            ],
+                        },
+                        {
+                            id: "sw",
+                            label: "Switching",
+                            sub: "key · mod · ring",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "key-switch: change secret key",
+                                "mod-switch: q → q' (scales noise down)",
+                                "ring-switch: R(n1) → R(n2)",
+                            ],
+                        },
+                        {
+                            id: "conv",
+                            label: "Conversion",
+                            sub: "LWE→RLWE · RLWE→RGSW",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "LWE→RLWE: pack LWEs into one RLWE, O(n log n) noise",
+                                "RLWE→RGSW: upgrade a bit so it can drive gates (uses RLevₛ(s²))",
+                            ],
+                        },
+                        {
+                            id: "rep",
+                            label: "Repacking",
+                            sub: "VIA-B",
+                            color: C.crypto,
+                            bg: C.cryptoBg,
+                            info: [
+                                "{ RLWE(Xᵢ) } → one RLWE,  depth log₂(T·n1/n2)",
+                                "reuses the conversion cascade keys (no new offline payload)",
+                            ],
+                        },
+                    ],
+                    250,
+                    186,
+                    78,
+                    52,
+                    16,
+                );
+                const msgBoxes = col(
+                    [
+                        {
+                            id: "keys",
+                            label: "Public keys",
+                            sub: "client → server, once",
+                            color: C.msg,
+                            bg: C.msgBg,
+                            info: [
+                                "cascade keys @q1, ring-switch key, RLWE→RGSW key",
+                                "index-independent ⇒ leak nothing about i",
+                            ],
+                        },
+                        {
+                            id: "query",
+                            label: "Query",
+                            sub: "client → server",
+                            color: C.msg,
+                            bg: C.msgBg,
+                            info: [
+                                "≈ ℓ·log N elements of Z(q1)  — Õ(log N)",
+                                "the carrier of privacy",
+                            ],
+                        },
+                        {
+                            id: "ans",
+                            label: "Answer",
+                            sub: "server → client",
+                            color: C.msg,
+                            bg: C.msgBg,
+                            info: [
+                                "(mask @ q3, body @ q4) over R(n2) — ≈ constant",
+                                "VIA-B: T interleaved records",
+                            ],
+                        },
+                    ],
+                    490,
+                    158,
+                    96,
+                    52,
+                    34,
+                );
+                const serverBoxes = col(
+                    [
+                        {
+                            id: "qdec",
+                            label: "Query decompression",
+                            sub: "→ RGSW controls",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: [
+                                "LWE→RLWE then RLWE→RGSW",
+                                "rebuilds C_ctrl, C_sel, C_rot",
+                            ],
+                        },
+                        {
+                            id: "dtree",
+                            label: "DMux tree",
+                            sub: "row select (dim 1)",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: [
+                                "expand log I control bits → one-hot over I rows",
+                                "+θ_DMux · log I",
+                            ],
+                        },
+                        {
+                            id: "fdim",
+                            label: "First-dimension fold",
+                            sub: "Σ over rows",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: [
+                                "Σ_i c_i · db[i,j] for each column j",
+                                "dominant noise term (~ I·n1·θ·p²/4)",
+                            ],
+                        },
+                        {
+                            id: "ctree",
+                            label: "CMux tree",
+                            sub: "col select (dim 2)",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: ["select column β over J", "+θ_CMux · log J"],
+                        },
+                        {
+                            id: "crt",
+                            label: "CRot stage",
+                            sub: "slot select",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: ["rotate to expose slot γ", "+θ_crot"],
+                        },
+                        {
+                            id: "rcomp",
+                            label: "Response compression",
+                            sub: "mod · ring · rescale",
+                            color: C.server,
+                            bg: C.serverBg,
+                            info: [
+                                "mod-switch q2→q3, ring-switch n1→n2, rescale to q4",
+                                "VIA-B repacks first; output must land under Δ/2",
+                            ],
+                        },
+                    ],
+                    706,
+                    178,
+                    78,
+                    50,
+                    16,
+                );
+                const nodes = [
+                    ...clientBoxes,
+                    ...cryptoBoxes,
+                    ...msgBoxes,
+                    ...serverBoxes,
+                ];
+                const E = (from, to, label, style, color) => ({
+                    from,
+                    to,
+                    label,
+                    style,
+                    color,
+                });
+                const edges = [
+                    // client internal + messages
+                    E("idx", "qenc", "feeds", "solid", C.client),
+                    E("qenc", "query", "creates", "dash", C.msg),
+                    E("kgen", "keys", "creates", "dash", C.msg),
+                    E("qenc", "conv", "compresses via", "dot", C.crypto),
+                    // messages → server
+                    E("query", "qdec", "input", "solid", C.msg),
+                    E("keys", "qdec", "enables", "dot", C.msg),
+                    // server pipeline
+                    E("qdec", "dtree", "", "solid", C.server),
+                    E("dtree", "fdim", "", "solid", C.server),
+                    E("fdim", "ctree", "", "solid", C.server),
+                    E("ctree", "crt", "", "solid", C.server),
+                    E("crt", "rcomp", "", "solid", C.server),
+                    E("rcomp", "ans", "creates", "dash", C.server),
+                    E("ans", "rec", "decodes", "dash", C.msg),
+                    // crypto internal stack (built-on)
+                    E("ext", "rlwe", "on", "solid", C.crypto),
+                    E("gates", "ext", "built on", "solid", C.crypto),
+                    E("conv", "ext", "built on", "solid", C.crypto),
+                    E("rep", "conv", "reuses", "solid", C.crypto),
+                ];
+                const zones = [
+                    {
+                        label: "CLIENT",
+                        x: 22,
+                        y: 56,
+                        w: 160,
+                        color: C.client,
+                        box: { x: 18, y: 70, w: 168, h: 290 },
+                    },
+                    {
+                        label: "CRYPTO PRIMITIVES",
+                        x: 248,
+                        y: 56,
+                        w: 192,
+                        color: C.crypto,
+                        box: { x: 244, y: 70, w: 198, h: 420 },
+                    },
+                    {
+                        label: "MESSAGES",
+                        x: 488,
+                        y: 74,
+                        w: 160,
+                        color: C.msg,
+                        box: { x: 484, y: 88, w: 170, h: 290 },
+                    },
+                    {
+                        label: "SERVER",
+                        x: 704,
+                        y: 56,
+                        w: 180,
+                        color: C.server,
+                        box: { x: 700, y: 70, w: 186, h: 414 },
+                    },
+                ];
+                return (
+                    <FlowDiagram
+                        W={900}
+                        H={510}
+                        zones={zones}
+                        nodes={nodes}
+                        edges={edges}
+                        legend={[
+                            { color: C.crypto, label: "uses / built-on" },
+                            { color: C.msg, dash: "7 3", label: "creates / sends message" },
+                            { color: C.server, label: "pipeline order" },
+                            { color: C.msg, dash: "2 4", label: "enables (offline keys)" },
+                        ]}
+                        note="The client never reveals i: it sends only ciphertexts (Query) and index-independent keys. The server runs an oblivious pipeline (top→bottom on the right) built entirely from the crypto primitives in the centre. Crypto-internal wiring is the Primitive stack tab; which primitive each server step uses is in its hover."
+                    />
+                );
+            }
+
+            // ════════════════ ② PRIMITIVE STACK ════════════════
+            function TabStack() {
+                const N = (id, label, sub, x, y, w, color, bg, info) => ({
+                    id,
+                    label,
+                    sub,
+                    x,
+                    y,
+                    w,
+                    h: 46,
+                    color,
+                    bg,
+                    info,
+                });
+                const cr = [C.crypto, C.cryptoBg];
+                const nodes = [
+                    N("alg", "Ring algebra", "R(n,q), NTT · sampling", 280, 470, 240, C.dimMid, C.bgAlt, ["Z_q, RNS/CRT, negacyclic ring R = Z_q[X]/(Xⁿ+1)", "NTT for fast multiply; PRG + Gaussian/ternary sampling"]),
+                    N("rlwe", "RLWE / MLWE", "base encryption", 150, 380, 200, ...cr, ["Enc(s,m) = (a, a·s+e+Δm)", "decrypt-and-round while |e| < Δ/2"]),
+                    N("gad", "Gadget decomposition", "approximate, base B len ℓ", 430, 380, 220, ...cr, ["x → ℓ small base-B digits; reconstruct ≈ x", "(B,ℓ) is the master noise knob"]),
+                    N("rgsw", "RLev / RGSW", "for multiplication", 280, 296, 240, ...cr, ["RLev = ℓ RLWEs at gadget powers", "RGSW = ( RLev(μ), RLev(μ·s) )"]),
+                    N("ext", "External product  ⊡", "RGSW × RLWE → RLWE", 250, 212, 300, ...cr, ["RGSW(μ) ⊡ RLWE(m) → RLWE(μ·m)", "ADDITIVE noise — the keystone of the whole scheme"]),
+                    N("sw", "Switching", "key · mod · ring", 40, 120, 200, ...cr, ["key-switch, modulus-switch, ring-switch", "change key / modulus / ring, preserve message"]),
+                    N("gate", "Gates", "DMux · CMux · CRot", 300, 120, 200, ...cr, ["route / select / rotate by an encrypted bit", "each is one external product"]),
+                    N("conv", "Conversion", "LWE→RLWE · RLWE→RGSW", 560, 120, 220, ...cr, ["LWE→RLWE: O(n log n) packing", "RLWE→RGSW: upgrade a bit to drive gates"]),
+                    N("rep", "Repacking", "VIA-B", 600, 40, 180, ...cr, ["pack T answers into one ciphertext", "borrows the conversion cascade keys"]),
+                    N("prot", "Protocol", "Setup · Query · Answer · Recover", 60, 40, 360, C.client, C.clientBg, ["the four algorithms composed from everything below"]),
+                ];
+                const Ec = C.crypto;
+                const edges = [
+                    { from: "alg", to: "rlwe", color: Ec },
+                    { from: "alg", to: "gad", color: Ec },
+                    { from: "rlwe", to: "rgsw", color: Ec },
+                    { from: "gad", to: "rgsw", color: Ec },
+                    { from: "gad", to: "ext", color: Ec },
+                    { from: "rgsw", to: "ext", color: Ec },
+                    { from: "ext", to: "gate", color: Ec },
+                    { from: "ext", to: "conv", color: Ec },
+                    { from: "rlwe", to: "sw", color: Ec },
+                    { from: "gad", to: "sw", color: Ec },
+                    { from: "sw", to: "conv", color: Ec },
+                    { from: "conv", to: "rep", color: Ec },
+                    { from: "sw", to: "prot", color: C.dimMid },
+                    { from: "gate", to: "prot", color: C.dimMid },
+                    { from: "conv", to: "prot", color: C.dimMid },
+                    { from: "rep", to: "prot", color: C.dimMid },
+                ];
+                return (
+                    <FlowDiagram
+                        W={840}
+                        H={540}
+                        nodes={nodes}
+                        edges={edges}
+                        legend={[{ color: Ec, label: "is built from (arrow points up the stack)" }]}
+                        note="Read bottom-up: each layer is constructed from the ones beneath it. The whole scheme rests on one multiplication primitive — the external product (with additive noise) — and one packing primitive — the LWE→RLWE conversion (with O(n log n) noise). Hover a layer for its contract."
+                    />
+                );
+            }
+
+            // ════════════════ ③ SETUP (offline) ════════════════
+            function TabSetup() {
+                const nodes = [
+                    { id: "cl", label: "Client", sub: "", x: 70, y: 40, w: 150, h: 30, color: C.client, bg: C.clientBg },
+                    { id: "sv", label: "Server", sub: "", x: 600, y: 40, w: 150, h: 30, color: C.server, bg: C.serverBg },
+                    { id: "samp", label: "Sample secret keys", sub: "s, S1, S2 ← χ_S", x: 50, y: 110, w: 190, h: 50, color: C.client, bg: C.clientBg, info: ["secret keys for the big ring (S1) and small ring (S2)", "distributions χ_S, χ_E set the security ↔ noise balance (see Parameters)"] },
+                    { id: "derive", label: "Derive public keys pp", sub: "cascade · ring-switch · RLWE→RGSW", x: 50, y: 195, w: 190, h: 58, color: C.client, bg: C.clientBg, info: ["cascade keys for LWE→RLWE", "ring-switch key S1→S2", "RLWE→RGSW key = RLevₛ(s²)  ← key-dependent"] },
+                    { id: "store", label: "Store pp", sub: "reused for all queries", x: 580, y: 195, w: 190, h: 50, color: C.server, bg: C.serverBg, info: ["pp is independent of any index i", "reused across every Query (no per-query offline cost)"] },
+                    { id: "kdm", label: "circular / KDM assumption", sub: "pp encrypts functions of s under s", x: 250, y: 300, w: 300, h: 50, color: C.state, bg: C.stateBg, info: ["RLWE→RGSW key is RLevₛ(s²); cascade key-switches between related keys", "paper assumes circular/KDM explicitly (§3.2, App C.1) — but the reduction only discharges MLWE"] },
+                ];
+                const edges = [
+                    { from: "samp", to: "derive", color: C.client, style: "solid" },
+                    { from: "derive", to: "store", label: "send pp (one round)", color: C.msg, style: "dash" },
+                    { from: "derive", to: "kdm", label: "relies on", color: C.state, style: "dot" },
+                ];
+                return (
+                    <FlowDiagram
+                        W={800}
+                        H={380}
+                        nodes={nodes}
+                        edges={edges}
+                        legend={[
+                            { color: C.msg, dash: "7 3", label: "message" },
+                            { color: C.state, dash: "2 4", label: "security assumption" },
+                        ]}
+                        note="VIA-C/VIA-B allow a one-time, index-independent offline phase: the client publishes evaluation keys the server reuses for every query (plain VIA has no offline phase). Because those keys encrypt functions of the secret key, soundness needs a circular/KDM assumption on top of MLWE — flagged in violet."
+                    />
+                );
+            }
+
+            // ════════════════ ④ QUERY → ANSWER (online) ════════════════
+            function TabOnline() {
+                const x1 = 40, x2 = 560, w = 220;
+                const nodes = [
+                    { id: "cl", label: "Client", sub: "", x: x1 + 30, y: 30, w: 160, h: 28, color: C.client, bg: C.clientBg },
+                    { id: "sv", label: "Server", sub: "", x: x2, y: 30, w: 200, h: 28, color: C.server, bg: C.serverBg },
+                    { id: "enc", label: "Decompose i + encrypt bits", sub: "q1", x: x1, y: 90, w: w, h: 46, color: C.client, bg: C.clientBg, info: ["i → (α,β,γ); encrypt each bit as LWE@q1", "compressed via LWE→RLWE"] },
+                    { id: "dec", label: "1 · Query decompression", sub: "q1", x: x2, y: 90, w: w, h: 46, color: C.server, bg: C.serverBg, info: ["LWE→RLWE→RGSW → C_ctrl, C_sel, C_rot"] },
+                    { id: "dm", label: "2 · DMux tree (row)", sub: "q1", x: x2, y: 152, w: w, h: 40, color: C.server, bg: C.serverBg, info: ["one-hot over I rows; +θ_DMux·log I"] },
+                    { id: "ms", label: "3 · mod-switch", sub: "q1 → q2", x: x2, y: 206, w: w, h: 36, color: C.server, bg: C.serverBg, info: ["scale noise + ciphertext down"] },
+                    { id: "fd", label: "4 · first-dimension fold", sub: "q2", x: x2, y: 256, w: w, h: 40, color: C.server, bg: C.serverBg, info: ["Σ_i c_i·db[i,j]; dominant noise term"] },
+                    { id: "cm", label: "5 · CMux tree (column)", sub: "q2", x: x2, y: 310, w: w, h: 40, color: C.server, bg: C.serverBg, info: ["select column β; +θ_CMux·log J"] },
+                    { id: "cr", label: "6 · CRot (slot)", sub: "q2", x: x2, y: 364, w: w, h: 36, color: C.server, bg: C.serverBg, info: ["rotate to slot γ"] },
+                    { id: "rc", label: "7 · response compression", sub: "q2→q3→q4, n1→n2", x: x2, y: 414, w: w, h: 44, color: C.server, bg: C.serverBg, info: ["VIA-B repacks T results first", "mod-switch, ring-switch, rescale to the tiny answer"] },
+                    { id: "rec", label: "Recover X[i]", sub: "decode @ q4", x: x1, y: 414, w: w, h: 44, color: C.client, bg: C.clientBg, info: ["decrypt-and-round; correct iff |E| < Δ/2 = (q4/p)/2"] },
+                ];
+                const edges = [
+                    { from: "enc", to: "dec", label: "Query  (Õ(log N))", color: C.msg, style: "dash" },
+                    { from: "dec", to: "dm", color: C.server },
+                    { from: "dm", to: "ms", color: C.server },
+                    { from: "ms", to: "fd", color: C.server },
+                    { from: "fd", to: "cm", color: C.server },
+                    { from: "cm", to: "cr", color: C.server },
+                    { from: "cr", to: "rc", color: C.server },
+                    { from: "rc", to: "rec", label: "Answer  (≈ const)", color: C.msg, style: "dash" },
+                ];
+                return (
+                    <FlowDiagram
+                        W={800}
+                        H={478}
+                        nodes={nodes}
+                        edges={edges}
+                        legend={[
+                            { color: C.msg, dash: "7 3", label: "message on the wire" },
+                            { color: C.server, label: "server step (oblivious)" },
+                        ]}
+                        note="The online round trip. The sub-labels track the modulus chain q1 > q2 > q3 > q4: each mod-/ring-switch walks the ciphertext (and its noise) down to the tiny final answer, which the client decodes at q4. Every server step runs identically regardless of i."
+                    />
+                );
+            }
+
+            // ════════════════ ⑤ DATA MODEL ════════════════
+            function Card({ title, color, rows }) {
+                return (
+                    <div className="dm-card" style={{ flex: "1 1 300px", minWidth: 280 }}>
+                        <div
+                            style={{
+                                background: color + "14",
+                                color: color,
+                                fontWeight: 700,
+                                fontSize: 12,
+                                padding: "7px 11px",
+                                fontFamily: FONT,
+                                borderBottom: `1px solid ${color}30`,
+                            }}
+                        >
+                            {title}
+                        </div>
+                        <table>
+                            <tbody>
+                                {rows.map((r, i) => (
+                                    <tr key={i}>
+                                        <td className="k">{r[0]}</td>
+                                        <td>{r[1]}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            }
+            function TabData() {
+                return (
+                    <div style={{ fontFamily: SANS }}>
+                        <div
+                            style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 16,
+                                maxWidth: 920,
+                            }}
+                        >
+                            <Card
+                                title="Query  (client → server)"
+                                color={C.msg}
+                                rows={[
+                                    ["ciphertexts", "≈ ℓ·log N LWE samples"],
+                                    ["modulus", "q1 (≈ 2⁷⁵ for VIA-C)"],
+                                    ["encodes", "bits of (α row, β col, γ slot)"],
+                                    ["size", "Õ(log N)  — the headline metric"],
+                                ]}
+                            />
+                            <Card
+                                title="Answer  (server → client)"
+                                color={C.msg}
+                                rows={[
+                                    ["mask", "R(n2) element @ q3"],
+                                    ["body", "R(n2) element @ q4"],
+                                    ["ring", "small ring n2 = 512"],
+                                    ["VIA-B", "carries T interleaved records"],
+                                ]}
+                            />
+                            <Card
+                                title="Public keys pp  (offline, once)"
+                                color={C.state}
+                                rows={[
+                                    ["cascade keys", "for LWE→RLWE, @ q1"],
+                                    ["ring-switch key", "S1 → S2"],
+                                    ["RLWE→RGSW key", "RLevₛ(s²)  — key-dependent"],
+                                    ["property", "index-independent; reused for all i"],
+                                ]}
+                            />
+                            <Card
+                                title="Parameters / state"
+                                color={C.crypto}
+                                rows={[
+                                    ["rings", "n1 > n2 (> n3 for VIA-B)"],
+                                    ["modulus chain", "q1 > q2 > q3 > q4 > p"],
+                                    ["database", "I × J grid, d = n1/n2 per cell"],
+                                    ["budget", "‖E_final‖ < Δ/2  (target 2⁻⁴⁰)"],
+                                ]}
+                            />
+                        </div>
+                        <p
+                            style={{
+                                fontSize: 12,
+                                color: C.dimMid,
+                                marginTop: 14,
+                                maxWidth: 760,
+                                lineHeight: 1.5,
+                            }}
+                        >
+                            The wire objects and the parameters they carry.
+                            Concrete values for every parameter (and how the three
+                            sources — paper, code, review — disagree on them) are
+                            on the{" "}
+                            <a href="params.html" style={{ color: C.client }}>
+                                Parameters
+                            </a>{" "}
+                            page.
+                        </p>
+                    </div>
+                );
+            }
+
+            // ════════════════ APP SHELL ════════════════
+            const CHIPS = [
+                {
+                    val: "Õ(log N)",
+                    sub: "online communication",
+                    col: C.client,
+                    detail: [
+                        "VIA's headline metric is how much data crosses the wire per query. Naive PIR sends O(N); VIA keeps online communication poly-logarithmic in the database size N.",
+                        "Plain VIA already removes the offline phase at Õ(1) online cost. VIA-C goes further: the LWE→RLWE conversion compresses the query to ≈ ℓ·log N elements of Z(q1), and response compression squeezes the answer to a near-constant (mask @ q3, body @ q4). VIA-B amortizes a batch of T queries into one answer.",
+                    ],
+                },
+                {
+                    val: "RLWE · MLWE",
+                    sub: "hardness assumption",
+                    col: C.crypto,
+                    detail: [
+                        "Privacy reduces to the hardness of (Ring / Module) Learning With Errors. The server only ever sees ciphertexts of the index bits, so telling which record was fetched is as hard as breaking RLWE/MLWE.",
+                        "There are several independent instances — the big ring R(n1,q1) and the small ring — each parameterized by (n, q, σ), and each must clear the security target on its own. The paper claims 110-bit classical security via the lattice estimator; reviewers measured ~88 / ~72 bits on the authors' implementation (see the Parameters page).",
+                    ],
+                },
+                {
+                    val: "circular",
+                    sub: "+ KDM assumption",
+                    col: C.state,
+                    detail: [
+                        "Beyond MLWE, VIA-C/B need a circular-security / key-dependent-message (KDM) assumption. Plain semantic security only hides messages that are independent of the secret key — and VIA's offline keys are not.",
+                        "The RLWE→RGSW conversion key is RLevₛ(s²) — an encryption of s² under s — and the LWE→RLWE cascade key-switches between related keys. So pp encrypts functions of the secret under the secret, which standard MLWE does not cover.",
+                        "The paper names this assumption explicitly (§3.2, Appendix C.1), but its security reduction only discharges MLWE at each step — the KDM assumption is declared, not formally used. Treat it as load-bearing. Plain VIA, having no conversion keys, does not need it.",
+                    ],
+                },
+                {
+                    val: "semi-honest",
+                    sub: "threat model",
+                    col: C.server,
+                    detail: [
+                        "VIA targets an honest-but-curious server: one that follows the protocol but tries to learn the index from what it sees. Security is computational query-indistinguishability (paper §2.1) — for any two indices i, j the queries are computationally indistinguishable given the public keys.",
+                        "There is no integrity or verifiability guarantee against a malicious server that deviates or returns a wrong/forged answer; the paper does not claim one. Correctness is stated for an honestly-run Answer.",
+                    ],
+                },
+            ];
+            function App() {
+                const [tab, setTab] = useState(0);
+                const [chip, setChip] = useState(null);
+                const panels = [
+                    TabArch,
+                    TabStack,
+                    TabSetup,
+                    TabOnline,
+                    TabData,
+                ];
+                const Panel = panels[tab];
+                return (
+                    <div style={{ background: C.bg, fontFamily: SANS }}>
+                        <style>{css}</style>
+                        <div
+                            style={{
+                                padding: "20px 28px 12px",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-end",
+                                flexWrap: "wrap",
+                                gap: 12,
+                                maxWidth: 1000,
+                                margin: "0 auto",
+                            }}
+                        >
+                            <div>
+                                <div
+                                    style={{
+                                        color: C.dim,
+                                        fontSize: 9,
+                                        letterSpacing: 2.4,
+                                        marginBottom: 3,
+                                        fontFamily: FONT,
+                                    }}
+                                >
+                                    ABSTRACT ARCHITECTURE · THE SCHEME, NOT THE CODEBASE
+                                </div>
+                                <div
+                                    style={{
+                                        color: C.black,
+                                        fontSize: 21,
+                                        fontWeight: 700,
+                                    }}
+                                >
+                                    VIA single-server PIR
+                                </div>
+                                <div
+                                    style={{
+                                        color: C.dimMid,
+                                        fontSize: 10.5,
+                                        marginTop: 2,
+                                        fontFamily: FONT,
+                                    }}
+                                >
+                                    Liu, Wang &amp; Zhang (2025) ·{" "}
+                                    <a
+                                        href="https://eprint.iacr.org/2025/2074"
+                                        target="_blank"
+                                        rel="noopener"
+                                        style={{ color: C.client }}
+                                    >
+                                        eprint 2025/2074
+                                    </a>{" "}
+                                    · this is an abstract system view of the
+                                    scheme; for the as-built crates see{" "}
+                                    <a
+                                        href="implementation.html"
+                                        style={{ color: C.client }}
+                                    >
+                                        Implementation details
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            style={{
+                                maxWidth: 1000,
+                                margin: "0 auto",
+                                padding: "20px 28px 30px",
+                            }}
+                        >
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: 9,
+                                    flexWrap: "wrap",
+                                    alignItems: "center",
+                                }}
+                            >
+                                {CHIPS.map((b, i) => (
+                                    <button
+                                        key={i}
+                                        className="tab-btn"
+                                        onClick={() =>
+                                            setChip(chip === i ? null : i)
+                                        }
+                                        style={{
+                                            border: `1px solid ${b.col}${chip === i ? "" : "30"}`,
+                                            background:
+                                                chip === i
+                                                    ? b.col + "14"
+                                                    : b.col + "08",
+                                            borderRadius: 6,
+                                            padding: "6px 12px",
+                                            textAlign: "center",
+                                            minWidth: 80,
+                                            cursor: "pointer",
+                                            boxShadow:
+                                                chip === i
+                                                    ? `0 0 0 2px ${b.col}33`
+                                                    : "none",
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                color: b.col,
+                                                fontWeight: 700,
+                                                fontSize: 13,
+                                                fontFamily: FONT,
+                                            }}
+                                        >
+                                            {b.val}
+                                        </div>
+                                        <div
+                                            style={{
+                                                color: C.dim,
+                                                fontSize: 8,
+                                                fontFamily: FONT,
+                                            }}
+                                        >
+                                            {b.sub}
+                                        </div>
+                                    </button>
+                                ))}
+                                <span
+                                    style={{
+                                        fontSize: 9,
+                                        color: C.dim,
+                                        fontFamily: FONT,
+                                        letterSpacing: 0.5,
+                                    }}
+                                >
+                                    click for detail
+                                </span>
+                            </div>
+                            {chip !== null && (
+                                <div
+                                    style={{
+                                        marginTop: 12,
+                                        border: `1px solid ${CHIPS[chip].col}44`,
+                                        background: CHIPS[chip].col + "08",
+                                        borderRadius: 8,
+                                        padding: "13px 16px",
+                                        maxWidth: 820,
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            color: CHIPS[chip].col,
+                                            fontWeight: 700,
+                                            fontSize: 13,
+                                            fontFamily: FONT,
+                                            marginBottom: 7,
+                                        }}
+                                    >
+                                        {CHIPS[chip].val} — {CHIPS[chip].sub}
+                                    </div>
+                                    {CHIPS[chip].detail.map((para, i) => (
+                                        <p
+                                            key={i}
+                                            style={{
+                                                fontFamily: SANS,
+                                                fontSize: 12.5,
+                                                color: C.neutral,
+                                                lineHeight: 1.55,
+                                                margin: "0 0 8px",
+                                            }}
+                                        >
+                                            {para}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            style={{
+                                display: "flex",
+                                borderBottom: `1px solid ${C.border}`,
+                                borderTop: `1px solid ${C.border}`,
+                                background: C.bgAlt,
+                                padding: "0 20px",
+                                maxWidth: 1000,
+                                margin: "0 auto",
+                                flexWrap: "wrap",
+                            }}
+                        >
+                            {TABS.map((t, i) => (
+                                <button
+                                    key={i}
+                                    className="tab-btn"
+                                    onClick={() => setTab(i)}
+                                    style={{
+                                        padding: "10px 15px",
+                                        color: tab === i ? C.client : C.dimMid,
+                                        borderBottom:
+                                            tab === i
+                                                ? `2px solid ${C.client}`
+                                                : "2px solid transparent",
+                                        fontSize: 11,
+                                        fontFamily: FONT,
+                                        fontWeight: tab === i ? 700 : 400,
+                                        background: tab === i ? C.bg : "none",
+                                    }}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                        <div
+                            style={{
+                                padding: "22px 16px 60px",
+                                overflowX: "auto",
+                                maxWidth: 1000,
+                                margin: "0 auto",
+                            }}
+                        >
+                            <Panel />
+                        </div>
+                    </div>
+                );
+            }
+
+            ReactDOM.createRoot(document.getElementById("root")).render(
+                <App />,
+            );
+        </script>
+    </body>
+</html>
