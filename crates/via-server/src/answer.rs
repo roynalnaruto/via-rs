@@ -45,6 +45,7 @@ use crate::prepared_db::PreparedDb;
 use crate::prepared_keys::PreparedKeys;
 use crate::query_decomp::query_decomp;
 use crate::resp_comp::resp_comp;
+use crate::scheme::{Scheme, ServerScheme};
 
 /// Steps 1–6 of the VIA-C answer pipeline (QueryDecomp → DMux → ModSwitch →
 /// FirstDim → CMux → CRot), extracted as the **variant-common** prefix returning
@@ -289,8 +290,7 @@ pub fn answer_one_query<
     const N2: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
     R2: RingPoly<N1> + RingPolyEval<N1>,
-    R3L: RingPoly<N1, Projected<N2> = R3>,
-    R3: RingPoly<N2, Modulus = R3L::Modulus> + RingPolyEval<N2>,
+    R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     K: Zeroize + CascadeKey,
     const L_QUERY: usize,
@@ -305,11 +305,13 @@ pub fn answer_one_query<
     prepared_keys: &PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
     q1_mod: R1::Modulus,
     q2_mod: R2::Modulus,
-    q3_mod: R3L::Modulus,
+    q3_mod: R3::Modulus,
     q4_mod: R4::Modulus,
     cascade: CascadeFn,
 ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
 where
+    // The q3-at-n1 ring-switch input is `R3::Embedded<N1>` (RespComp derives it).
+    R3::Embedded<N1>: RingPoly<N1, Projected<N2> = R3>,
     CascadeFn:
         Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
 {
@@ -337,7 +339,7 @@ where
 
     // --- Step 7: RespComp — paper-asymmetric q2 → q3 → n2 → q4 ------------
     let answer = tracing::debug_span!("step7_resp_comp").in_scope(|| {
-        resp_comp::<N1, N2, R2, R3L, R3, R4, L_RSK, D>(
+        resp_comp::<N1, N2, R2, R3, R4, L_RSK, D>(
             &rotated,
             &prepared_keys.rsk,
             q3_mod,
@@ -349,66 +351,104 @@ where
     Ok(answer)
 }
 
-/// A VIA-C server: public parameters + the pre-encoded database + the four ring
-/// moduli, bundled so the caller issues `server.answer(&query, cascade)` instead
-/// of the 9-argument [`answer_one_query`].
-///
-/// The engine is generic over the ring backend (toy single-prime `Poly` or
-/// paper RNS `PolyRns`); [`Server::answer`] returns the raw paper-asymmetric
-/// [`ModSwitchedCiphertext`]. The wire type `via_protocol::CompressedAnswer` is
-/// **locked to the paper q3/q4 rings** (the VIA-C answer is always at paper
-/// moduli), so the paper instantiation wraps the result —
-/// `CompressedAnswer::new(server.answer(&q, cascade)?)` — at the wire boundary;
-/// the generic `Server` stays one rung below it (and so is testable at the toy
-/// rings). VIA-B will likewise wrap [`answer_one_query`] directly.
-///
-/// The four moduli are stored (they cannot be reconstructed from
-/// [`PIRParams`](via_protocol::PIRParams) generically); the cascade function is
-/// supplied per `answer` call.
+/// Compile-time configuration handed to [`Server::setup`]: the public parameters
+/// plus the four ring moduli (the ex-fields of [`Server`]). The DB `records` and
+/// their plaintext modulus `p` are passed to `setup` separately (the data plane).
+/// The four moduli are stored because they cannot be reconstructed from
+/// [`PIRParams`](via_protocol::PIRParams) generically.
+pub struct ServerConfig<
+    Rg: ServerScheme<N1, N2>,
+    const N1: usize,
+    const N2: usize,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> {
+    /// Query-compression + ring-switch keys, PIR params, and DB dimensions.
+    pub public_params: PublicParams<Rg::K, N1, N2, Rg::R1, Rg::R3, L_QUERY, L_CK, L_RSK, D>,
+    /// $q_1$ modulus (n1, cascade stage).
+    pub q1_mod: <Rg::R1 as RingPoly<N1>>::Modulus,
+    /// $q_2$ modulus (n1, DMux/FirstDim/CMux/CRot stage).
+    pub q2_mod: <Rg::R2 as RingPoly<N1>>::Modulus,
+    /// $q_3$ modulus (n2, RespComp ring-switch stage).
+    pub q3_mod: <Rg::R3 as RingPoly<N2>>::Modulus,
+    /// $q_4$ modulus (n2, final answer stage).
+    pub q4_mod: <Rg::R4 as RingPoly<N2>>::Modulus,
+}
+
+impl<
+    Rg: ServerScheme<N1, N2>,
+    const N1: usize,
+    const N2: usize,
+    const L_QUERY: usize,
+    const L_CK: usize,
+    const L_RSK: usize,
+    const D: usize,
+> ServerConfig<Rg, N1, N2, L_QUERY, L_CK, L_RSK, D>
+{
+    /// Bundle the public parameters and the four moduli. The modulus arguments
+    /// pin the backend `Rg`, so the surrounding `let server` rarely needs a turbofish.
+    pub fn new(
+        public_params: PublicParams<Rg::K, N1, N2, Rg::R1, Rg::R3, L_QUERY, L_CK, L_RSK, D>,
+        q1_mod: <Rg::R1 as RingPoly<N1>>::Modulus,
+        q2_mod: <Rg::R2 as RingPoly<N1>>::Modulus,
+        q3_mod: <Rg::R3 as RingPoly<N2>>::Modulus,
+        q4_mod: <Rg::R4 as RingPoly<N2>>::Modulus,
+    ) -> Self {
+        Self {
+            public_params,
+            q1_mod,
+            q2_mod,
+            q3_mod,
+            q4_mod,
+        }
+    }
+}
+
+/// A VIA server: public parameters + the pre-encoded database + the four ring
+/// moduli, bundled so the caller issues `server.answer(&query)` instead of the
+/// 9-argument [`answer_one_query`]. The crypto backend — the four ring types,
+/// the cascade-key type, and the cascade/repack ops — is selected by `Rg`; see
+/// [`ServerScheme`]. [`Server::answer`] returns the raw paper-asymmetric
+/// [`ModSwitchedCiphertext`]; the paper instantiation wraps it in
+/// `via_protocol::CompressedAnswer` at the wire boundary.
 ///
 /// # Constant-time: No
 ///
 /// Answering branches only on public data (query ciphertexts, the cleartext
 /// database); see [`answer_one_query`].
 pub struct Server<
-    K: Zeroize + CascadeKey,
+    Rg: ServerScheme<N1, N2>,
     const N1: usize,
     const N2: usize,
     // Record degree: VIA-C packs `N_REC = N2`; VIA-B the finer `N_REC = N3 ≤ N2`
     // (more records per cell, more CRot bits). Gates only `setup_db`'s packing.
     const N_REC: usize,
-    R1: RingPoly<N1> + RingPolyEval<N1>,
-    R2: RingPoly<N1> + RingPolyEval<N1>,
-    R3: RingPoly<N2> + RingPolyEval<N2>,
-    R4: RingPoly<N2>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
 > {
-    public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-    prepared_db: PreparedDb<N1, R2>,
-    prepared_keys: PreparedKeys<N1, N2, R1, R3, K, L_CK, L_RSK, D>,
-    q1_mod: R1::Modulus,
-    q2_mod: R2::Modulus,
-    q3_mod: R3::Modulus,
-    q4_mod: R4::Modulus,
+    public_params: PublicParams<Rg::K, N1, N2, Rg::R1, Rg::R3, L_QUERY, L_CK, L_RSK, D>,
+    prepared_db: PreparedDb<N1, Rg::R2>,
+    prepared_keys: PreparedKeys<N1, N2, Rg::R1, Rg::R3, Rg::K, L_CK, L_RSK, D>,
+    q1_mod: <Rg::R1 as RingPoly<N1>>::Modulus,
+    q2_mod: <Rg::R2 as RingPoly<N1>>::Modulus,
+    q3_mod: <Rg::R3 as RingPoly<N2>>::Modulus,
+    q4_mod: <Rg::R4 as RingPoly<N2>>::Modulus,
 }
 
 impl<
-    K: Zeroize + CascadeKey,
+    Rg: ServerScheme<N1, N2>,
     const N1: usize,
     const N2: usize,
     const N_REC: usize,
-    R1: RingPoly<N1> + RingPolyEval<N1>,
-    R2: RingPoly<N1> + RingPolyEval<N1>,
-    R3: RingPoly<N2> + RingPolyEval<N2>,
-    R4: RingPoly<N2>,
     const L_QUERY: usize,
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> Server<K, N1, N2, N_REC, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>
+> Server<Rg, N1, N2, N_REC, L_QUERY, L_CK, L_RSK, D>
 {
     /// Compile-time `N_REC` consistency: the record ring must be a non-trivial
     /// power-of-two divisor of `N1` that fits within the query-compression ring.
@@ -428,28 +468,42 @@ impl<
         );
     };
 
-    /// Build a server from raw `p`-encoded records and public parameters.
+    /// Build a server from raw `p`-encoded records and a [`ServerConfig`].
     ///
     /// Encodes the `I×J` database via [`setup_db`](crate::setup_db()) (packing
-    /// `d3 = N1/N_REC` records per cell at modulus `p`), then pre-transforms it to
-    /// eval form at `q2` ([`PreparedDb`]) so [`answer`](Server::answer) does no
-    /// per-query DB transform. `RRec` is the record ring at `(p, n_rec)`; `p_mod`
-    /// is its modulus.
-    #[allow(clippy::too_many_arguments)]
+    /// `d3 = N1/N_REC` records per cell at the plaintext modulus `p`), then
+    /// pre-transforms it to eval form at `q2` ([`PreparedDb`]) so
+    /// [`answer`](Server::answer) does no per-query DB transform. `RRec` is the
+    /// record ring at $(p, n_{rec})$; `p_mod` is its modulus.
+    ///
+    /// # Errors
+    ///
+    /// [`ViaError::DimMismatch`] if `records.len()` exceeds the DB capacity
+    /// $\text{num\\_rows} \cdot \text{num\\_cols} \cdot (N_1 / N_{rec})$ (which
+    /// would silently drop records); fewer records than capacity are zero-padded.
     pub fn setup<Rp, RRec>(
+        config: ServerConfig<Rg, N1, N2, L_QUERY, L_CK, L_RSK, D>,
         records: &[RRec],
-        public_params: PublicParams<K, N1, N2, R1, R3, L_QUERY, L_CK, L_RSK, D>,
-        q1_mod: R1::Modulus,
-        q2_mod: R2::Modulus,
-        q3_mod: R3::Modulus,
-        q4_mod: R4::Modulus,
         p_mod: Rp::Modulus,
-    ) -> Self
+    ) -> Result<Self, ViaError>
     where
         Rp: RingPoly<N1>,
         RRec: RingPoly<N_REC, Modulus = Rp::Modulus, Embedded<N1> = Rp>,
     {
         let () = Self::_CHECK;
+        let ServerConfig {
+            public_params,
+            q1_mod,
+            q2_mod,
+            q3_mod,
+            q4_mod,
+        } = config;
+        let capacity = public_params.num_rows * public_params.num_cols * (N1 / N_REC);
+        if records.len() > capacity {
+            return Err(ViaError::DimMismatch(
+                "setup: more records than DB capacity (would silently drop)",
+            ));
+        }
         let encoded_db = crate::setup_db::setup_db::<N1, N_REC, Rp, RRec>(
             records,
             public_params.num_rows,
@@ -457,10 +511,10 @@ impl<
             p_mod,
         );
         // Pre-transform to eval form at q2 (the `p→q2` lift + forward NTT), once.
-        let prepared_db = PreparedDb::<N1, R2>::from_encoded(&encoded_db, q2_mod);
+        let prepared_db = PreparedDb::<N1, Rg::R2>::from_encoded(&encoded_db, q2_mod);
         // Pre-transform the static answer keys (conv key + RSK) to eval form, once (T7).
         let prepared_keys = PreparedKeys::from_public_params(&public_params);
-        Self {
+        Ok(Self {
             public_params,
             prepared_db,
             prepared_keys,
@@ -468,26 +522,21 @@ impl<
             q2_mod,
             q3_mod,
             q4_mod,
-        }
+        })
     }
 
     /// Run the 7-step answer pipeline for one query (delegates to
-    /// [`answer_one_query`]; see it for the error conditions).
-    ///
-    /// `R3L` is the `q3`-at-`n1` `mod_switch_sym` intermediate
-    /// (`Projected<N2> = R3`); supply it at the call site (toy: the `q3` ring at
-    /// `n1`; paper-scale: `ViaCPolyQ3` at `n1`).
-    pub fn answer<R3L, CascadeFn>(
+    /// [`answer_one_query`], supplying the backend's
+    /// [`cascade`](ServerScheme::cascade)). The q3-at-n1 `mod_switch_sym`
+    /// intermediate is derived internally as `R3::Embedded<N1>`.
+    pub fn answer(
         &self,
-        query: &CompressedQuery<N1, 1, R1::Projected<1>>,
-        cascade: CascadeFn,
-    ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
+        query: &CompressedQuery<N1, 1, <Rg::R1 as RingPoly<N1>>::Projected<1>>,
+    ) -> Result<ModSwitchedCiphertext<N2, Rg::R3, Rg::R4>, ViaError>
     where
-        R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
-        CascadeFn:
-            Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
+        <Rg::R3 as RingPoly<N2>>::Embedded<N1>: RingPoly<N1, Projected<N2> = Rg::R3>,
     {
-        answer_one_query::<N1, N2, R1, R2, R3L, R3, R4, K, L_QUERY, L_CK, L_RSK, D, CascadeFn>(
+        answer_one_query::<N1, N2, Rg::R1, Rg::R2, Rg::R3, Rg::R4, Rg::K, L_QUERY, L_CK, L_RSK, D, _>(
             query,
             &self.public_params,
             &self.prepared_db,
@@ -496,45 +545,40 @@ impl<
             self.q2_mod,
             self.q3_mod,
             self.q4_mod,
-            cascade,
+            <Rg as ServerScheme<N1, N2>>::cascade,
         )
     }
 
-    /// VIA-B: run the batch answer pipeline for `T` queries — delegates to
-    /// [`answer_batch`](crate::batch::answer_batch) with the record degree fixed
-    /// to the server's `N_REC` (= `N3` for a [`ViaBServer`]). `repack` and
-    /// `cascade` are injected per call (same pattern as [`Server::answer`]'s
-    /// `cascade`); see the free function for the pipeline and error conditions.
+    /// VIA-B: run the batch answer pipeline for `T` queries (delegates to
+    /// [`answer_batch`](crate::batch::answer_batch), supplying the backend's
+    /// [`cascade`](ServerScheme::cascade) and [`repack`](ServerScheme::repack);
+    /// the repack-key derivation gets `q2` from `self`).
     #[cfg(feature = "via-b")]
-    pub fn answer_batch<R3L, const T: usize, RepackFn, CascadeFn>(
+    pub fn answer_batch<const T: usize>(
         &self,
-        batch: &via_protocol::BatchedQuery<N1, 1, R1::Projected<1>>,
-        repack: RepackFn,
-        cascade: CascadeFn,
-    ) -> Result<ModSwitchedCiphertext<N2, R3, R4>, ViaError>
+        batch: &via_protocol::BatchedQuery<N1, 1, <Rg::R1 as RingPoly<N1>>::Projected<1>>,
+    ) -> Result<ModSwitchedCiphertext<N2, Rg::R3, Rg::R4>, ViaError>
     where
-        R3L: RingPoly<N1, Projected<N2> = R3, Modulus = R3::Modulus>,
-        RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
-        CascadeFn:
-            Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
+        <Rg::R3 as RingPoly<N2>>::Embedded<N1>: RingPoly<N1, Projected<N2> = Rg::R3>,
     {
+        let q2 = self.q2_mod;
+        let ck_base = self.public_params.ck_base;
         crate::batch::answer_batch::<
             N1,
             N2,
             N_REC,
             T,
-            R1,
-            R2,
-            R3L,
-            R3,
-            R4,
-            K,
+            Rg::R1,
+            Rg::R2,
+            Rg::R3,
+            Rg::R4,
+            Rg::K,
             L_QUERY,
             L_CK,
             L_RSK,
             D,
-            RepackFn,
-            CascadeFn,
+            _,
+            _,
         >(
             batch,
             &self.public_params,
@@ -544,16 +588,18 @@ impl<
             self.q2_mod,
             self.q3_mod,
             self.q4_mod,
-            repack,
-            cascade,
+            move |rotateds: &[RLWECiphertext<N1, Rg::R2>], k: &Rg::K| {
+                <Rg as ServerScheme<N1, N2>>::repack::<T>(rotateds, k, q2, ck_base)
+            },
+            <Rg as ServerScheme<N1, N2>>::cascade,
         )
     }
 }
 
-/// VIA-C server (M1): [`Server`] with the record degree fixed to `N_REC = N2`
-/// (one record-ring per query-compression slot — the VIA-C packing). The clean
-/// name for the VIA-C instantiation, hiding the `N_REC` slot the variant never
-/// varies; `ViaCServer<K, N1, N2, …>` ≡ `Server<K, N1, N2, N2, …>`.
+/// VIA-C server: [`Server`] with the record degree fixed to `N_REC = N2` (one
+/// record-ring per query-compression slot — the VIA-C packing), over the
+/// [`Scheme`] carrier.
+/// `ViaCServer<K, N1, N2, R1, R2, R3, R4, …>` ≡ `Server<Scheme<K,R1,R2,R3,R4>, N1, N2, N2, …>`.
 #[allow(type_alias_bounds)]
 pub type ViaCServer<
     K: Zeroize + CascadeKey,
@@ -567,12 +613,12 @@ pub type ViaCServer<
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> = Server<K, N1, N2, N2, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>;
+> = Server<Scheme<K, R1, R2, R3, R4>, N1, N2, N2, L_QUERY, L_CK, L_RSK, D>;
 
 /// VIA-B server: [`Server`] with the record degree exposed as the finer
-/// `N_REC = N3 ≤ N2` (the VIA-B record ring). Gated on `via-b`; VIA-B's batch
-/// answer packs `T` of these finer records per query.
-/// `ViaBServer<K, N1, N2, N3, …>` ≡ `Server<K, N1, N2, N3, …>`.
+/// `N_REC = N3 ≤ N2` (the VIA-B record ring), over the
+/// [`Scheme`] carrier. Gated on `via-b`.
+/// `ViaBServer<K, N1, N2, N3, R1, R2, R3, R4, …>` ≡ `Server<Scheme<K,R1,R2,R3,R4>, N1, N2, N3, …>`.
 #[cfg(feature = "via-b")]
 #[allow(type_alias_bounds)]
 pub type ViaBServer<
@@ -588,7 +634,7 @@ pub type ViaBServer<
     const L_CK: usize,
     const L_RSK: usize,
     const D: usize,
-> = Server<K, N1, N2, N3, R1, R2, R3, R4, L_QUERY, L_CK, L_RSK, D>;
+> = Server<Scheme<K, R1, R2, R3, R4>, N1, N2, N3, L_QUERY, L_CK, L_RSK, D>;
 
 #[cfg(test)]
 mod tests {
@@ -732,7 +778,7 @@ mod tests {
         let query = zero_query(&s1, 3 * L_QUERY, &mut prg);
 
         let answer =
-            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+            answer_one_query::<N1, N2, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
                 &query,
                 &pp,
                 &db,
@@ -760,19 +806,18 @@ mod tests {
         let (pp, db, pk, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(2, 2, &records, &mut prg);
         let query = zero_query(&s1, 5, &mut prg); // expected 3·2 = 6
 
-        let err =
-            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
-                &query,
-                &pp,
-                &db,
-                &pk,
-                q1,
-                q2,
-                q3,
-                q4,
-                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
-            )
-            .unwrap_err();
+        let err = answer_one_query::<N1, N2, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+            &query,
+            &pp,
+            &db,
+            &pk,
+            q1,
+            q2,
+            q3,
+            q4,
+            lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
+        )
+        .unwrap_err();
         assert_eq!(
             err,
             ViaError::QueryLengthMismatch {
@@ -791,19 +836,18 @@ mod tests {
         let (pp, db, pk, s1, _s2, q1, q2, q3, q4, _p) = toy_setup(3, 2, &records, &mut prg);
         let query = zero_query(&s1, 6, &mut prg);
 
-        let err =
-            answer_one_query::<N1, N2, R8, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
-                &query,
-                &pp,
-                &db,
-                &pk,
-                q1,
-                q2,
-                q3,
-                q4,
-                lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
-            )
-            .unwrap_err();
+        let err = answer_one_query::<N1, N2, R8, R8, R4, R4, Cascade, L_QUERY, L_CK, L_RSK, D, _>(
+            &query,
+            &pp,
+            &db,
+            &pk,
+            q1,
+            q2,
+            q3,
+            q4,
+            lwe_to_rlwe_n8_eval::<DynModulus, L_CK>,
+        )
+        .unwrap_err();
         assert!(matches!(err, ViaError::DimMismatch(_)));
     }
 
@@ -894,7 +938,6 @@ mod tests {
             N2,
             N3,
             T,
-            R8,
             R8,
             R8,
             R4,

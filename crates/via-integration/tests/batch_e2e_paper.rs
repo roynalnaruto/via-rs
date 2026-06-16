@@ -27,18 +27,14 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
 use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
-use via_primitives::conversion::{
-    LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
-    repack_keys_poly_2048_t8_from_rns_cascade_boxed, repack_poly_2048_t8,
-};
-use via_primitives::encryption::types::RLWECiphertext;
+use via_primitives::conversion::{LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed};
 use via_primitives::params::{ViaCPolyP, ViaCPolyQ1Rns, ViaCPolyQ2, ViaCPolyQ3, ViaCPolyQ4};
 use via_primitives::sampling::distribution::Distribution;
 use via_primitives::sampling::prg::Shake256Prg;
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams};
-use via_server::ViaBServer;
+use via_server::{ServerConfig, ViaBServer};
 
 const N1: usize = 2048;
 const N2: usize = 512;
@@ -134,25 +130,17 @@ fn batch_round_trip(idxs: &[usize; T]) -> (Vec<Rec>, Vec<Rec>) {
 
     // --- Server setup: a DB of d3·I·J degree-n3 records (N_REC = N3) ---------
     let records: Vec<Rec> = (0..D3 * NUM_ROWS * NUM_COLS).map(record).collect();
-    let server = PaperBServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
+    let server =
+        PaperBServer::setup::<RpN1, Rec>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+            .expect("server setup");
 
     // --- Batch query → answer_batch → recover_batch --------------------------
     let batch = client
         .batch_query::<T, N3>(idxs, &mut prg)
         .expect("batch_query");
-    let answer = server
-        .answer_batch::<R3N1, T, _, _>(
-            &batch,
-            // Repack at single-prime q2: derive the q2 key (boxed, heap) from the
-            // RNS-q1 cascade key by cross-type mod-switch (cascade-key reuse), then pack.
-            |rotateds: &[RLWECiphertext<N1, R2>], k: &K| {
-                let q2_key = repack_keys_poly_2048_t8_from_rns_cascade_boxed(k, q2);
-                let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-                repack_poly_2048_t8(arr, &*q2_key, CK_BASE)
-            },
-            lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>,
-        )
-        .expect("answer_batch");
+    // cascade + repack (cross-type RNS-q1 → single-prime-q2 key reuse) are the
+    // server backend's behaviour now; `answer_batch::<T>` wires them.
+    let answer = server.answer_batch::<T>(&batch).expect("answer_batch");
     let recovered: Vec<Rec> = client
         .recover_batch::<R3N2, R4N2, Rp512, N3, T>(&answer, q3, q4, p)
         .expect("recover_batch");

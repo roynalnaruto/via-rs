@@ -234,7 +234,7 @@ fn toy_benches(c: &mut Criterion) {
         crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
     };
     let run_resp_comp = |rotated: &RLWECiphertext<N1, R8>| {
-        resp_comp::<N1, N2, R8, R8, R4, R4, L_RSK, D>(rotated, &rsk_eval, fx.q3, fx.q4, b_rsk)
+        resp_comp::<N1, N2, R8, R4, R4, L_RSK, D>(rotated, &rsk_eval, fx.q3, fx.q4, b_rsk)
     };
 
     // ── Build the chain ONCE (untimed) to obtain each step's input. ───────
@@ -317,7 +317,7 @@ fn toy_benches(c: &mut Criterion) {
             |mut prg| {
                 let query = fx.client.query(INDEX, &mut prg).expect("client query");
                 let ans =
-                    answer_one_query::<N1, N2, R8, R8, R8, R4, R4, K, L_QUERY, L_CK, L_RSK, D, _>(
+                    answer_one_query::<N1, N2, R8, R8, R4, R4, K, L_QUERY, L_CK, L_RSK, D, _>(
                         &query,
                         &fx.pp,
                         &fx.prepared_db,

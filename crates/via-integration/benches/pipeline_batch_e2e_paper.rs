@@ -34,18 +34,14 @@ mod b {
     use via_primitives::algebra::ring::element::Poly;
     use via_primitives::algebra::rns::basis::paper::ViaCQ1Rns;
     use via_primitives::algebra::zq::modulus::paper::{ViaCP, ViaCQ2, ViaCQ3, ViaCQ4};
-    use via_primitives::conversion::{
-        LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed, lwe_to_rlwe_rns_n2048_eval,
-        repack_keys_poly_2048_t8_from_rns_cascade_boxed, repack_poly_2048_t8,
-    };
-    use via_primitives::encryption::types::RLWECiphertext;
+    use via_primitives::conversion::{LweToRlweKeyRnsN2048, gen_lwe_to_rlwe_key_rns_n2048_boxed};
     use via_primitives::params::{ViaCPolyP, ViaCPolyQ1Rns, ViaCPolyQ2, ViaCPolyQ3, ViaCPolyQ4};
     use via_primitives::sampling::distribution::Distribution;
     use via_primitives::sampling::prg::Shake256Prg;
     use via_primitives::switching::gen_rsk;
     use via_primitives::switching::rekey::rekey_secret_key;
     use via_protocol::{BatchedQuery, KeyDist, PIRParams};
-    use via_server::ViaBServer;
+    use via_server::{ServerConfig, ViaBServer};
 
     const N1: usize = 2048;
     const N2: usize = 512;
@@ -121,7 +117,6 @@ mod b {
     struct Fixture {
         server: PaperBServer,
         batch: Batch,
-        q2: ViaCQ2,
     }
 
     /// Build the heavy fixture once (untimed): client+server setup at the given
@@ -155,12 +150,14 @@ mod b {
         .expect("client setup");
 
         let records: Vec<Rec> = (0..D3 * num_rows * num_cols).map(record).collect();
-        let server = PaperBServer::setup::<RpN1, Rec>(&records, pp, q1, q2, q3, q4, p);
+        let server =
+            PaperBServer::setup::<RpN1, Rec>(ServerConfig::new(pp, q1, q2, q3, q4), &records, p)
+                .expect("server setup");
 
         let batch = client
             .batch_query::<T, N3>(idxs, &mut prg)
             .expect("batch_query");
-        Fixture { server, batch, q2 }
+        Fixture { server, batch }
     }
 
     pub fn batch_e2e_paper_benches(c: &mut Criterion) {
@@ -170,22 +167,13 @@ mod b {
         let idxs: [usize; T] = [3, 17, 42, 5, 88, 100, 7, 120];
         let fx = build_fixture(num_rows, num_cols, &idxs);
 
-        // Repack at single-prime q2: derive the q2 key (boxed/heap) from the RNS-q1
-        // cascade key by cross-type mod-switch (cascade-key reuse), then pack — the injected
-        // closure `Server::answer_batch` calls between the prefix and resp_comp.
-        let q2 = fx.q2;
-        let repack = |rotateds: &[RLWECiphertext<N1, R2>], k: &K| {
-            let q2_key = repack_keys_poly_2048_t8_from_rns_cascade_boxed(k, q2);
-            let arr: &[_; T] = rotateds.try_into().expect("T rotated ciphertexts");
-            repack_poly_2048_t8(arr, &*q2_key, CK_BASE)
-        };
-        let cascade = lwe_to_rlwe_rns_n2048_eval::<ViaCQ1Rns, L_CK>;
-
+        // cascade + repack (cross-type RNS-q1 → single-prime-q2 key reuse) are the
+        // server backend's behaviour now; `answer_batch::<T>` wires them.
         c.bench_function("paper_batch/03_answer_batch_e2e", |b| {
             b.iter(|| {
                 black_box(
                     fx.server
-                        .answer_batch::<R3N1, T, _, _>(&fx.batch, &repack, cascade)
+                        .answer_batch::<T>(&fx.batch)
                         .expect("answer_batch"),
                 )
             })

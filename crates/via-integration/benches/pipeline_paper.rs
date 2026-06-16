@@ -246,9 +246,7 @@ fn paper_benches(c: &mut Criterion) {
         crot(CRotDir::SlotExtract, &crot_q2, selected, b2, b2)
     };
     let run_resp_comp = |rotated: &RLWECiphertext<N1, R2N1>| {
-        resp_comp::<N1, N2, R2N1, R3N1, R3N2, R4N2, L_RSK, D>(
-            rotated, &rsk_eval, fx.q3, fx.q4, b_rsk,
-        )
+        resp_comp::<N1, N2, R2N1, R3N2, R4N2, L_RSK, D>(rotated, &rsk_eval, fx.q3, fx.q4, b_rsk)
     };
 
     // Build the chain ONCE (untimed) to obtain each step's input.
@@ -338,7 +336,6 @@ fn paper_benches(c: &mut Criterion) {
                     N2,
                     R1,
                     R2N1,
-                    R3N1,
                     R3N2,
                     R4N2,
                     K,
