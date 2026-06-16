@@ -19,16 +19,12 @@ use via_primitives::algebra::ring::RingPoly;
 use via_primitives::algebra::ring::element::Poly;
 use via_primitives::algebra::ring::form::Coefficient;
 use via_primitives::algebra::zq::modulus::DynModulus;
-use via_primitives::conversion::{
-    LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8, lwe_to_rlwe_n8_eval,
-    repack_keys_n8_t2_from_cascade_modswitched, repack_n8_t2,
-};
-use via_primitives::encryption::types::RLWECiphertext;
+use via_primitives::conversion::{LweToRlweKeyN8, gen_lwe_to_rlwe_key_n8};
 use via_primitives::sampling::{Distribution, Shake256Prg};
 use via_primitives::switching::gen_rsk;
 use via_primitives::switching::rekey::rekey_secret_key;
 use via_protocol::{KeyDist, PIRParams};
-use via_server::ViaBServer;
+use via_server::{ServerConfig, ViaBServer};
 
 const N1: usize = 8;
 const N2: usize = 4;
