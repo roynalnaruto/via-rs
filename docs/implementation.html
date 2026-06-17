@@ -44,12 +44,12 @@
                     >VIA &middot; Documentation</a
                 >
                 <nav>
-                    <a href="intro.html">Intro to VIA</a>
-                    <a href="architecture.html">Architecture</a>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
                     <a href="implementation.html" class="on"
-                        >Implementation details</a
+                        >Impl</a
                     >
-                    <a href="params.html">Parameters</a>
+                    <a href="params.html">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -60,7 +60,7 @@
                 </nav>
             </div>
         </header>
-        <div class="wrap">
+        <div class="wrap" role="main">
             <h1 class="page-title">
                 Implementation details &mdash; architecture &amp; analysis
             </h1>
@@ -99,7 +99,7 @@
                 <a href="#footnotes">Footnotes</a> &middot;
                 <a href="audit.html">Audit &#8599;</a>
             </p>
-            <h3 id="summary">Summary</h3>
+            <h2 id="summary">Summary</h2>
             <p>
                 VIA is a lattice (RLWE/MLWE) single-server PIR family whose
                 headline trick is to
@@ -150,15 +150,15 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="construction">The scheme — variants &amp; construction</h3>
-            <table>
+            <h2 id="construction">The scheme — variants &amp; construction</h2>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Variant</th>
-                        <th>Offline comm.</th>
-                        <th>Online comm.</th>
-                        <th>Key idea</th>
-                        <th>In <code>via-rs</code>?</th>
+                        <th scope="col">Variant</th>
+                        <th scope="col">Offline comm.</th>
+                        <th scope="col">Online comm.</th>
+                        <th scope="col">Key idea</th>
+                        <th scope="col">In <code>via-rs</code>?</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -177,7 +177,7 @@
                     <tr>
                         <td><strong>VIA-C</strong></td>
                         <td>allowed (public params)</td>
-                        <td>\(O(\log N)\)</td>
+                        <td>\(\tilde O(1)\)</td>
                         <td>
                             VIA + LWE&rarr;RLWE / RLWE&rarr;RGSW query
                             compression; ring-switch <em>inside</em> response
@@ -201,7 +201,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Sources: paper Figures 4 (VIA), 8 (VIA-C), 9 (VIA-B).<sup
                     ><a href="#fn1" id="ref1c">1</a></sup
@@ -213,7 +213,7 @@
                 (PR #10).<sup><a href="#fn4" id="ref4b">4</a></sup>
             </p>
 
-            <h4>Database layout &amp; query decomposition</h4>
+            <h3>Database layout &amp; query decomposition</h3>
             <p>
                 <span
                     class="tag tag-paper"
@@ -241,9 +241,9 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="architecture">Architecture — as built</h3>
+            <h2 id="architecture">Architecture — as built</h2>
 
-            <h4>Crate &amp; layer dependency graph</h4>
+            <h3>Crate &amp; layer dependency graph</h3>
             <pre class="mermaid">
 graph TD
   subgraph PRIM["via-primitives (no_std)"]
@@ -273,7 +273,7 @@ graph TD
   </pre
             >
 
-            <h4>VIA-C end-to-end sequence</h4>
+            <h3>VIA-C end-to-end sequence</h3>
             <pre class="mermaid">
 sequenceDiagram
   participant C as Client
@@ -294,7 +294,7 @@ sequenceDiagram
   </pre
             >
 
-            <h4>Answer noise/modulus journey</h4>
+            <h3>Answer noise/modulus journey</h3>
             <pre class="mermaid">
 flowchart TD
   A["LWE at q1 (compressed query bits)"]
@@ -327,14 +327,14 @@ flowchart TD
                 accumulated variance stays under \(\Delta/2\).
             </p>
 
-            <h4>Primitive &rarr; paper map</h4>
-            <table>
+            <h3>Primitive &rarr; paper map</h3>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Primitive</th>
-                        <th>Where (code)</th>
-                        <th>Paper §</th>
-                        <th>Notes</th>
+                        <th scope="col">Primitive</th>
+                        <th scope="col">Where (code)</th>
+                        <th scope="col">Paper §</th>
+                        <th scope="col">Notes</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -417,10 +417,10 @@ flowchart TD
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="build">Build &amp; test status</h3>
+            <h2 id="build">Build &amp; test status</h2>
             <p>
                 <a
                     class="tag tag-code"
@@ -514,7 +514,7 @@ flowchart TD
             </ul>
 
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="footnotes">Footnotes</h3>
+            <h2 id="footnotes">Footnotes</h2>
             <ol class="footnotes">
                 <li id="fn1">
                     <a

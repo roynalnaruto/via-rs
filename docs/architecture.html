@@ -13,7 +13,11 @@
             src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
             crossorigin
         ></script>
-        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <!-- Pinned to Babel 7.x: this page uses UMD React globals and the
+             classic JSX runtime (React.createElement). Babel 8 changed the
+             default to the automatic runtime, which emits an unresolvable
+             `import … from "react/jsx-runtime"` and renders the page blank. -->
+        <script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
     </head>
     <body>
         <header class="site">
@@ -22,10 +26,10 @@
                     >VIA &middot; Documentation</a
                 >
                 <nav>
-                    <a href="intro.html">Intro to VIA</a>
-                    <a href="architecture.html" class="on">Architecture</a>
-                    <a href="implementation.html">Implementation details</a>
-                    <a href="params.html">Parameters</a>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html" class="on">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -36,7 +40,7 @@
                 </nav>
             </div>
         </header>
-        <div id="root"></div>
+        <main id="root"></main>
 
         <script type="text/babel">
             const { useState } = React;
@@ -58,7 +62,7 @@
                 msg: "#0e7490",
                 msgBg: "#ecfeff",
                 neutral: "#374151",
-                dim: "#9ca3af",
+                dim: "#6b7280",
                 dimMid: "#6b7280",
                 black: "#111827",
                 grid: "#e9eef5",
@@ -178,7 +182,17 @@
                                 {z.label}
                             </div>
                         ))}
-                        <svg width={W} height={H} style={{ display: "block", maxWidth: "100%" }}>
+                        <svg
+                            width={W}
+                            height={H}
+                            role="img"
+                            aria-label={
+                                note
+                                    ? "VIA scheme diagram. " + note
+                                    : "VIA scheme diagram showing components and data flow."
+                            }
+                            style={{ display: "block", maxWidth: "100%" }}
+                        >
                             <Grid w={W} h={H} />
                             <defs>
                                 {edges.map((e, i) => (
@@ -1088,7 +1102,7 @@
                             <div>
                                 <div
                                     style={{
-                                        color: C.dim,
+                                        color: C.dimMid,
                                         fontSize: 9,
                                         letterSpacing: 2.4,
                                         marginBottom: 3,
@@ -1097,15 +1111,19 @@
                                 >
                                     ABSTRACT ARCHITECTURE · THE SCHEME, NOT THE CODEBASE
                                 </div>
-                                <div
+                                <h1
                                     style={{
                                         color: C.black,
                                         fontSize: 21,
                                         fontWeight: 700,
+                                        margin: 0,
+                                        padding: 0,
+                                        border: "none",
+                                        letterSpacing: "-0.01em",
                                     }}
                                 >
                                     VIA single-server PIR
-                                </div>
+                                </h1>
                                 <div
                                     style={{
                                         color: C.dimMid,

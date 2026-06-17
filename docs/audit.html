@@ -44,10 +44,10 @@
                     >VIA &middot; Documentation</a
                 >
                 <nav>
-                    <a href="intro.html">Intro to VIA</a>
-                    <a href="architecture.html">Architecture</a>
-                    <a href="implementation.html">Implementation details</a>
-                    <a href="params.html">Parameters</a>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html">Params</a>
                     <a href="audit.html" class="on">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -58,7 +58,7 @@
                 </nav>
             </div>
         </header>
-        <div class="wrap">
+        <div class="wrap" role="main">
             <h1 class="page-title">
                 Audit &mdash; VIA-C &amp; VIA-B correctness &amp; security
             </h1>
@@ -99,7 +99,7 @@
                 <a href="#footnotes">Footnotes</a>
             </p>
 
-            <h3 id="summary">Summary</h3>
+            <h2 id="summary">Summary</h2>
             <div class="callout">
                 <strong>Scope &amp; commit pinning.</strong> The VIA-C findings
                 (A1&ndash;A8) below were performed at commit
@@ -141,7 +141,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="audit">VIA-C audit findings</h3>
+            <h2 id="audit">VIA-C audit findings</h2>
             <p class="key">
                 Severity:
                 <span
@@ -658,7 +658,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="validation">Audit-of-audit &mdash; adversarial validation</h3>
+            <h2 id="validation">Audit-of-audit &mdash; adversarial validation</h2>
             <p>
                 Every finding on this page (the VIA-C findings above and the
                 VIA-B follow-up below) was independently re-checked by a separate
@@ -685,12 +685,12 @@
                 page number, and one cross-finding \(\sigma\) mislabel), and
                 they are folded into the findings themselves.
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Finding</th>
-                        <th>Verdict</th>
-                        <th>What the re-check changed</th>
+                        <th scope="col">Finding</th>
+                        <th scope="col">Verdict</th>
+                        <th scope="col">What the re-check changed</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -828,11 +828,11 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="open-questions">Open questions &amp; uncertainties</h3>
+            <h2 id="open-questions">Open questions &amp; uncertainties</h2>
             <ul>
                 <li>
                     <strong
@@ -878,7 +878,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="via-b">VIA-B (batch) — follow-up audit</h3>
+            <h2 id="via-b">VIA-B (batch) — follow-up audit</h2>
             <p>
                 The findings above cover VIA-C at commit <code>9575286</code>.
                 This section covers the <strong>VIA-B</strong> batch variant
@@ -892,7 +892,7 @@
                 §4.5–4.7 (Fig 9) and Appendix C.
             </p>
 
-            <h4>What VIA-B adds, and how it answers a batch</h4>
+            <h3>What VIA-B adds, and how it answers a batch</h3>
             <p>
                 <span class="tag tag-code">code</span> VIA-B is a thin batch shell
                 over the VIA-C stack plus one new primitive layer,
@@ -936,7 +936,7 @@ flowchart TD
                 (\(T > n_1/n_3\)) is not implemented (see VB-6).
             </p>
 
-            <h4>Findings (VIA-B)</h4>
+            <h3>Findings (VIA-B)</h3>
 
             <div class="finding sev-critical" id="vb1">
                 <div class="f-head">
@@ -1116,7 +1116,7 @@ flowchart TD
                 <p class="conf">Confidence: high (read at source; borrow proven by an in-repo byte-identity equality test).</p>
             </div>
 
-            <h4>VIA-B build &amp; test</h4>
+            <h3>VIA-B build &amp; test</h3>
             <ul>
                 <li><span class="tag tag-code">code</span> Ran the toy batch suite: <code>via_b_toy_batch_roundtrip</code> + <code>via_b_toy_batch_covers_cells_and_slots</code> — <strong>2/2 pass</strong> (<code>cargo test -p via-integration --features via-b</code>; <code>ViaBToyParams</code>, ternary keys, 2×2 DB).</li>
                 <li><span class="tag tag-code">code</span> The 4×8-grid and paper-scale (T=8 / n3=64) batch e2e tests exist but are <code>#[ignore]</code>d (ternary keys, 2×2 DB).</li>
@@ -1125,7 +1125,7 @@ flowchart TD
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="footnotes">Footnotes</h3>
+            <h2 id="footnotes">Footnotes</h2>
             <ol class="footnotes">
                 <li id="fn1">
                     <em

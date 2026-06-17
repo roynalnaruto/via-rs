@@ -36,10 +36,10 @@
                     >VIA &middot; Documentation</a
                 >
                 <nav>
-                    <a href="intro.html">Intro to VIA</a>
-                    <a href="architecture.html">Architecture</a>
-                    <a href="implementation.html">Implementation details</a>
-                    <a href="params.html" class="on">Parameters</a>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html" class="on">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -50,7 +50,7 @@
                 </nav>
             </div>
         </header>
-        <div class="wrap">
+        <div class="wrap" role="main">
             <h1 class="page-title">
                 Parameters &mdash; the paper, the code &amp; the review,
                 reconciled
@@ -94,7 +94,7 @@
                 <a href="#caveats">Caveats for implementers</a>
             </p>
 
-            <h3 id="overview">Overview &mdash; one recipe, two targets, three sources</h3>
+            <h2 id="overview">Overview &mdash; one recipe, two targets, three sources</h2>
             <p>
                 VIA is not a single parameter set; it is a <em>recipe</em> for
                 choosing one. A parameterization is valid only if it clears two
@@ -115,11 +115,11 @@
                 from. <strong>Five artifacts by three parties</strong> are in
                 play, and keeping them straight is half the battle:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Artifact</th>
-                        <th>What it is</th>
+                        <th scope="col">Artifact</th>
+                        <th scope="col">What it is</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -195,7 +195,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 Lineage: the <strong>paper</strong> is realized by the authors'
                 C++ <strong>owniai/VIA</strong> and by Turan's Python
@@ -231,17 +231,17 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="knobs">The knobs</h3>
+            <h2 id="knobs">The knobs</h2>
             <p>
                 VIA is built on RLWE/MLWE, so its parameters are the usual
                 lattice-encryption knobs plus a few PIR-specific ones. Grouped:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Knob</th>
-                        <th>What it is</th>
-                        <th>Why it exists</th>
+                        <th scope="col">Knob</th>
+                        <th scope="col">What it is</th>
+                        <th scope="col">Why it exists</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -318,23 +318,23 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="tension">The security &harr; correctness tension</h3>
+            <h2 id="tension">The security &harr; correctness tension</h2>
             <p>
                 This is the whole game: the levers point in opposite directions.
                 Reading the table, "turn up" means increase that one knob holding
                 the others fixed.
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Turn up&hellip;</th>
-                        <th>Correctness (noise budget)</th>
-                        <th>Security (lattice hardness)</th>
-                        <th>Other cost</th>
+                        <th scope="col">Turn up&hellip;</th>
+                        <th scope="col">Correctness (noise budget)</th>
+                        <th scope="col">Security (lattice hardness)</th>
+                        <th scope="col">Other cost</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -390,7 +390,7 @@
                         <td>—</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 So "make decryption reliable" pulls toward <em>big \(q\), small
                 \(\sigma\), small gadget bases, many digits, small
@@ -407,7 +407,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="chain">The modulus chain &mdash; why it descends</h3>
+            <h2 id="chain">The modulus chain &mdash; why it descends</h2>
             <p>
                 VIA does not use a single modulus; it uses a descending chain
                 \(q_1 > q_2 > q_3 > q_4 > p\), mod-switching down between stages.
@@ -443,7 +443,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="reconcile">Side by side &mdash; paper · code · review</h3>
+            <h2 id="reconcile">Side by side &mdash; paper · code · review</h2>
             <p>
                 One structural fact first, because it shapes every table below:
                 <span class="tag tag-code">code</span> the repository has
@@ -457,20 +457,20 @@
                 instantiation; \(n_1=2048,\ n_2=512\) throughout.
             </p>
 
-            <h4>The contested values, at a glance</h4>
+            <h3>The contested values, at a glance</h3>
             <p>
                 Where the three sources disagree, that disagreement <em>is</em>
                 the finding. The rest of this section gives the full numbers;
                 this table is the map.
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Parameter (VIA-C)</th>
-                        <th><span class="tag tag-paper">paper</span></th>
-                        <th><span class="tag tag-code">code</span></th>
-                        <th>Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a></th>
-                        <th>Status</th>
+                        <th scope="col">Parameter (VIA-C)</th>
+                        <th scope="col"><span class="tag tag-paper">paper</span></th>
+                        <th scope="col"><span class="tag tag-code">code</span></th>
+                        <th scope="col">Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a></th>
+                        <th scope="col">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -543,15 +543,15 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
-            <h4>Rings &amp; modulus chain</h4>
-            <table>
+            <h3>Rings &amp; modulus chain</h3>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Quantity</th>
-                        <th>VIA</th>
-                        <th>VIA-C &amp; VIA-B</th>
+                        <th scope="col">Quantity</th>
+                        <th scope="col">VIA</th>
+                        <th scope="col">VIA-C &amp; VIA-B</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -608,7 +608,7 @@
                         <td>16</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> Appendix B, p.22
                 (moduli) &amp; §5.1, p.16 (dimensions); <span class="tag tag-code">code</span>
@@ -637,20 +637,18 @@
                 >.
                 <span class="tag tag-infer">inference</span> Caveats: the
                 code's VIA-C moduli match the paper exactly; only plain-VIA's
-                \(q_1\) diverges (square vs two primes). The paper is also
-                internally loose on plain-VIA's \(q_1\) size (§5.1 calls it
-                "75-bit", App B prints \(\approx 2^{57}\)); \(n_3\) is never given
+                \(q_1\) diverges (square vs two primes). \(n_3\) is never given
                 a number in the paper.
             </p>
 
-            <h4>Distributions (secret key \(\chi_S\), error \(\chi_E\))</h4>
-            <table>
+            <h3>Distributions (secret key \(\chi_S\), error \(\chi_E\))</h3>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Where</th>
-                        <th>VIA (paper)</th>
-                        <th>VIA-C &amp; VIA-B (paper)</th>
-                        <th>Code (all variants)</th>
+                        <th scope="col">Where</th>
+                        <th scope="col">VIA (paper)</th>
+                        <th scope="col">VIA-C &amp; VIA-B (paper)</th>
+                        <th scope="col">Code (all variants)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -675,7 +673,7 @@
                         <td>Gaussian \(\sigma=26\)</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> §5.1, p.16;
                 <span class="tag tag-code">code</span>
@@ -701,7 +699,7 @@
                 nor the preset's \(1.0\) is what runs (<a href="audit.html#a4">A4</a>).
             </p>
 
-            <h4>Gadget parameters &mdash; the three-way reconciliation</h4>
+            <h3>Gadget parameters &mdash; the three-way reconciliation</h3>
             <p>
                 This is where "matches the paper" and "is correct as intended"
                 come apart. The lengths \(\ell\) are unchanged across draft and
@@ -709,14 +707,14 @@
                 <em>bases</em> \(B\) moved, and the base is what governs the
                 noise. VIA-C / VIA-B:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Gate</th>
-                        <th>\(\ell\)</th>
-                        <th>Paper Table 6 base \(B\) (draft)</th>
-                        <th>Authors' erratum base \(B\)</th>
-                        <th>Code base \(B\)</th>
+                        <th scope="col">Gate</th>
+                        <th scope="col">\(\ell\)</th>
+                        <th scope="col">Paper Table 6 base \(B\) (draft)</th>
+                        <th scope="col">Authors' erratum base \(B\)</th>
+                        <th scope="col">Code base \(B\)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -749,7 +747,7 @@
                         <td>8</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> Table 6, p.23
                 (draft); Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a> VIA authors'
@@ -769,7 +767,7 @@
                     title="crates/via-protocol/src/presets.rs:150,153,156 — bases 55879/81/8; conv L_CK=18"
                     >presets.rs:150,153,156</a
                 >
-                (HEAD <code>e4338cc</code> unchanged — erratum not adopted).
+                (unchanged at the audited commit — erratum not adopted).
                 <span class="tag tag-infer">inference</span> The code ships the
                 draft bases, which the authors' own analysis does
                 <em>not</em> certify to \(2^{-40}\); plain VIA's gadgets are a
@@ -777,13 +775,13 @@
                 rs \(B{=}24\)) and are not implemented.
             </p>
 
-            <h4>Database dimensions (paper Table 4, p.23)</h4>
-            <table>
+            <h3>Database dimensions (paper Table 4, p.23)</h3>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Database</th>
-                        <th>VIA \((I,\ J)\)</th>
-                        <th>VIA-C &amp; VIA-B \((I,\ J)\)</th>
+                        <th scope="col">Database</th>
+                        <th scope="col">VIA \((I,\ J)\)</th>
+                        <th scope="col">VIA-C &amp; VIA-B \((I,\ J)\)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -803,7 +801,7 @@
                         <td>\((2^{11},\ 2^{14})\)</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 <span class="tag tag-infer">inference</span> \(I\) (rows, the
                 first-dimension sum) and \(J\) (columns, the CMux tree) are the
@@ -816,7 +814,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="correctness">The correctness budget</h3>
+            <h2 id="correctness">The correctness budget</h2>
             <p>
                 <span class="tag tag-paper">paper</span> The target is a
                 decryption-failure rate \(\le 2^{-40}\) (§5.1, and Appendix C.2,
@@ -834,12 +832,12 @@
                 per-stage recursion (App C.2, pp.26&ndash;27) that mirrors the
                 pipeline. Each stage adds its own term; the load-bearing ones:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Stage</th>
-                        <th>Variance update</th>
-                        <th>What it adds</th>
+                        <th scope="col">Stage</th>
+                        <th scope="col">Variance update</th>
+                        <th scope="col">What it adds</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -880,7 +878,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 Two things make this budget the crux for an implementer:
             </p>
@@ -930,7 +928,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="security">The security target</h3>
+            <h2 id="security">The security target</h2>
             <p>
                 Security rests on the hardness of the underlying RLWE/MLWE
                 instances. Hardness is governed by the triple \((n, q, \sigma)\):
@@ -950,12 +948,12 @@
                 Here the three sources give three different numbers for the same
                 quantity:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
-                        <th>Source</th>
-                        <th>Security level</th>
-                        <th>How obtained</th>
+                        <th scope="col">Source</th>
+                        <th scope="col">Security level</th>
+                        <th scope="col">How obtained</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1007,7 +1005,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 <span class="tag tag-infer">inference</span> The telling detail:
                 the reviewers <em>reproduced</em> the paper's 110 from the
@@ -1039,7 +1037,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h3 id="caveats">Caveats for implementers</h3>
+            <h2 id="caveats">Caveats for implementers</h2>
             <p>
                 If you are porting or re-instantiating VIA, these are the traps
                 the three sources together expose &mdash; each links to where it

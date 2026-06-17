@@ -44,10 +44,10 @@
                     >VIA &middot; Documentation</a
                 >
                 <nav>
-                    <a href="intro.html" class="on">Intro to VIA</a>
-                    <a href="architecture.html">Architecture</a>
-                    <a href="implementation.html">Implementation details</a>
-                    <a href="params.html">Parameters</a>
+                    <a href="intro.html" class="on">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -58,7 +58,7 @@
                 </nav>
             </div>
         </header>
-        <div class="wrap">
+        <div class="wrap" role="main">
             <h1 class="page-title">Intro to VIA: a chain of forced moves</h1>
             <section class="intro">
                 <p>
@@ -95,7 +95,7 @@
                     machinery on top of VIA-C and is out of scope here.
                 </p>
 
-                <h3>Move 0 — the only obviously-correct scheme</h3>
+                <h2>Move 0 — the only obviously-correct scheme</h2>
                 <p>
                     Send the client the entire database. The server learns
                     nothing about \(i\) because the client asked for all of it.
@@ -105,7 +105,7 @@
                     do the selecting, without ever seeing what it selected.
                 </p>
 
-                <h3>Move 1 — hand the server an encrypted selector</h3>
+                <h2>Move 1 — hand the server an encrypted selector</h2>
                 <p>
                     Represent the request as a <strong>one-hot vector</strong>:
                     a \(1\) at position \(i\) and \(0\) elsewhere — say
@@ -351,10 +351,10 @@
                 </p>
 
                 <div class="example">
-                    <h4>
+                    <h3>
                         Worked example: how noise accumulates, and what happens
                         when it overflows
-                    </h4>
+                    </h3>
                     <p>
                         Take tiny numbers: modulus \(q = 64\), plaintext modulus
                         \(p = 2\) (so \(m\) is a single bit), giving \(\Delta =
@@ -600,9 +600,9 @@
                     </p>
                 </div>
 
-                <h3>
+                <h2>
                     Move 2 — send the index in binary, expand it server-side
-                </h3>
+                </h2>
                 <p>
                     Lay the database out as an \(I\times J\) grid, so a record's
                     address splits into a row \(\alpha\) and a column \(\beta\)
@@ -1025,7 +1025,7 @@ graph TD
                     <em>quadratically</em> — exactly the trap Move 2 sidesteps.)
                 </p>
 
-                <h3>Move 3 — make "multiply by an encrypted bit" cheap</h3>
+                <h2>Move 3 — make "multiply by an encrypted bit" cheap</h2>
                 <p>
                     Move 2 leaned on an operation it never justified:
                     multiplying a ciphertext by an <em>encrypted</em> bit,
@@ -1216,7 +1216,7 @@ graph TD
                     from Move 2.
                 </p>
 
-                <h3>Move 4 — stop shipping big gate-keys</h3>
+                <h2>Move 4 — stop shipping big gate-keys</h2>
                 <p>
                     RGSW ciphertexts are large — they are bundles of many RLWE
                     ciphertexts. Transmitting the control bits as RGSW (the
@@ -1232,10 +1232,10 @@ graph TD
                 <figure class="fig">
                     <pre class="mermaid">
 graph LR
-  Q["client sends<br/>tiny LWE ciphertexts of the index bits<br/>about &#8467; log N numbers"]
+  Q["client sends tiny LWE ciphertexts of the index bits, about &#8467; log N numbers"]
   Q --> C1["server: LWE to RLWE conversion"]
   C1 --> C2["RLWE to RGSW conversion"]
-  C2 --> G["full-size RGSW gate-keys<br/>rebuilt on the server"]
+  C2 --> G["full-size RGSW gate-keys rebuilt on the server"]
   G --> T["feed the DMux / CMux / CRot trees (Move 2)"]
   classDef a fill:#e8f7ee,stroke:#1f9d6b;
   classDef b fill:#eaf2fb,stroke:#2b5dd1;
@@ -1278,10 +1278,10 @@ graph LR
                     follows.
                 </p>
 
-                <h3>
+                <h2>
                     Move 5 — pay for the conversions, then balance the whole
                     ledger
-                </h3>
+                </h2>
                 <p>
                     Re-encoding is not free: each conversion injects noise, so a
                     careless LWE→RLWE step would bankrupt the budget on its own.
@@ -1433,7 +1433,7 @@ graph LR
                     in the first place.
                 </p>
 
-                <h3>Why it all holds together</h3>
+                <h2>Why it all holds together</h2>
                 <p>
                     Each primitive is the forced answer to the previous step's
                     flaw — the one-hot selector, the binary index plus DMux

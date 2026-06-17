@@ -11,39 +11,39 @@
 <header class="site"><div class="site-inner">
   <a class="brand" href="index.html">VIA &middot; Documentation</a>
   <nav>
-    <a href="intro.html">Intro to VIA</a>
-    <a href="architecture.html">Architecture</a>
-    <a href="implementation.html">Implementation details</a>
-    <a href="params.html">Parameters</a>
+    <a href="intro.html">Intro</a>
+    <a href="architecture.html">Arch</a>
+    <a href="implementation.html">Impl</a>
+    <a href="params.html">Params</a>
     <a href="audit.html">Audit</a>
     <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
   </nav>
 </div></header>
-<div class="wrap">
+<div class="wrap" role="main">
   <div class="hero">
     <h1>VIA — Communication-Efficient Single-Server PIR</h1>
-    <div class="meta">A pure-Rust implementation of the VIA family &middot; paper: <a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu, Wang &amp; Zhang (2025)</a> &middot; 2026-06-10</div>
+    <div class="meta">A pure-Rust implementation of the VIA family &middot; paper: <a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu, Wang &amp; Zhang (2025)</a></div>
     <p class="lead">Private Information Retrieval lets a client fetch the <em>i</em>-th record of a server-held database while keeping <em>i</em> hidden from the server &mdash; from a single server, with no non-collusion assumption. VIA does this with a logarithmic-depth <strong>DMux tree</strong> for query expansion and (in VIA-C) a low-noise <strong>LWE&rarr;RLWE conversion</strong> for query compression.</p>
   </div>
   <div class="cards">
     <a class="card" href="intro.html">
-      <h2>Intro to VIA &#8594;</h2>
+      <h2>Intro to VIA</h2>
       <p>A from-first-principles explanation &mdash; no PIR or cryptography background assumed. What the noise budget is, why the DMux tree wins, how the query is compressed, and <em>why each step works</em>, built up as a chain of forced moves with worked examples and schematics.</p>
     </a>
     <a class="card" href="architecture.html">
-      <h2>Architecture &#8594;</h2>
+      <h2>Architecture</h2>
       <p>The VIA scheme as an abstract system for applied-cryptography engineers: a clickable map of the self-contained components, how they stack, how a query flows through them, and <em>why the composition is complete and sound</em>. The scheme, not the codebase.</p>
     </a>
     <a class="card" href="implementation.html">
-      <h2>Implementation details &#8594;</h2>
+      <h2>Implementation details</h2>
       <p>The <code>via-rs</code> codebase as built: an architecture map of the five crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and the build/test status.</p>
     </a>
     <a class="card" href="params.html">
-      <h2>Parameters &#8594;</h2>
+      <h2>Parameters</h2>
       <p>An implementer's reference to VIA's parameterization: the ring dimensions, modulus chain, distributions, and gadget bases &mdash; reconciled side by side across the <em>paper</em>, the <em>code</em>, and the <em>Yue et al. review</em>, with the security/correctness trade-offs and caveats each implies.</p>
     </a>
     <a class="card" href="audit.html">
-      <h2>Audit &#8594;</h2>
+      <h2>Audit</h2>
       <p>A severity-ranked correctness/security audit of VIA-C and VIA-B &mdash; paper-vs-code parameter and noise-budget divergences, each finding adversarially re-validated against the paper and the code pinned to a commit, with source links and citations.</p>
     </a>
   </div>
