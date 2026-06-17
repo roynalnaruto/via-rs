@@ -96,6 +96,17 @@ pub type ViaCToyParams = ViaCPublicParams<64, 16, 20, 40, 8, 4>;
 /// sidecar: [`REALISTIC_PARAMS`].
 pub type ViaCRealisticParams = ViaCPublicParams<2048, 512, 2, 18, 8, 4>;
 
+/// **≥120-bit "secure" VIA-C preset**: `n1=4096, n2=1024, L_QUERY=2, L_CK=18,
+/// L_RSK=8, D=4`.
+///
+/// Derived (see `docs/params-concrete.html`) so that *both* exposed lattice
+/// instances clear ≥120-bit classical security under ternary keys — the
+/// large ring (n1=4096, q1≈2^74.7) at ~214 bits and the ring-switch-key small
+/// ring (n2=1024, q3≈2^23) at ~174 bits, per the lattice estimator — while the
+/// Appendix-C noise budget still decodes at ≤ 2^-40. Runtime sidecar:
+/// [`SECURE_PARAMS`].
+pub type ViaCSecure120Params = ViaCPublicParams<4096, 1024, 2, 18, 8, 4>;
+
 // ---------------------------------------------------------------------------
 // ViaBPublicParams — const-generic ZST marker (VIA-B)
 // ---------------------------------------------------------------------------
@@ -246,6 +257,48 @@ pub const REALISTIC_PARAMS: PIRParams = PIRParams::new(
     128,
 );
 
+/// **≥120-bit "secure"** `PIRParams` sidecar (matches [`ViaCSecure120Params`]).
+///
+/// Differences from [`REALISTIC_PARAMS`], all derived in
+/// `docs/params-concrete.html`:
+/// - `n1 = 4096, n2 = 1024` (both rings raised — n=2048 provably cannot reach
+///   120-bit; q2-survival needs q1≳2^60 while 120-bit needs q1≲2^56).
+/// - `q1 = 173_964_607_489 * 173_964_656_641 ≈ 2^74.68` — NTT primes ≡1 mod 8192.
+/// - `q4 = 2^15` (up from 2^12) — holds the larger q3→q4 rounding at n1=4096.
+/// - **erratum** gadget bases (DMux 18073, CMux/CRot 307, ring-switch 4); the
+///   draft 55879/81/8 do not certify 2^-40.
+/// - **ternary** keys (mandatory: Gaussian σ=32 fails the q4 decode), so the
+///   σ fields are `None`.
+/// - `security_param = 120` — and unlike [`REALISTIC_PARAMS`]' unbacked 128,
+///   this is witnessed by an external lattice-estimator run (≥174-bit min).
+pub const SECURE_PARAMS: PIRParams = PIRParams::new(
+    4096,
+    1024,
+    // q1 = 173_964_607_489 * 173_964_656_641 (two NTT primes ≡1 mod 8192, ≈ 2^74.68)
+    173_964_607_489u128 * 173_964_656_641u128,
+    // q2 ≈ 2^34, q3 ≈ 2^23 (both reused, ≡1 mod 2048), q4 = 2^15, p = 16
+    17_175_674_881,
+    8_380_417,
+    32_768,
+    16,
+    // Large-ring (DMux) gadget: erratum base 18073, depth 2 (= L_QUERY)
+    18073,
+    2,
+    // Small-ring (CMux/CRot) tree gadget: erratum base 307, depth 2
+    307,
+    2,
+    // Ring-switch gadget: erratum base 4, depth 8
+    4,
+    8,
+    KeyDist::Ternary,
+    KeyDist::Ternary,
+    1,
+    None,
+    None,
+    None,
+    120,
+);
+
 /// Toy VIA-B `PIRParams` sidecar: [`TOY_PARAMS`] values + `n3 = 2`, `t = 8`.
 #[cfg(feature = "via-b")]
 pub const TOY_B_PARAMS: PIRParams = PIRParams::new_b(
@@ -359,6 +412,29 @@ mod tests {
     #[test]
     fn realistic_check_evaluates() {
         let () = ViaCRealisticParams::_CHECK;
+    }
+
+    #[test]
+    fn secure_check_evaluates() {
+        let () = ViaCSecure120Params::_CHECK;
+    }
+
+    /// The ≥120-bit secure sidecar agrees with its marker and carries the
+    /// derived values (n4096/n1024, q4=2^15, erratum gadgets, p=16, λ=120).
+    #[test]
+    fn secure_params_matches_preset() {
+        pir_params_matches_preset::<4096, 1024, 2, 18, 8, 4>(&SECURE_PARAMS);
+        assert_eq!(SECURE_PARAMS.n1, 4096);
+        assert_eq!(SECURE_PARAMS.n2, 1024);
+        assert_eq!(SECURE_PARAMS.d(), 4);
+        assert_eq!(SECURE_PARAMS.q4, 32_768);
+        assert_eq!(SECURE_PARAMS.p, 16);
+        assert_eq!(SECURE_PARAMS.gadget_base_1, 18073);
+        assert_eq!(SECURE_PARAMS.gadget_base_2, 307);
+        assert_eq!(SECURE_PARAMS.gadget_base_rsk, 4);
+        assert_eq!(SECURE_PARAMS.security_param, 120);
+        // q1 ≈ 2^74.68 (two NTT primes), so delta = ceil(q1/16) exceeds u64.
+        assert!(SECURE_PARAMS.delta() > u128::from(u64::MAX));
     }
 
     #[test]

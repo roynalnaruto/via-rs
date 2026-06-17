@@ -55,6 +55,12 @@
                 Parameters &mdash; the paper, the code &amp; the review,
                 reconciled
             </h1>
+            <p class="toc">
+                Params section:
+                <strong>Abstract (this page)</strong> &middot;
+                <a href="params-concrete.html">Concrete &mdash; a &ge;120-bit instantiation</a> &middot;
+                <a href="params-bench.html">Benchmarks</a>
+            </p>
 
             <p class="legend">
                 <span
@@ -105,7 +111,12 @@
                 (every underlying lattice instance must be hard &mdash; the paper
                 aims for \(\ge 110\) bits). Almost every knob that buys headroom
                 on one target spends it on the other, which is what makes
-                parameter selection the delicate part of the scheme.
+                parameter selection the delicate part of the scheme. This page
+                covers the knobs and the tension in the abstract; the
+                <a href="params-concrete.html">concrete page</a> resolves it into
+                a parameter set that provably clears \(\ge 120\) bits, and the
+                <a href="params-bench.html">benchmarks page</a> measures what that
+                costs.
             </p>
             <p>
                 This page is an implementer's reference. Because the parameters

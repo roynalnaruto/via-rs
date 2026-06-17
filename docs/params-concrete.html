@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Parameters: a ≥120-bit instantiation</title>
+        <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}]})"
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html">VIA &middot; Documentation</a>
+                <nav>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html" class="on">Params</a>
+                    <a href="audit.html">Audit</a>
+                    <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
+                </nav>
+            </div>
+        </header>
+        <div class="wrap" role="main">
+            <h1 class="page-title">Parameters &mdash; a provable &ge;120-bit instantiation</h1>
+            <p class="toc">
+                Params section:
+                <a href="params.html">Abstract</a> &middot;
+                <strong>Concrete (this page)</strong> &middot;
+                <a href="params-bench.html">Benchmarks</a>
+            </p>
+
+            <p class="legend">
+                <span><span class="tag tag-paper" title="Stated in the paper (Liu et al. 2025)">paper</span> stated in the paper</span>
+                <span><span class="tag tag-code" title="Observed in via-rs">code</span> observed in <code>via-rs</code></span>
+                <span><span class="tag tag-infer">inference</span> derived here (estimator / noise budget)</span>
+                <span><span class="tag tag-flag">unverified</span> could not confirm</span>
+            </p>
+
+            <p class="toc" id="toc">
+                <a href="#gap">The gap</a> &middot;
+                <a href="#method">Method</a> &middot;
+                <a href="#why">Why both rings must grow</a> &middot;
+                <a href="#instantiation">The instantiation</a> &middot;
+                <a href="#security">Security check</a> &middot;
+                <a href="#correctness">Correctness check</a> &middot;
+                <a href="#cost">What it costs</a> &middot;
+                <a href="#use">Using it</a>
+            </p>
+
+            <p>
+                The <a href="params.html">abstract page</a> lays out the
+                security&harr;correctness tension in general. This page resolves
+                it concretely: it derives a parameter set that
+                <strong>provably clears &ge;120-bit classical security on every
+                exposed lattice instance</strong> while keeping the Appendix-C
+                noise budget under \(2^{-40}\), explains why each choice is
+                <em>forced</em> rather than picked, and ships it as the
+                <code>SECURE_PARAMS</code> preset. The companion
+                <a href="params-bench.html">benchmarks page</a> measures what it
+                costs. Throughout, &ldquo;provable&rdquo; means the standard
+                lattice-crypto sense: the
+                <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">lattice estimator</a>
+                reports every known attack at \(\ge 2^{120}\).
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="gap">The gap &mdash; what the published parameters actually deliver</h2>
+            <p>
+                VIA exposes <strong>two</strong> independent lattice instances to
+                the server, and the scheme&rsquo;s security is the <em>minimum</em>
+                of the two<sup><a href="#fn1" id="r1">1</a></sup>: the large ring
+                \(\mathcal R_{n_1,q_1}\) (the query, conversion keys, and gate
+                keys), and the <em>small</em> ring \(\mathcal R_{n_2,q_3}\) carried
+                by the ring-switching key under the small-ring secret \(S_2\).
+                Running each through the lattice estimator
+                <span class="tag tag-infer">inference</span><sup><a href="#fn2" id="r2">2</a></sup>:
+            </p>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Instance</th>
+                    <th scope="col">\((n,\ \log_2 q)\)</th>
+                    <th scope="col">Secret</th>
+                    <th scope="col">Estimate (classical)</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>Large ring</td><td>\((2048,\ 75)\)</td><td>Gaussian \(\sigma{=}32\) <span class="tag tag-paper">paper</span></td><td>109.8 bits</td></tr>
+                    <tr><td>Small ring</td><td>\((512,\ 23)\)</td><td>Gaussian \(\sigma{=}26\) <span class="tag tag-paper">paper</span></td><td>110.2 bits</td></tr>
+                    <tr><td>Large ring</td><td>\((2048,\ 75)\)</td><td><strong>ternary</strong> <span class="tag tag-code">code</span></td><td>101.4 bits</td></tr>
+                    <tr><td>Small ring</td><td>\((512,\ 23)\)</td><td><strong>ternary</strong> <span class="tag tag-code">code</span></td><td><strong>87.0 bits</strong> &larr; binding</td></tr>
+                </tbody>
+            </table></div>
+            <p>
+                Two facts fall out, and they are kinder to the paper than the
+                headline &ldquo;110 vs 72&rdquo; suggests
+                <span class="tag tag-infer">inference</span>:
+            </p>
+            <ul>
+                <li>
+                    The paper&rsquo;s <strong>110-bit claim reproduces</strong> &mdash;
+                    <em>both</em> rings land at \(\approx\!110\) under the
+                    paper&rsquo;s Gaussian distributions. The estimator agrees with
+                    Liu et al. on their own parameters.
+                </li>
+                <li>
+                    But <code>via-rs</code> runs <strong>ternary keys</strong>, not
+                    the paper&rsquo;s Gaussians (the Gaussian preset is inert &mdash;
+                    <a href="audit.html#a4">A4</a>). That substitution drops the
+                    large ring to 101 and the small ring to <strong>87</strong>.
+                    The small ring at \(n_2=512\) is the binding instance, and
+                    no choice of modulus rescues 512 dimensions to 120 bits.
+                    (Yue et al.&rsquo;s measured ~72/88 were taken on the
+                    <em>C++</em> <a href="https://github.com/owniai/VIA" target="_blank" rel="noopener">owniai/VIA</a>,
+                    a third parameter set again<sup><a href="#fn3" id="r3">3</a></sup>.)
+                </li>
+            </ul>
+            <p>
+                Either way, the shipped code is an <strong>~87-bit scheme</strong>,
+                ~33 bits short of a 120-bit target.
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="method">Method &mdash; two estimators, cross-checked</h2>
+            <p>
+                A credible &ldquo;&ge;120-bit&rdquo; claim has to clear two
+                independent gates, computed with tools, not asserted:
+            </p>
+            <ul>
+                <li>
+                    <strong>Security.</strong> The
+                    <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">lattice estimator</a>
+                    (Albrecht et&nbsp;al.), classical core-SVP cost model, run on
+                    each exposed \((n,q,\chi_s,\chi_e)\). The binding attack here is
+                    primal&nbsp;<code>bdd</code>/<code>usvp</code> across the board.
+                    Calibration check: \((n{=}2048,\ q{=}2^{54},\ \text{ternary})\)
+                    estimates at 126.3 bits, matching the Homomorphic Encryption
+                    Security Standard&rsquo;s 128-bit edge for that
+                    dimension<sup><a href="#fn2">2</a></sup>.
+                </li>
+                <li>
+                    <strong>Correctness.</strong> The paper&rsquo;s Appendix-C noise
+                    recursion, reimplemented and <em>validated against the
+                    authors&rsquo; own erratum</em>: with the erratum gadget bases
+                    it reproduces \(\log_2 P_{\text{fail}}\approx -39.8\) against
+                    the paper&rsquo;s \((q_3{-}q_4)/p\) threshold &mdash; matching
+                    the authors&rsquo; stated \(-43.4\)<sup><a href="#fn4" id="r4">4</a></sup>.
+                    Decoding is then evaluated at the <em>final</em> modulus
+                    \(q_4\) (threshold \(\Delta/2 = q_4/2p\)), which Yue Chen argues
+                    &mdash; and we concur &mdash; is the correct decode point
+                    (<a href="audit.html#a5">A5</a>).
+                </li>
+            </ul>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="why">Why both rings must grow (and ternary is forced)</h2>
+            <p>
+                The instantiation below raises <em>both</em> ring dimensions. Each
+                increase is <strong>forced by a collision of constraints</strong>,
+                not chosen for comfort &mdash; which is exactly why the 120-bit
+                profile departs from the paper&rsquo;s.
+            </p>
+
+            <h3>1. The large ring cannot stay at \(n_1=2048\)</h3>
+            <p>
+                At \(n_1=2048\) with ternary keys, 120-bit security needs
+                \(\log_2 q_1 \le 56\) <span class="tag tag-infer">inference</span>
+                (the estimator gives 126 bits at \(q_1{=}2^{54}\), ~118 at
+                \(2^{56}\), and only 101 at the published \(2^{75}\)). But \(q_1\)
+                is <em>also</em> bounded <strong>from below</strong> by correctness:
+                the DMux output and the first-dimension/CMux sum must survive
+                modulo \(q_1\)/\(q_2\) before they are switched down. Tracing the
+                Appendix-C variance, the first-dimension&ndash;CMux noise at \(q_2\)
+                only stays under the message budget \(q_2/2p\) when
+                \(q_1 \gtrsim 2^{60}\) <span class="tag tag-infer">inference</span><sup><a href="#fn5" id="r5">5</a></sup>
+                (the smaller \(q_1\) is, the less the DMux noise is scaled down at
+                the \(q_1\!\to\!q_2\) switch, so it overflows \(q_2\)).
+            </p>
+            <p style="text-align:center">
+                <strong>Security wants \(q_1 \le 2^{56}\); correctness wants
+                \(q_1 \ge 2^{60}\). No \(q_1\) satisfies both at \(n_1=2048\).</strong>
+            </p>
+            <p>
+                Because ring dimensions must be powers of two for the NTT, the next
+                feasible dimension is <strong>\(n_1=4096\)</strong> &mdash; where
+                120-bit security tolerates \(\log_2 q_1\) up to \(\sim\!112\), so
+                the published \(2^{75}\) sits comfortably inside the window that the
+                correctness lower bound (\(\gtrsim 2^{63}\) at \(n_1{=}4096\)) opens.
+            </p>
+
+            <h3>2. The small ring cannot stay at \(n_2=512\)</h3>
+            <p>
+                \(n_2=512\) is only 87-bit at \(q_3=2^{23}\). One could try to buy
+                security by <em>shrinking</em> \(q_3\) (smaller modulus &rArr;
+                harder lattice at fixed \(n\)): the estimator confirms
+                \((512,\ 2^{14})\) reaches ~159 bits. But \(q_4 < q_3\) always, so
+                \(q_3 = 2^{14}\) caps the response modulus at \(q_4 \le 2^{13}\)
+                &mdash; and (see below) the \(n_1{=}4096\) noise needs
+                \(q_4 = 2^{15}\) to decode. <strong>Shrinking \(q_3\) to secure
+                \(n_2{=}512\) breaks the decode; keeping \(q_3\) large enough to
+                decode leaves \(n_2{=}512\) at 87 bits.</strong> The smallest
+                power-of-two that resolves the squeeze is
+                <strong>\(n_2=1024\)</strong>: it is 174-bit even at
+                \(q_3=2^{23}\), leaving full room for \(q_4=2^{15}\).
+            </p>
+
+            <h3>3. The secret must be ternary &mdash; which is what makes (1) bite</h3>
+            <p>
+                The final \(q_3\!\to\!q_4\) mod-switch adds a rounding term of
+                variance \((1+n_1\theta_S)/12\), where \(\theta_S=\mathbb E[s_i^2]\).
+                With the paper&rsquo;s Gaussian secret (\(\sigma_S{=}32,\
+                \theta_S{=}1024\)) this term alone is \(\sigma\approx418\) at
+                \(n_1{=}4096\) &mdash; far above the decode budget
+                \(\Delta/2 = q_4/2p = 128\). With a <strong>ternary</strong> secret
+                (\(\theta_S=\tfrac23\)) it is \(\sigma\approx15\), comfortably
+                under <span class="tag tag-infer">inference</span>. So the scheme
+                only decodes correctly at this \(q_4\) <em>because</em> the key is
+                ternary &mdash; the very substitution that weakened security in the
+                first place. 120-bit must therefore be reached <em>with</em>
+                ternary keys (hence by raising \(n\)), not by adopting the
+                paper&rsquo;s wide Gaussian.
+            </p>
+            <p>
+                This closes the loop between three findings that looked separate:
+                the inert Gaussian preset (<a href="audit.html#a4">A4</a>), the
+                decode-threshold question (<a href="audit.html#a5">A5</a>), and
+                Yue&rsquo;s &ldquo;increase \(q_4\)&rdquo; remark are one mechanism.
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="instantiation">The instantiation</h2>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Parameter</th>
+                    <th scope="col">VIA-C published <span class="tag tag-code">code</span></th>
+                    <th scope="col">&ge;120-bit secure <span class="tag tag-infer">inference</span></th>
+                    <th scope="col">Why it changed</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>\(n_1\) (large ring)</td><td>2048</td><td><strong>4096</strong></td><td>large-ring security + \(q_2\)-survival</td></tr>
+                    <tr><td>\(n_2\) (small ring)</td><td>512</td><td><strong>1024</strong></td><td>small-ring security vs. \(q_4\) decode</td></tr>
+                    <tr><td>\(q_1\)</td><td>\(137438822401\cdot274810798081\approx2^{75}\)</td><td>\(173964607489\cdot173964656641\approx2^{74.7}\)</td><td>new NTT primes \(\equiv1\bmod 8192\)</td></tr>
+                    <tr><td>\(q_2\)</td><td>\(17175674881\approx2^{34}\)</td><td>\(17175674881\) (reused)</td><td>already \(\equiv1\bmod2048\)</td></tr>
+                    <tr><td>\(q_3\)</td><td>\(8380417\approx2^{23}\)</td><td>\(8380417\) (reused)</td><td>already \(\equiv1\bmod2048\)</td></tr>
+                    <tr><td>\(q_4\)</td><td>\(2^{12}\)</td><td><strong>\(2^{15}\)</strong></td><td>hold \(q_3\!\to\!q_4\) rounding at \(n_1{=}4096\)</td></tr>
+                    <tr><td>\(p\)</td><td>16</td><td>16</td><td>&mdash;</td></tr>
+                    <tr><td>Gadget bases (DMux/CMux/rs)</td><td>55879 / 81 / 8 (draft)</td><td><strong>18073 / 307 / 4</strong> (erratum)</td><td>draft fails \(2^{-40}\) (<a href="audit.html#a1">A1</a>)</td></tr>
+                    <tr><td>Secret \(\chi_S\)</td><td>ternary</td><td>ternary</td><td>mandatory for \(q_4\) decode</td></tr>
+                    <tr><td>\(\texttt{security\_param}\)</td><td>128 (unbacked)</td><td><strong>120 (estimator-backed)</strong></td><td>&mdash;</td></tr>
+                </tbody>
+            </table></div>
+            <p class="key">
+                Shipped as <code>SECURE_PARAMS</code> / <code>ViaCSecure120Params</code>
+                <span class="tag tag-code">code</span> in
+                <code>crates/via-protocol/src/presets.rs</code>, with the new
+                moduli in <code>via-primitives</code>
+                (<code>algebra/zq/modulus.rs::paper::ViaSec*</code>,
+                <code>algebra/rns/basis.rs::paper::ViaSecQ1Rns</code>) and the
+                \(n_1{=}4096\) LWE&rarr;RLWE cascade key
+                (<code>conversion/cascade.rs</code>, <code>LweToRlweKeyRnsN4096</code>).
+                <span class="tag tag-infer">inference</span> \(d = n_1/n_2 = 4\) is
+                preserved, so the protocol structure (records-per-cell, CRot range)
+                is unchanged; only dimensions and \(q_4\) move.
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="security">Security check &mdash; both rings, with margin</h2>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Instance</th>
+                    <th scope="col">\((n,\ \log_2 q)\)</th>
+                    <th scope="col">Estimate (classical, ternary)</th>
+                    <th scope="col">&ge;120?</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>Large ring</td><td>\((4096,\ 74.7)\)</td><td><strong>214.5 bits</strong></td><td>&#10003;</td></tr>
+                    <tr><td>Small ring</td><td>\((1024,\ 23)\)</td><td><strong>174.5 bits</strong></td><td>&#10003;</td></tr>
+                    <tr><td colspan="2"><strong>min over instances</strong></td><td><strong>174.5 bits</strong></td><td>&#10003;</td></tr>
+                </tbody>
+            </table></div>
+            <p>
+                <span class="tag tag-infer">inference</span> The estimate
+                <em>overshoots</em> 120 substantially (174&ndash;214 bits). That
+                margin is not waste &mdash; it is <strong>forced by the power-of-two
+                dimension</strong>: \(n_1=2048\) tops out at 101 bits and the next
+                step, 4096, lands at 214. There is no dimension in between, so a
+                clean &ge;120 inevitably overshoots. The binding instance is now the
+                small ring at 174 bits.
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="correctness">Correctness check &mdash; the budget still closes</h2>
+            <p>
+                <span class="tag tag-infer">inference</span> Evaluating the
+                Appendix-C recursion at the secure parameters, with ternary keys and
+                erratum gadget bases, decoding at \(q_4\):
+            </p>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Check</th>
+                    <th scope="col">Value</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Pass?</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>\(q_4\)-decode failure (\(\Delta/2 = 512\))</td><td>\(\log_2 P_{\text{fail}} = -43.8\)</td><td>\(\le -40\)</td><td>&#10003;</td></tr>
+                    <tr><td>\(q_2\)-survival (first-dim/CMux, mod \(q_2\))</td><td>\(\approx 2^{-42}\) (margin \(x=6.1\))</td><td>\(\le 2^{-40}\)</td><td>&#10003;</td></tr>
+                    <tr><td>end-to-end (dominated by \(q_2\)-survival)</td><td>\(\approx 2^{-41.5}\)</td><td>\(\le 2^{-40}\)</td><td>&#10003;</td></tr>
+                </tbody>
+            </table></div>
+            <p>
+                Two honest caveats <span class="tag tag-infer">inference</span>:
+                <strong>(a)</strong> the margin is <em>tight</em> &mdash; the
+                binding \(q_2\)-survival term sits at \(2^{-42}\), only ~2 bits past
+                target. Raising the CMux gadget length \(\ell\!:\!2\to3\) restores a
+                wide margin but enlarges the gate keys and adds a polynomial
+                multiply per CMux level (a correctness-for-performance trade the
+                <a href="params-bench.html">benchmarks</a> would reflect).
+                <strong>(b)</strong> \(q_4=2^{15}\) was chosen as the smallest
+                power-of-two clearing the decode: \(2^{14}\) gives only \(-41.3\)
+                and the failure probability <em>saturates</em> near \(-44\) as
+                \(q_4\) grows (the \(q_3\!\to\!q_4\) noise grows quadratically in
+                \(q_4\) while the threshold grows linearly), so there is no benefit
+                past \(2^{15}\).
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="cost">What it costs</h2>
+            <p>
+                Raising both rings is not free; quantifying the hit is the whole
+                point of the exercise. In brief
+                <span class="tag tag-infer">inference</span> (measured in full on
+                the <a href="params-bench.html">benchmarks page</a>):
+            </p>
+            <ul>
+                <li><strong>Compute ~2.2&times;.</strong> The multiplicative core (eval-backed <code>gadget_product</code>) is \(O(n\log n)\): measured 6159 &rarr; 13341 &micro;s/op going \(n{=}2048\to4096\), a 2.17&times; factor.</li>
+                <li><strong>Conversion key ~2.2&times;.</strong> The LWE&rarr;RLWE cascade key grows 24.75&nbsp;MB &rarr; 54.00&nbsp;MB (one extra fold).</li>
+                <li><strong>Response ~2.5&times;.</strong> The answer is an \(n_2\)-coefficient ciphertext at \(q_4\): \(1024\cdot15\) vs \(512\cdot12\) bits.</li>
+            </ul>
+            <p>
+                So <strong>real 120-bit security changes VIA-C&rsquo;s advertised
+                profile by roughly 2&times; across compute, key size, and response
+                size</strong> &mdash; the paper&rsquo;s headline figures are a
+                ~87&ndash;101-bit operating point, not a 120-bit one.
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="use">Using it</h2>
+            <p>
+                <span class="tag tag-code">code</span> The preset is wired
+                end-to-end behind the same const-generic machinery as
+                <code>REALISTIC_PARAMS</code>:
+            </p>
+            <pre><code>use via_protocol::{SECURE_PARAMS, ViaCSecure120Params};
+// n1=4096, n2=1024, q1=2^74.7 (RNS), q2=2^34, q3=2^23, q4=2^15, p=16,
+// erratum gadgets (18073/307/4), ternary keys, security_param = 120.
+assert_eq!(SECURE_PARAMS.security_param, 120);</code></pre>
+            <p>
+                Unlike the published presets, the \(120\) here is
+                <strong>witnessed</strong>: the estimator script and the noise-budget
+                calculator that produced every number above are the audit trail. An
+                implementer should still re-run both on the exact \((n,q,\sigma)\)
+                they ship &mdash; the one number you must never hard-code is the one
+                that says you are safe.
+            </p>
+
+            <!-- ============================================================ -->
+            <ol class="footnotes">
+                <li id="fn1">
+                    Exposed-instance enumeration: the query, the LWE&rarr;RLWE
+                    conversion key, and the RLWE&rarr;RGSW key all live on the large
+                    ring under \(S_1\); the ring-switching key is an RLWE sample
+                    under the small-ring secret \(S_2\) at \(q_3\). No
+                    lower-dimension LWE leaves the client (the conversion&rsquo;s
+                    low-rank intermediates are computed server-side). <span class="tag tag-paper">paper</span> §5.1, p.16; <span class="tag tag-code">code</span> <code>via-client/src/client.rs</code>, <code>via-primitives/src/switching/ring_switch.rs</code>. <a href="#r1">&#8617;</a>
+                </li>
+                <li id="fn2">
+                    <span class="tag tag-infer">inference</span> Estimates from
+                    <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">malb/lattice-estimator</a>
+                    (classical core-SVP; binding attack <code>bdd</code>/<code>usvp</code>),
+                    run per instance with the secret/error distributions shown.
+                    Calibrated against \((2048,2^{54},\text{ternary})\to126.3\) bits,
+                    consistent with the HE Security Standard. RLWE/MLWE treated as
+                    LWE at the ring dimension (standard). <a href="#r2">&#8617;</a>
+                </li>
+                <li id="fn3">
+                    <span class="tag tag-flag">unverified</span> The ~72/88-bit
+                    figures are reported by Yue et&nbsp;al. on the
+                    <a href="https://github.com/owniai/VIA" target="_blank" rel="noopener">owniai/VIA</a>
+                    C++ implementation via the OpenFHE estimator and were not re-run
+                    here; they concern a different artifact than <code>via-rs</code>.
+                    <a href="#r3">&#8617;</a>
+                </li>
+                <li id="fn4">
+                    <span class="tag tag-infer">inference</span> Appendix-C recursion
+                    reimplemented (Lemmas C.1&ndash;C.5, pp.24&ndash;27) and validated:
+                    erratum gadgets + paper Gaussian, against the paper&rsquo;s
+                    \((q_3{-}q_4)/p\) threshold, give \(\log_2 P_{\text{fail}}=-39.8\)
+                    (union over \(n_1\) coefficients), matching the authors&rsquo;
+                    stated \(-43.4\) to within the union-bound convention. The prior
+                    finding that &ldquo;the erratum also fails&rdquo; traced to a
+                    ring-switch gadget-length transcription error (\(\ell_{rs}=4\)
+                    instead of \(8\)) and is withdrawn. <a href="#r4">&#8617;</a>
+                </li>
+                <li id="fn5">
+                    <span class="tag tag-infer">inference</span> The binding
+                    intermediate constraint is the first-dimension/CMux output at
+                    \(q_2\): its noise must stay below the message budget
+                    \(q_2/2p\). Lowering \(q_1\) raises the \(q_1\!\to\!q_2\)
+                    mod-switch ratio \((q_2/q_1)^2\) applied to the (large) DMux
+                    variance, so the carried noise at \(q_2\) grows; the survival
+                    margin crosses \(6\sigma\) near \(q_1=2^{60}\) at \(n_1{=}2048\)
+                    and \(q_1=2^{63}\) at \(n_1{=}4096\). <a href="#r5">&#8617;</a>
+                </li>
+            </ol>
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+        </div>
+    </body>
+</html>

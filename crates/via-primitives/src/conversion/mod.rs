@@ -94,6 +94,12 @@ pub use cascade::{
     LweToRlweKeyRnsN2048, LweToRlweKeyRnsN2048Eval, gen_lwe_to_rlwe_key_rns_n2048_boxed,
     lwe_to_rlwe_rns_n2048, lwe_to_rlwe_rns_n2048_eval,
 };
+// ≥120-bit "secure" n₁ = 4096 cascade (`alloc`-only — ~50 MB heap-built key).
+#[cfg(feature = "alloc")]
+pub use cascade::{
+    LweToRlweKeyRnsN4096, LweToRlweKeyRnsN4096Eval, gen_lwe_to_rlwe_key_rns_n4096_boxed,
+    lwe_to_rlwe_rns_n4096, lwe_to_rlwe_rns_n4096_eval,
+};
 pub use extract::{ExtrDims, extr};
 // VIA-B repacking primitives. Same gate as the `repack` module.
 // The leaf primitives + the per-preset repack families (schedule trait, owned

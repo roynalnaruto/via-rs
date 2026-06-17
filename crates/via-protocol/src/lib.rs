@@ -24,8 +24,8 @@ pub use via_primitives as primitives;
 pub use error::{Result, ViaError};
 pub use params::{KeyDist, PIRParams};
 pub use presets::{
-    REALISTIC_PARAMS, TOY_PARAMS, ViaCPublicParams, ViaCRealisticParams, ViaCToyParams,
-    pir_params_matches_preset,
+    REALISTIC_PARAMS, SECURE_PARAMS, TOY_PARAMS, ViaCPublicParams, ViaCRealisticParams,
+    ViaCSecure120Params, ViaCToyParams, pir_params_matches_preset,
 };
 // The common variant-dimension read surface (VIA-C ≡ n3=n2, t=1).
 pub use variant::VariantParams;
