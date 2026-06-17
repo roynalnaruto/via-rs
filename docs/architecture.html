@@ -13,7 +13,11 @@
             src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
             crossorigin
         ></script>
-        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <!-- Pinned to Babel 7.x: this page uses UMD React globals and the
+             classic JSX runtime (React.createElement). Babel 8 changed the
+             default to the automatic runtime, which emits an unresolvable
+             `import … from "react/jsx-runtime"` and renders the page blank. -->
+        <script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
     </head>
     <body>
         <header class="site">
