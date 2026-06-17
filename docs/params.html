@@ -115,7 +115,7 @@
                 from. <strong>Five artifacts by three parties</strong> are in
                 play, and keeping them straight is half the battle:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Artifact</th>
@@ -195,7 +195,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 Lineage: the <strong>paper</strong> is realized by the authors'
                 C++ <strong>owniai/VIA</strong> and by Turan's Python
@@ -236,7 +236,7 @@
                 VIA is built on RLWE/MLWE, so its parameters are the usual
                 lattice-encryption knobs plus a few PIR-specific ones. Grouped:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Knob</th>
@@ -318,7 +318,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
@@ -328,7 +328,7 @@
                 Reading the table, "turn up" means increase that one knob holding
                 the others fixed.
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Turn up&hellip;</th>
@@ -390,7 +390,7 @@
                         <td>—</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 So "make decryption reliable" pulls toward <em>big \(q\), small
                 \(\sigma\), small gadget bases, many digits, small
@@ -463,7 +463,7 @@
                 the finding. The rest of this section gives the full numbers;
                 this table is the map.
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Parameter (VIA-C)</th>
@@ -543,10 +543,10 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
 
             <h4>Rings &amp; modulus chain</h4>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Quantity</th>
@@ -608,7 +608,7 @@
                         <td>16</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> Appendix B, p.22
                 (moduli) &amp; §5.1, p.16 (dimensions); <span class="tag tag-code">code</span>
@@ -644,7 +644,7 @@
             </p>
 
             <h4>Distributions (secret key \(\chi_S\), error \(\chi_E\))</h4>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Where</th>
@@ -675,7 +675,7 @@
                         <td>Gaussian \(\sigma=26\)</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> §5.1, p.16;
                 <span class="tag tag-code">code</span>
@@ -709,7 +709,7 @@
                 <em>bases</em> \(B\) moved, and the base is what governs the
                 noise. VIA-C / VIA-B:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Gate</th>
@@ -749,7 +749,7 @@
                         <td>8</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 Source: <span class="tag tag-paper">paper</span> Table 6, p.23
                 (draft); Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a> VIA authors'
@@ -778,7 +778,7 @@
             </p>
 
             <h4>Database dimensions (paper Table 4, p.23)</h4>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Database</th>
@@ -803,7 +803,7 @@
                         <td>\((2^{11},\ 2^{14})\)</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p class="key">
                 <span class="tag tag-infer">inference</span> \(I\) (rows, the
                 first-dimension sum) and \(J\) (columns, the CMux tree) are the
@@ -834,7 +834,7 @@
                 per-stage recursion (App C.2, pp.26&ndash;27) that mirrors the
                 pipeline. Each stage adds its own term; the load-bearing ones:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Stage</th>
@@ -880,7 +880,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 Two things make this budget the crux for an implementer:
             </p>
@@ -950,7 +950,7 @@
                 Here the three sources give three different numbers for the same
                 quantity:
             </p>
-            <table>
+            <div class="tscroll"><table>
                 <thead>
                     <tr>
                         <th>Source</th>
@@ -1007,7 +1007,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
             <p>
                 <span class="tag tag-infer">inference</span> The telling detail:
                 the reviewers <em>reproduced</em> the paper's 110 from the
