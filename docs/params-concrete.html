@@ -329,6 +329,18 @@
                 </tbody>
             </table></div>
             <p>
+                <span class="tag tag-code">code</span> The pipeline is also
+                confirmed <strong>empirically end-to-end</strong> at these
+                dimensions: a full query&rarr;answer&rarr;recover round-trip at
+                \(n_1{=}4096,\ n_2{=}1024\) with the new moduli, \(q_4{=}2^{15}\),
+                ternary keys and erratum gadgets &mdash; exercising the n4096
+                LWE&rarr;RLWE cascade &mdash; recovers the correct record
+                (<code>client_server_e2e_secure</code>, ~17&nbsp;s release). On a
+                small \(2\times2\) database the accumulated noise is far below the
+                32&nbsp;GiB budget above, so this witnesses the
+                <em>mechanics</em> (and the integration), not the worst-case budget.
+            </p>
+            <p>
                 Two honest caveats <span class="tag tag-infer">inference</span>:
                 <strong>(a)</strong> the margin is <em>tight</em> &mdash; the
                 binding \(q_2\)-survival term sits at \(2^{-42}\), only ~2 bits past
