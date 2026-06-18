@@ -446,7 +446,9 @@
                 gadgets, not the conversion. <span class="tag tag-infer">inference</span>
                 The one thing still un-exhibited in code is a <em>full</em>
                 end-to-end \(P_{\text{fail}}\) at the 32&nbsp;GiB dimensions &mdash;
-                infeasible via the schoolbook \(O(n^2)\) reference, so the analytic
+                infeasible not for algorithmic reasons (the server&rsquo;s
+                <code>first_dim</code> is eval/NTT, \(O(N)\)) but for resources:
+                the prepared DB at that size is ~1&nbsp;TB of RAM. So the analytic
                 recursion plus these primitive-level measurements are the substitute.
                 Raising the DMux (<code>L_QUERY</code>) length \(\ell\!:\!2\to3\)
                 buys an enormous margin for one extra gadget digit &mdash; cheap

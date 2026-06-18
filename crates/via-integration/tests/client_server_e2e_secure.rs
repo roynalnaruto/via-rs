@@ -13,8 +13,8 @@
 //! budget here is far slacker than the 32 GiB analysis the parameters target —
 //! this proves the *mechanics* close, not the worst-case budget).
 //!
-//! `#[ignore]` — heavy: the n4096 RNS cascade key is ~54 MB and the schoolbook
-//! O(n²) pipeline at n=4096 runs for minutes. Run with:
+//! `#[ignore]` — heavy: the n4096 RNS cascade key is ~54 MB and the single-threaded
+//! n=4096 NTT pipeline runs for minutes. Run with:
 //!
 //! ```text
 //! cargo test -p via-integration --release --test client_server_e2e_secure -- --ignored

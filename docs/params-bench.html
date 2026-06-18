@@ -148,17 +148,31 @@
                 (<code>client_server_e2e_secure</code>) &mdash; confirming the
                 integration and the decode, not throughput at scale.
             </p>
+            <p>
+                <span class="tag tag-code">code</span> A larger end-to-end run with
+                the parallel <code>first_dim</code> &mdash; \(n_1{=}2048\),
+                \(I{=}32,\ J{=}4096\) (\(2^{17}\) cells, a <strong>~2&nbsp;GB</strong>
+                eval-form prepared DB) &mdash; recovers the right record in
+                <strong>~31&nbsp;s</strong> (release, 11 cores). That is the
+                largest DB that fits this machine&rsquo;s 8&nbsp;GB RAM; it
+                witnesses the multi-threaded first-dimension at real database
+                width, short of the 32&nbsp;GiB noise budget.
+            </p>
             <div class="callout">
                 <strong>Not measured here</strong>
                 <span class="tag tag-flag">unverified</span>: full
                 <em>database-scale</em> throughput (the 32&nbsp;GiB
-                \(I{=}2^{11},J{=}2^{14}\) configuration). The in-tree e2e is a
-                <em>schoolbook</em> \(O(n^2)\) reference (it exists to witness
-                correctness, not speed); at full database dimensions it would run
-                for many minutes and is not representative of the eval/NTT
-                production path, whose per-op scaling the table above already
-                captures. The honest performance statement is the
-                <em>ratio</em>, which is build- and machine-independent.
+                \(I{=}2^{11},J{=}2^{14}\) configuration). The in-tree
+                <code>first_dim</code> runs the <strong>eval/NTT</strong> path
+                (the DB is forward-NTT'd once into a <code>PreparedDb</code>, then
+                a pointwise multiply-accumulate &mdash; \(O(N)\), not \(O(n^2)\))
+                and is now <strong>multi-threaded</strong> (the independent columns
+                are fanned across <code>available_parallelism()</code> scoped
+                workers). The remaining limit at full scale is <em>memory</em>:
+                the prepared matrix for 32&nbsp;GiB is ~1&nbsp;TB of RAM, so that
+                size needs server-class hardware regardless of speed. The honest
+                performance statement here is the per-op <em>ratio</em>, which is
+                build- and machine-independent.
             </div>
 
             <!-- ============================================================ -->

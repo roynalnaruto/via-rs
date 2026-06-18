@@ -85,7 +85,7 @@ pub fn answer_through_crot<
     const N2: usize,
     const N_REC: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
-    R2: RingPoly<N1> + RingPolyEval<N1>,
+    R2: RingPoly<N1> + RingPolyEval<N1> + Send + Sync,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     K: Zeroize + CascadeKey,
     const L_QUERY: usize,
@@ -105,6 +105,7 @@ pub fn answer_through_crot<
 where
     CascadeFn:
         Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
+    R2::Eval: Send + Sync,
 {
     const {
         assert!(N1 >= N_REC, "answer_through_crot: N1 must be >= N_REC");
@@ -289,7 +290,7 @@ pub fn answer_one_query<
     const N1: usize,
     const N2: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
-    R2: RingPoly<N1> + RingPolyEval<N1>,
+    R2: RingPoly<N1> + RingPolyEval<N1> + Send + Sync,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     K: Zeroize + CascadeKey,
@@ -314,6 +315,7 @@ where
     R3::Embedded<N1>: RingPoly<N1, Projected<N2> = R3>,
     CascadeFn:
         Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
+    R2::Eval: Send + Sync,
 {
     // Parent span; the prefix's step spans nest under `answer_through_crot` and
     // step 7 nests directly here (held for the whole call, dropped on every
@@ -535,6 +537,8 @@ impl<
     ) -> Result<ModSwitchedCiphertext<N2, Rg::R3, Rg::R4>, ViaError>
     where
         <Rg::R3 as RingPoly<N2>>::Embedded<N1>: RingPoly<N1, Projected<N2> = Rg::R3>,
+        Rg::R2: Send + Sync,
+        <Rg::R2 as RingPolyEval<N1>>::Eval: Send + Sync,
     {
         answer_one_query::<N1, N2, Rg::R1, Rg::R2, Rg::R3, Rg::R4, Rg::K, L_QUERY, L_CK, L_RSK, D, _>(
             query,
@@ -560,6 +564,8 @@ impl<
     ) -> Result<ModSwitchedCiphertext<N2, Rg::R3, Rg::R4>, ViaError>
     where
         <Rg::R3 as RingPoly<N2>>::Embedded<N1>: RingPoly<N1, Projected<N2> = Rg::R3>,
+        Rg::R2: Send + Sync,
+        <Rg::R2 as RingPolyEval<N1>>::Eval: Send + Sync,
     {
         let q2 = self.q2_mod;
         let ck_base = self.public_params.ck_base;

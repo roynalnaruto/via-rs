@@ -14,8 +14,12 @@
 //! For NTT-friendly `q2` this is `O(N)` pointwise muls (the speed-up); for the
 //! non-NTT fallback (`DynModulus`/`PowerOfTwoModulus`) `Eval = Self`, the
 //! transforms are the identity, and the pointwise `Mul` degenerates to the
-//! existing schoolbook `negacyclic_mul_slice` — same result, same cost. A future
-//! *batched* GPU FirstDim would wrap this whole function.
+//! existing schoolbook `negacyclic_mul_slice` — same result, same cost.
+//!
+//! The columns are independent, so under `feature = "alloc"` (where `std` is
+//! linked) the `J`-loop is split across `available_parallelism()` worker
+//! threads via [`std::thread::scope`] (no extra dependency); the `no_std` build
+//! keeps the serial loop. Results are identical and assembled in column order.
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
@@ -61,7 +65,8 @@ pub fn first_dim<const N1: usize, R2>(
     prepared: &PreparedDb<N1, R2>,
 ) -> Vec<RLWECiphertext<N1, R2>>
 where
-    R2: RingPoly<N1> + RingPolyEval<N1>,
+    R2: RingPoly<N1> + RingPolyEval<N1> + Send + Sync,
+    R2::Eval: Send + Sync,
 {
     let (i_len, j_len) = (prepared.num_rows(), prepared.num_cols());
     assert_eq!(
@@ -78,23 +83,57 @@ where
         .map(|ct| (R2::to_eval(ct.mask), R2::to_eval(ct.body)))
         .collect();
 
-    let mut results = Vec::with_capacity(j_len);
-    for j in 0..j_len {
-        // Seed both accumulators from i=0 (I ≥ 1: num_rows is a power of two ≥ 1
-        // by the answer-path guard, and ≥ 1 for the direct callers), then MAC
-        // i=1..I — pointwise in eval form.
+    // One output column: MAC the I cells against the selection, pointwise in
+    // eval form. Seed from i=0 (I ≥ 1 by the asserts above), then MAC i=1..I.
+    let column = |j: usize| -> RLWECiphertext<N1, R2> {
         let mut acc_mask = prepared.cell(0, j) * sel[0].0;
         let mut acc_body = prepared.cell(0, j) * sel[0].1;
         for (i, &(sel_mask, sel_body)) in sel.iter().enumerate().skip(1) {
             acc_mask += prepared.cell(i, j) * sel_mask;
             acc_body += prepared.cell(i, j) * sel_body;
         }
-        results.push(RLWECiphertext::new(
-            R2::from_eval(acc_mask),
-            R2::from_eval(acc_body),
-        ));
+        RLWECiphertext::new(R2::from_eval(acc_mask), R2::from_eval(acc_body))
+    };
+
+    // Columns are independent — fan the J-loop across worker threads under
+    // `alloc` (= std linked); fall back to a serial loop for `no_std`.
+    #[cfg(feature = "alloc")]
+    {
+        let workers = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(j_len);
+        if workers > 1 {
+            let column = &column;
+            let chunk = j_len.div_ceil(workers);
+            // Workers don't inherit the caller's (large) stack, and the eval-form
+            // ring ops put sizeable temporaries on the stack at paper/secure n —
+            // give each a generous stack (overridable via VIA_FIRSTDIM_STACK_MB).
+            let stack = std::env::var("VIA_FIRSTDIM_STACK_MB")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(64)
+                << 20;
+            let mut results: Vec<RLWECiphertext<N1, R2>> = Vec::with_capacity(j_len);
+            std::thread::scope(|s| {
+                let handles: Vec<_> = (0..j_len)
+                    .step_by(chunk)
+                    .map(|lo| {
+                        let hi = (lo + chunk).min(j_len);
+                        std::thread::Builder::new()
+                            .stack_size(stack)
+                            .spawn_scoped(s, move || (lo..hi).map(column).collect::<Vec<_>>())
+                            .expect("spawn first_dim worker")
+                    })
+                    .collect();
+                for h in handles {
+                    results.extend(h.join().expect("first_dim worker thread panicked"));
+                }
+            });
+            return results;
+        }
     }
-    results
+    (0..j_len).map(column).collect()
 }
 
 #[cfg(test)]
