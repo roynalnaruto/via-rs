@@ -55,6 +55,11 @@ jobs:
           if git cat-file -e "$BASE:crates/via-integration/benches/pipeline_toy.rs" 2>/dev/null; then
             PR_REF="$(git rev-parse HEAD)"
             git checkout --quiet --detach "$BASE"
+            # Force a fresh build of the workspace crates under test. A restored
+            # target/ cache can otherwise leave the bench binary linked against a
+            # stale build, so the comparison measures the wrong code (this guards
+            # against the first_dim parallelism regression that slipped through).
+            cargo clean -p via-primitives -p via-protocol -p via-client -p via-server -p via-integration
             cargo bench --bench pipeline_toy -- --save-baseline base
             git checkout --quiet "$PR_REF"
             echo "HAVE_BASE=1" >> "$GITHUB_ENV"
@@ -71,6 +76,10 @@ jobs:
       # "Baseline 'base' must exist before comparison is allowed".
       - name: Benchmark PR / branch
         run: |
+          # Same cache-staleness guard as the base step: rebuild the workspace
+          # crates so the bench binary reflects this commit's code, not a stale
+          # artifact restored from the target/ cache.
+          cargo clean -p via-primitives -p via-protocol -p via-client -p via-server -p via-integration
           if [ "${HAVE_BASE:-0}" = "1" ]; then
             cargo bench --bench pipeline_toy -- --baseline-lenient base
           else
