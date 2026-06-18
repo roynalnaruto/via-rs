@@ -29,6 +29,34 @@ use via_primitives::encryption::types::RLWECiphertext;
 
 use crate::prepared_db::PreparedDb;
 
+/// Print the chosen FirstDim path (serial vs parallel) once per process, but
+/// only when `VIA_FIRSTDIM_DEBUG` is set. The env probe is cached so the hot
+/// path stays free of any syscall when the flag is unset (the common case);
+/// the bench CI sets the flag to report the path for the toy and paper grids.
+#[cfg(feature = "alloc")]
+fn firstdim_debug_path(
+    i: usize,
+    j: usize,
+    n1: usize,
+    work: usize,
+    par_min: usize,
+    workers: usize,
+    parallel: bool,
+) {
+    use std::sync::{Once, OnceLock};
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    if !*ENABLED.get_or_init(|| std::env::var_os("VIA_FIRSTDIM_DEBUG").is_some()) {
+        return;
+    }
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        eprintln!(
+            "[first_dim] i={i} j={j} N1={n1} work={work} PAR_MIN_WORK={par_min} workers={workers} -> {}",
+            if parallel { "PARALLEL" } else { "serial" }
+        );
+    });
+}
+
 /// Compute the `J` FirstDim output ciphertexts at `q2`.
 ///
 /// # Arguments
@@ -103,32 +131,25 @@ where
     // thread-spawn cost; fall back to the serial loop otherwise and for `no_std`.
     #[cfg(feature = "alloc")]
     {
-        // Spawning `workers` threads (each with a large stack, below) costs tens
-        // of µs per worker — a net loss when the MAC work is tiny. Only
-        // parallelize once that work (≈ I·J·N pointwise multiply-accumulates) is
-        // large enough to dwarf the spawn cost. Empirically the n=8 toy grid
-        // (work 2^5) is ~18× slower parallelized and must stay serial, while the
-        // paper/secure grids (n≥2048, work ≥ 2^18) win from the fan-out (~2× at
-        // the CI bench grid I=8, J=16).
+        // Spawning workers costs tens of µs each, and the available_parallelism()
+        // probe is itself a syscall (cgroup parsing can cost ~tens of µs in a
+        // container) — both a net loss when the MAC work is tiny. So gate on the
+        // cheap work estimate (≈ I·J·N multiply-accumulates) FIRST and keep the
+        // small-work path syscall-free: only consult available_parallelism() once
+        // the work clears the threshold. The n=8 toy grid (work 2^5) stays serial;
+        // paper/secure grids (n≥2048, work ≥ 2^18) fan out (~2× at I=8, J=16).
         const PAR_MIN_WORK: usize = 1 << 16;
         let work = i_len.saturating_mul(j_len).saturating_mul(N1);
-        let workers = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1)
-            .min(j_len);
-        let go_parallel = workers > 1 && work >= PAR_MIN_WORK;
-        // Diagnostic: print the chosen path once per process when
-        // VIA_FIRSTDIM_DEBUG is set (used by the bench CI to report serial vs
-        // parallel for the toy and paper grids).
-        if std::env::var_os("VIA_FIRSTDIM_DEBUG").is_some() {
-            static DBG: std::sync::Once = std::sync::Once::new();
-            DBG.call_once(|| {
-                eprintln!(
-                    "[first_dim] i={i_len} j={j_len} N1={N1} work={work} PAR_MIN_WORK={PAR_MIN_WORK} workers={workers} -> {}",
-                    if go_parallel { "PARALLEL" } else { "serial" }
-                );
-            });
-        }
+        let workers = if work >= PAR_MIN_WORK {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(j_len)
+        } else {
+            1
+        };
+        let go_parallel = workers > 1;
+        firstdim_debug_path(i_len, j_len, N1, work, PAR_MIN_WORK, workers, go_parallel);
         if go_parallel {
             let column = &column;
             let chunk = j_len.div_ceil(workers);
