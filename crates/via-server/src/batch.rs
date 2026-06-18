@@ -75,7 +75,7 @@ pub fn answer_batch<
     const N3: usize,
     const T: usize,
     R1: RingPoly<N1> + RingPolyEval<N1>,
-    R2: RingPoly<N1> + RingPolyEval<N1>,
+    R2: RingPoly<N1> + RingPolyEval<N1> + Send + Sync,
     R3: RingPoly<N2> + RingPolyEval<N2>,
     R4: RingPoly<N2>,
     K: Zeroize + CascadeKey,
@@ -102,6 +102,7 @@ where
     RepackFn: Fn(&[RLWECiphertext<N1, R2>], &K) -> RLWECiphertext<N1, R2>,
     CascadeFn:
         Fn(&MLWECiphertext<N1, 1, R1::Projected<1>>, &K::Eval, u64) -> RLWECiphertext<N1, R1>,
+    R2::Eval: Send + Sync,
 {
     const {
         assert!(N1 >= N3, "answer_batch: N1 must be >= N3");

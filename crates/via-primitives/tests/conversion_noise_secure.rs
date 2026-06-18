@@ -11,6 +11,17 @@
 //!
 //! Run: `cargo test -p via-primitives --release --features alloc
 //!       --test conversion_noise_secure -- --ignored --nocapture`
+//!
+//! On the **negative** counterpart (per Rohit's PR review — "confirm error not
+//! within budget for paper-prescribed params"): the *conversion* is not a valid
+//! negative witness, because it keeps ~46 bits of headroom even under the
+//! paper's Gaussian σ=32 secret (the headroom below is ~56 bits at ternary and
+//! E[s²]=32²/(2/3)≈1536 costs only ~10.6 bits). The budget violation for paper
+//! params lives in the **DMux/CMux gate residual** (Yue's bug): see
+//! `dmux_noise_empirical` check (3) — the measured σ=32 residual exceeds the
+//! paper's own C.1/C.2 bound by ~1000× — and `via-estimator`'s
+//! `yue_correction_breaks_paper_gaussian`, which carries that through the
+//! recursion to P_fail > 2^-40.
 
 #![cfg(feature = "alloc")]
 

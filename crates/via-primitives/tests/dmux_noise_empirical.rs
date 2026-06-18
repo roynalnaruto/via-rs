@@ -159,4 +159,20 @@ fn run_experiment() {
         "σ=32 / ternary variance ratio = {:.1}; paper ×1 predicts ≈1, Yue predicts ≈1536",
         gauss32_var / tern_var
     );
+
+    // (3) NEGATIVE WITNESS (per Rohit's PR review): for the paper-prescribed
+    //     Gaussian secret (σ=32), the measured DMux residual EXCEEDS the residual
+    //     the paper's own C.1/C.2 bound budgets for it (`residual_base`, the ×1
+    //     value) by ~1000× — i.e. the published bound is violated at the gate.
+    //     This is the primitive-level half of "error not within budget for paper
+    //     params"; the emergent decryption-failure (P_fail > 2^-40 once this is
+    //     scaled through the I=2^11 recursion) is asserted analytically in
+    //     `via-estimator`'s `yue_correction_breaks_paper_gaussian`. The
+    //     conversion itself is NOT a valid negative witness — it keeps ~46-bit
+    //     headroom even at σ=32 (see `conversion_noise_secure`).
+    assert!(
+        gauss32_var / residual_base > 100.0,
+        "σ=32 residual is {:.0}× the paper-budgeted residual — bound NOT violated?",
+        gauss32_var / residual_base
+    );
 }
