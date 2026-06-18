@@ -39,7 +39,7 @@
                     <a href="intro.html">Intro</a>
                     <a href="architecture.html">Arch</a>
                     <a href="implementation.html">Impl</a>
-                    <a href="params.html" class="on">Params</a>
+                    <a href="params-primer.html" class="on">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -55,6 +55,7 @@
                 Parameters &mdash; the specification
             </h1>
             <nav class="subnav" aria-label="Parameters section">
+                <a class="subnav-item sn-primer" href="params-primer.html">Primer</a>
                 <span class="subnav-item sn-spec current" aria-current="page">Spec</span>
                 <a class="subnav-item sn-gaps" href="params-gaps.html">Gaps</a>
                 <a class="subnav-item sn-fix" href="params-concrete.html">Fix</a>
@@ -109,15 +110,14 @@
             <h2 id="overview">Overview</h2>
             <p>
                 VIA is not a single parameter set; it is a <em>recipe</em> for
-                choosing one. A parameterization is valid only if it clears two
-                hard targets <strong>at the same time</strong>: a
-                <strong>correctness</strong> target (decryption must succeed with
-                overwhelming probability &mdash; the paper aims for a failure
-                rate \(\le 2^{-40}\)) and a <strong>security</strong> target
-                (every underlying lattice instance must be hard &mdash; the paper
-                aims for \(\ge 110\) bits). Almost every knob that buys headroom
-                on one target spends it on the other, which is what makes
-                parameter selection the delicate part of the scheme.
+                choosing one, valid only when it clears the
+                <strong>security</strong> and <strong>correctness</strong> gates
+                together (the <a href="params-primer.html">Primer</a> lays out
+                that model). This page is the recipe itself: the knobs, why the
+                two gates pull against each other, the descending modulus chain,
+                and the value tables &mdash; the paper&rsquo;s numbers alongside
+                what the code sets. Where those values <em>fail</em> a gate is the
+                <a href="params-gaps.html">Gaps</a> tab.
             </p>
             <p>
                 The short version of the divergence: <span class="tag tag-infer">inference</span>

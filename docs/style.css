@@ -87,6 +87,7 @@ h2,h3,h4,.toc{scroll-margin-top:64px;}
   border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s;}
 .subnav a.subnav-item:hover{color:var(--fg);border-bottom-color:var(--line);text-decoration:none;}
 .subnav-item.current{cursor:default;}
+.subnav-item.current.sn-primer{color:#6741d9;border-bottom-color:#6741d9;}
 .subnav-item.current.sn-spec{color:#2b5dd1;border-bottom-color:#2b5dd1;}
 .subnav-item.current.sn-gaps{color:#c0392b;border-bottom-color:#c0392b;}
 .subnav-item.current.sn-fix{color:#1a855b;border-bottom-color:#1a855b;}

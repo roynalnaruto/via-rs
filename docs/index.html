@@ -14,7 +14,7 @@
     <a href="intro.html">Intro</a>
     <a href="architecture.html">Arch</a>
     <a href="implementation.html">Impl</a>
-    <a href="params.html">Params</a>
+    <a href="params-primer.html">Params</a>
     <a href="audit.html">Audit</a>
     <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
   </nav>
@@ -38,9 +38,9 @@
       <h2>Implementation details</h2>
       <p>The <code>via-rs</code> codebase as built: an architecture map of the five crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and the build/test status.</p>
     </a>
-    <a class="card" href="params.html">
+    <a class="card" href="params-primer.html">
       <h2>Parameters</h2>
-      <p>Three pages: the <em>abstract</em> (the knobs and the security/correctness tension, reconciled across paper, code, and review); the <em>concrete</em> &mdash; a derived, estimator-backed instantiation that provably clears <strong>&ge;120-bit</strong> security while staying correct; and <em>benchmarks</em> measuring what that 120-bit point costs.</p>
+      <p>A parameter set is <em>valid</em> only if it clears two gates &mdash; <strong>secure</strong> and <strong>correct</strong> &mdash; at once; performance is then the profile at which it does. Five tabs: <em>Primer</em> (that model), <em>Spec</em>, <em>Gaps</em> (where the published params fail a gate), <em>Fix</em> (a derived, estimator-backed &ge;120-bit set), and <em>Cost</em> (its ~2&times; performance profile).</p>
     </a>
     <a class="card" href="audit.html">
       <h2>Audit</h2>
