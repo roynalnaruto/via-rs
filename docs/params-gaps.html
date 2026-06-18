@@ -52,7 +52,7 @@
         </header>
         <div class="wrap" role="main">
             <h1 class="page-title">
-                Parameters &mdash; paper vs reality
+                Parameters
             </h1>
             <nav class="subnav" aria-label="Parameters section">
                 <a class="subnav-item sn-primer" href="params-primer.html">Primer</a>
@@ -143,7 +143,7 @@
                         <td>
                             authors' erratum notes a legacy
                             <code>MODULUS_PC=256</code> in their C++ impl
-                            (owniai/VIA) &mdash; an author self-disclosure, not a
+                            (owniai/VIA): an author self-disclosure, not a
                             reviewer finding
                         </td>
                         <td>
@@ -238,7 +238,7 @@
                         <td>First dimension</td>
                         <td>\(\theta_{first} = I\,n_1\,\theta_{ms}\,p^2/4\)</td>
                         <td>
-                            <strong>the dominant blow-up</strong> — scales with
+                            <strong>the dominant blow-up</strong>: scales with
                             \(I\,n_1\,p^2\)
                         </td>
                     </tr>
@@ -384,7 +384,7 @@
                         <td>128 (asserted)</td>
                         <td>
                             a hard-coded <code>u32</code>, read only by
-                            asserts/Debug — <strong>no estimator in the repo</strong>
+                            asserts/Debug: <strong>no estimator in the repo</strong>
                         </td>
                     </tr>
                 </tbody>
@@ -393,15 +393,29 @@
                 <span class="tag tag-infer">inference</span> Read through our own
                 estimator &mdash; the only number we treat as authoritative
                 (<a href="params-concrete.html">Fix</a>) &mdash; the 110 is a
-                <em>claim to be checked</em>, not a fact: on the paper's Gaussian
-                parameters <code>via-estimator</code> gives \(\approx\!95\text{–}96\)
+                <em>claim to be checked</em>, not a fact:
+                <span class="tag tag-code">code</span> on the paper's Gaussian
+                parameters
+                <a
+                    href="https://github.com/roynalnaruto/via-rs/blob/6ddafdb7a0fbb86bb297618e3618394c31585cdc/crates/via-estimator/src/lib.rs#L85-L96"
+                    target="_blank"
+                    rel="noopener"
+                    title="crates/via-estimator/src/lib.rs:85-96 (security_bits / min_security_bits)"
+                    ><code>via-estimator</code></a>
+                gives \(\approx\!95\text{–}96\)
                 bits (the reviewers and malb put those same params nearer 110; we
                 read our conservative ~95 as a floor, not a contradiction). On the
                 <strong>ternary keys via-rs actually runs</strong> it gives
-                \(\approx\!77\) bits (binding small ring). The reviewers' OpenFHE
+                \(\approx\!77\) bits (binding small ring;
+                <a
+                    href="https://github.com/roynalnaruto/via-rs/blob/6ddafdb7a0fbb86bb297618e3618394c31585cdc/crates/via-estimator/src/lib.rs#L223-L235"
+                    target="_blank"
+                    rel="noopener"
+                    title="crates/via-estimator/src/lib.rs:223-235 (realistic_security_gap test pins ternary min ~77)"
+                    >lib.rs:223-235</a>). The reviewers' OpenFHE
                 run on the authors' C++
                 <a href="https://github.com/owniai/VIA" target="_blank" rel="noopener">owniai/VIA</a>
-                got 88/72 &mdash; a third, separate artifact.
+                got 88/72: a third, separate artifact.
                 <span class="tag tag-flag">unverified</span> Those 88/72 figures
                 are on the reviewers' authority, were not re-run here, and the
                 88/72-vs-big/small mapping is a positional reading of the review
@@ -416,7 +430,7 @@
                 <strong>For an implementer:</strong> treat the security level as
                 <em>derived</em>, never asserted. Run an estimator on your exact
                 \((n, q, \sigma)\) for every ring and every variant you ship, and
-                gate CI on it — the one number you must not hard-code is the one
+                gate CI on it: the one number you must not hard-code is the one
                 that says you are safe. <span class="tag tag-code">code</span>
                 via-rs now does this: the <code>via-estimator</code> crate
                 (<code>cargo run -p via-estimator</code>) reports a calibrated
@@ -432,7 +446,7 @@
             <h2 id="caveats">Caveats for implementers</h2>
             <p>
                 If you are porting or re-instantiating VIA, these are the traps
-                the three sources together expose &mdash; each links to where it
+                the three sources together expose: each links to where it
                 bites in the audit.
             </p>
             <ol class="caveats">
@@ -453,10 +467,8 @@
                     ring and <em>every</em> variant; both the big and the small
                     ring are independent LWE instances and both must clear your
                     target. Don't take the paper's 110 as given: our own
-                    <code>via-estimator</code> gives \(\approx\!95\text{–}96\) bits
-                    on the paper's Gaussian params and \(\approx\!77\) on the
-                    ternary keys via-rs ships (the reviewers measured ~88/72 on the
-                    authors' separate C++ build).
+                    <code>via-estimator</code> reads the shipped ternary keys far
+                    lower (see <a href="#security">Security target</a> above).
                     (<a href="audit.html#a2">Audit A2</a>.)
                 </li>
                 <li>
@@ -472,7 +484,7 @@
                     parameters.</strong> A preset that <em>declares</em> Gaussian
                     keys but <em>samples</em> ternary is a silent footgun: the
                     security and noise story becomes decorative. And if you do use
-                    large-\(\sigma\) keys, re-derive the CMux/DMux noise &mdash;
+                    large-\(\sigma\) keys, re-derive the CMux/DMux noise:
                     the TFHE-style lemmas assume a binary key and omit an
                     \(\mathbb E[s_i^2]\) factor. (<a href="audit.html#a4">Audit
                     A4</a>.)
@@ -489,8 +501,8 @@
                 <li>
                     <strong>Respect the algebra.</strong> Rings are powers of
                     two for the NTT, and a modulus that the paper writes as a
-                    prime <em>square</em> cannot be CRT-split into RNS channels
-                    &mdash; substitute two distinct NTT-friendly primes of the
+                    prime <em>square</em> cannot be CRT-split into RNS channels:
+                    substitute two distinct NTT-friendly primes of the
                     same size. (<a href="audit.html#a6">Audit A6</a>.)
                 </li>
                 <li>

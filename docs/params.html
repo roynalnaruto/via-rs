@@ -52,7 +52,7 @@
         </header>
         <div class="wrap" role="main">
             <h1 class="page-title">
-                Parameters &mdash; the specification
+                Parameters
             </h1>
             <nav class="subnav" aria-label="Parameters section">
                 <a class="subnav-item sn-primer" href="params-primer.html">Primer</a>
@@ -111,12 +111,12 @@
             <p>
                 VIA is not a single parameter set; it is a <em>recipe</em> for
                 choosing one, valid only when it clears the
-                <strong>security</strong> and <strong>correctness</strong> gates
+                <strong>security</strong> and <strong>correctness</strong> checks
                 together (the <a href="params-primer.html">Primer</a> lays out
                 that model). This page is the recipe itself: the knobs, why the
-                two gates pull against each other, the descending modulus chain,
-                and the value tables &mdash; the paper&rsquo;s numbers alongside
-                what the code sets. Where those values <em>fail</em> a gate is the
+                two checks pull against each other, the descending modulus chain,
+                and the value tables: the paper&rsquo;s numbers alongside
+                what the code sets. Where those values <em>fail</em> a check is the
                 <a href="params-gaps.html">Gaps</a> tab.
             </p>
             <p>
@@ -203,7 +203,7 @@
                         </td>
                         <td>
                             the dominant correctness lever (see
-                            <a href="params-gaps.html#correctness">Correctness budget</a>) &mdash;
+                            <a href="params-gaps.html#correctness">Correctness budget</a>):
                             trades key size/speed against noise
                         </td>
                     </tr>
@@ -308,7 +308,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="chain">The modulus chain &mdash; why it descends</h2>
+            <h2 id="chain">The modulus chain</h2>
             <p>
                 VIA does not use a single modulus; it uses a descending chain
                 \(q_1 > q_2 > q_3 > q_4 > p\), mod-switching down between stages.
@@ -320,7 +320,7 @@
                 <li>
                     <strong>Communication.</strong> The answer is squeezed to a
                     small modulus before being sent, so each coefficient costs
-                    fewer bits — VIA's headline metric is response size.
+                    fewer bits: VIA's headline metric is response size.
                 </li>
                 <li>
                     <strong>The budget travels with the modulus.</strong> The
@@ -328,8 +328,8 @@
                     needs room); the first-dimension sum happens at \(q_2\);
                     response compression walks \(q_2\!\to\!q_3\!\to\!q_4\). The
                     final decode happens at \(q_4\), where in VIA-C
-                    \(\Delta/2=(q_4/p)/2\) is only on the order of a hundred
-                    &mdash; a tiny budget that works precisely because the noise
+                    \(\Delta/2=(q_4/p)/2\) is only on the order of a hundred:
+                    a tiny budget that works precisely because the noise
                     was scaled down the chain alongside the modulus.
                 </li>
             </ul>
@@ -348,7 +348,7 @@
             <p>
                 One structural fact first, because it shapes every table below:
                 <span class="tag tag-code">code</span> the repository has
-                <strong>no plain-VIA protocol preset</strong> — the wired
+                <strong>no plain-VIA protocol preset</strong>: the wired
                 end-to-end presets are all VIA-C / VIA-B:
                 <code>REALISTIC_PARAMS</code> (paper-scale),
                 <code>SECURE_PARAMS</code> (the &ge;120-bit set &mdash; see
@@ -440,10 +440,10 @@
                 >
                 (q1 primes),
                 <a
-                    href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L444"
+                    href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/algebra/zq/modulus.rs#L448-L467"
                     target="_blank"
                     rel="noopener"
-                    title="crates/via-primitives/src/algebra/zq/modulus.rs:444-467"
+                    title="crates/via-primitives/src/algebra/zq/modulus.rs:448-467"
                     >modulus.rs</a
                 >
                 (q2–q4, p),
@@ -477,7 +477,7 @@
                         <td>Gaussian \(\sigma_{1,S}=32\)</td>
                         <td rowspan="3">
                             declares <code>Gaussian</code> with placeholder
-                            \(\sigma=1.0\); <strong>all dead</strong> — every test
+                            \(\sigma=1.0\); <strong>all dead</strong>: every test
                             samples <code>Ternary</code>
                         </td>
                     </tr>
@@ -513,12 +513,12 @@
                 <span class="tag tag-infer">inference</span> Two traps here: the
                 paper prints the small-ring \(\sigma\) under a typo'd
                 \(\sigma_{1,E}\) subscript (it is \(\chi_2\)'s, not the big
-                ring's); and the code's \(\sigma=1.0\) fields are never read — the
+                ring's); and the code's \(\sigma=1.0\) fields are never read: the
                 actual key/error is ternary, so neither the paper's \(\sigma\)
                 nor the preset's \(1.0\) is what runs (<a href="audit.html#a4">A4</a>).
             </p>
 
-            <h3>Gadget parameters &mdash; the three-way reconciliation</h3>
+            <h3>Gadget parameters</h3>
             <p>
                 This is where "matches the paper" and "is correct as intended"
                 come apart. The lengths \(\ell\) are unchanged across draft and
@@ -586,7 +586,7 @@
                     title="crates/via-protocol/src/presets.rs:150,153,156 — bases 55879/81/8; conv L_CK=18"
                     >presets.rs:150,153,156</a
                 >
-                (unchanged at the audited commit — erratum not adopted).
+                (unchanged at the audited commit: erratum not adopted).
                 <span class="tag tag-infer">inference</span> The code ships the
                 draft bases, which the authors' own analysis does
                 <em>not</em> certify to \(2^{-40}\); plain VIA's gadgets are a

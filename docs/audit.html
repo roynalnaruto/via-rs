@@ -60,7 +60,7 @@
         </header>
         <div class="wrap" role="main">
             <h1 class="page-title">
-                Audit &mdash; VIA-C &amp; VIA-B correctness &amp; security
+                Audit
             </h1>
 
             <div class="navlegend">
@@ -94,9 +94,9 @@
             <p class="toc" id="toc">
                 <a href="#summary">Summary</a>
                 <a href="#audit">VIA-C findings</a>
-                <a href="#validation">Audit-of-audit</a>
-                <a href="#open-questions">Open questions</a>
                 <a href="#via-b">VIA-B follow-up</a>
+                <a href="#open-questions">Open questions</a>
+                <a href="#validation">Audit-of-audit</a>
                 <a href="#footnotes">Footnotes</a>
             </p>
             </div>
@@ -135,11 +135,11 @@
                     >no correctness test under the paper's actual noise
                     distributions and database dimensions</strong
                 >, and the "realistic" Gaussian key distribution declared in the
-                presets is <em>inert</em> &mdash; every test actually runs
+                presets is <em>inert</em>: every test actually runs
                 ternary keys. The follow-up parameterization work adds a
                 scheme-level finding (<a href="#a9">A9</a>): the paper's DMux/CMux
                 noise bound omits the secret \(\mathbb E[s^2]\) factor, so its
-                intended Gaussian-key parameters fail \(2^{-40}\) &mdash; now
+                intended Gaussian-key parameters fail \(2^{-40}\): now
                 confirmed empirically and analytically in-repo. A derived
                 \(\ge120\)-bit <code>SECURE_PARAMS</code> preset now clears
                 security with margin (estimator-gated), though its correctness
@@ -150,7 +150,7 @@
             </p>
             <div class="callout">
                 <strong>Scope.</strong> This page audits <em>implementation /
-                code quality</em> &mdash; what the Rust does, where it diverges
+                code quality</em>: what the Rust does, where it diverges
                 from the paper, what is tested, and what is constant-time. The
                 <em>parameter</em> question (paper vs reality: the security and
                 correctness numbers, the modulus chain, the draft-vs-erratum
@@ -266,7 +266,7 @@
                 <p>
                     <span class="tag tag-code">code</span>
                     <strong>Update:</strong> this is no longer just a
-                    paper-vs-code base mismatch &mdash; the in-repo
+                    paper-vs-code base mismatch: the in-repo
                     <code>via-estimator</code> now <em>proves</em> the shipped
                     draft bases miss \(2^{-40}\) (test
                     <code>draft_gadgets_fail_correctness</code>) and reproduces the
@@ -342,13 +342,13 @@
                 </p>
                 <p>
                     <span class="tag tag-code">code</span>
-                    <strong>Update:</strong> there is now an in-repo estimator
-                    &mdash; the <code>via-estimator</code> crate (added during this
+                    <strong>Update:</strong> there is now an in-repo estimator:
+                    the <code>via-estimator</code> crate (added during this
                     audit) runs a calibrated core-SVP estimate on the
                     <em>shipped</em> presets and gates CI. On the ternary keys the
                     code actually uses, it reports <strong>~77 bits</strong>
-                    (binding small ring) for <code>REALISTIC_PARAMS</code> &mdash;
-                    so the asserted <code>128</code> is not merely underived but
+                    (binding small ring) for <code>REALISTIC_PARAMS</code>, so
+                    the asserted <code>128</code> is not merely underived but
                     wrong by ~50 bits. The full parameter-security reconciliation
                     (paper vs review vs this estimate) now lives on the
                     <a href="params-concrete.html">Params &middot; Concrete</a>
@@ -418,7 +418,7 @@
                 <p>
                     <span class="tag tag-code">code</span>
                     <strong>Update:</strong> the missing analytic budget now
-                    exists &mdash; <code>via-estimator::noise</code> implements the
+                    exists: <code>via-estimator::noise</code> implements the
                     Appendix-C \(P_{\text{fail}}\) recursion (validated: it
                     reproduces the authors' \(-43.4\) exactly at the paper's
                     \(n_1{=}2048\)) and gates CI. With Yue's correction &mdash; the
@@ -497,7 +497,7 @@
                     \(\mathbb E[s_i^2]\) factor the paper's CMux/DMux lemmas omit,
                     now a confirmed correctness bug in its own right
                     (<a href="#a9">A9</a>).<sup><a href="#fn10" id="ref10">10</a></sup> The twist that finding exposes: the
-                    inert preset is a <em>lucky</em> bug here &mdash; the ternary
+                    inert preset is a <em>lucky</em> bug here: the ternary
                     keys it silently falls back to are precisely what keeps the
                     noise budget closeable, where the paper's intended Gaussian
                     \(\sigma{=}32\) key would <em>break</em> it.
@@ -618,7 +618,7 @@
                     prime-square is not square-free and cannot be CRT-split into
                     distinct RNS channels, so the two-prime substitution is a
                     deliberate implementability choice, not a bug. Same magnitude;
-                    affects only the unimplemented VIA variant — VIA-C's \(q_1\)
+                    affects only the unimplemented VIA variant: VIA-C's \(q_1\)
                     primes match the paper exactly.
                 </p>
                 <p class="conf">
@@ -710,8 +710,9 @@
                     (a) <strong>Plaintext modulus is correct:</strong>
                     <code>ViaCP = 16</code> everywhere (<code>ViaP = 256</code> is
                     the separate, correct VIA value); no leftover
-                    <code>MODULUS_PC = 256</code> exists — the Python-reference bug
-                    the authors noted is not present in this port.<sup
+                    <code>MODULUS_PC = 256</code> exists: the constant the
+                    authors discussed (May 11) lives in their own C++
+                    <code>owniai/VIA</code>, not in this port.<sup
                         ><a href="#fn16" id="ref16">16</a></sup
                     >
                     (b) <strong>Constant-time decode:</strong> the secret-key
@@ -776,7 +777,7 @@
                     ways. <strong>Empirically</strong>
                     (<code>dmux_noise_empirical</code>): a real DMux at
                     \(n_1{=}4096\), swept over secrets, shows the residual scales
-                    as \(\mathbb E[s^2]\) to ~1% &mdash; the \(\sigma{=}32\) secret
+                    as \(\mathbb E[s^2]\) to ~1%: the \(\sigma{=}32\) secret
                     carries <strong>1519&times;</strong> the ternary noise and
                     exceeds the paper's own \(\times1\) budget by ~1000&times;.
                     <strong>Analytically</strong>
@@ -788,7 +789,7 @@
                     <span class="tag tag-infer">inference</span> Consequence,
                     and the reason <a href="#a4">A4</a> matters: via-rs runs
                     <em>ternary</em> keys (\(\mathbb E[s^2]{=}\tfrac23<1\)), which
-                    <em>shrink</em> the residual &mdash; so the substitution that
+                    <em>shrink</em> the residual: so the substitution that
                     weakens security is exactly what keeps correctness closeable.
                 </p>
                 <p class="conf">
@@ -807,10 +808,307 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="validation">Audit-of-audit &mdash; adversarial validation</h2>
+            <h2 id="via-b">VIA-B (batch)</h2>
             <p>
-                Every finding on this page (the VIA-C findings above and the
-                VIA-B follow-up below) was independently re-checked by a separate
+                The findings above cover VIA-C at commit <code>9575286</code>.
+                This section covers the <strong>VIA-B</strong> batch variant
+                merged later (upstream PR #10), and its source links are pinned
+                to commit <code>62fe493</code>. Same epistemic tags as above
+                (<span class="tag tag-paper">paper</span> /
+                <span class="tag tag-code">code</span> /
+                <span class="tag tag-infer">inference</span> /
+                <span class="tag tag-flag">unverified</span>). Method: a fresh
+                research + adversarial-review pass over the new code against paper
+                §4.5–4.7 (Fig 9) and Appendix C.
+            </p>
+
+            <h3>What VIA-B adds, and how it answers a batch</h3>
+            <p>
+                <span class="tag tag-code">code</span> VIA-B is a thin batch shell
+                over the VIA-C stack plus one new primitive layer,
+                <strong>homomorphic repacking</strong> (the paper's §4.6;
+                "Layer 7" in the code's own module numbering), all behind the
+                <code>via-b</code> cargo feature (repack also needs
+                <code>alloc</code>: the recursion holds a runtime
+                <code>Vec</code>). The server answers <code>T</code> queries by
+                running the VIA-C prefix (Fig 9 steps 1–6) once per query at the
+                record-ring degree <code>n3</code>, <strong>repacking</strong> the
+                <code>T</code> results into a single ciphertext (the one new
+                step), then running response compression once, so
+                <code>T</code> records cost roughly one answer.
+            </p>
+            <pre class="mermaid">
+flowchart TD
+  Q["client: batch_query yields T compressed VIA-C queries"]
+  Q --> AC["server: answer_through_crot x T  (Fig 9 steps 1-6, at record degree n3)"]
+  AC --> RP["server: Repack to n2  (step 7) - recursive MLWEs-to-RLWE, depth log2(T n1 / n2)"]
+  RP --> RC["server: RespComp x 1  (step 8)"]
+  RC --> RV["client: recover then deinterleave_batch yields T records"]
+  CK["query-compression cascade keys (at q1)"] -. borrowed, mod-switched to q2, no new offline payload .-> RP
+  classDef s fill:#eaf2fb,stroke:#2b5dd1;
+  classDef c fill:#e8f7ee,stroke:#1f9d6b;
+  class AC,RP,RC s;
+  class Q,RV c;
+            </pre>
+            <p class="key">
+                <span class="tag tag-code">code</span> Repack (<code>repack.rs</code>,
+                Layer 7) realizes the paper's MLWEs-to-RLWE conversion: extract
+                each input to an MLWE, then recursively pair-convert
+                (<code>mlwes_to_mlwe</code>, <code>d=2</code>) over
+                \(\log_2(T\,n_1/n_2)\) levels into one RLWE, reusing the VIA-C
+                conversion cascade's own key-switch step (<code>conv_step</code>)
+                and <em>borrowing</em> the query-compression cascade keys, so
+                repacking adds no new public parameters (paper §4.6 Remark). The
+                client's <code>deinterleave_batch</code> is a pure strided
+                permutation that inverts the repack interleave. Construction
+                verdict: <span class="tag tag-code">code</span> faithful to Fig 9
+                / §4.6 for the single-repack case; the paper's vectorization path
+                (\(T > n_1/n_3\)) is not implemented (see VB-6).
+            </p>
+
+            <h3>Findings (VIA-B)</h3>
+
+            <div class="finding sev-critical" id="vb1">
+                <div class="f-head">
+                    <span class="sev">critical</span>
+                    <span class="f-title">VB-1 — Production VIA-B correctness is never end-to-end tested</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-integration/tests/batch_e2e_paper.rs#L43-L46" target="_blank" rel="noopener" title="crates/via-integration/tests/batch_e2e_paper.rs:43-46 (T=8, n3=64, #[ignore])">integration/batch_e2e_paper.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L1307" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:1307 (repack_poly_2048_t256_spike, #[ignore])">primitives/repack.rs</a></span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span> The toy batch
+                    round-trip passes (I ran it: <code>via_b_toy_batch_roundtrip</code>
+                    + <code>…covers_cells_and_slots</code>, 2/2), but at
+                    <code>ViaBToyParams</code> (n2=16), <strong>ternary</strong>
+                    keys, a 2×2 database. The <em>production</em> configuration
+                    (T=256, n3=2, the paper's Gaussian σ, real DB dimensions) has
+                    <strong>no end-to-end correctness test</strong>: the
+                    paper-scale batch e2e runs T=8 / n3=64 (the record-fit
+                    boundary; "T=256 ≈ 3 h"), ternary keys, 2×2 DB, and is
+                    <code>#[ignore]</code>d; the T=256 path exists only as
+                    <code>#[ignore]</code>d repack "spike" tests on
+                    fresh-encrypted inputs (not the noise-laden answer pipeline).
+                    <span class="tag tag-infer">inference</span> The toy/T=8 tests
+                    cannot exercise the production noise regime: half the repack
+                    depth, ternary keys instead of the paper σ, and no accumulated
+                    first-dimension/CMux noise. So production VIA-B correctness is
+                    asserted structurally, not verified: the same gap as VIA-C
+                    (A3), compounded by the deeper repack.
+                </p>
+                <p class="conf">Confidence: high. <em>Fix:</em> a paper-noise, production-dimension batch correctness test (at least one size), plus an analytic θrep/θans budget.</p>
+            </div>
+
+            <div class="finding sev-high" id="vb2">
+                <div class="f-head">
+                    <span class="sev">high</span>
+                    <span class="f-title">VB-2 — VIA-B inherits VIA-C's draft gadget bases, so the security/noise drift carries over</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/presets.rs#L283-L307" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:283-307 (REALISTIC_B_PARAMS)">protocol/presets.rs</a> &middot; HackMD erratum</span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span> <code>ViaBRealisticParams</code>
+                    / <code>REALISTIC_B_PARAMS</code> reuse the VIA-C
+                    <em>draft</em> Table-6 bases (DMux 55879, CMux 81, ring-switch
+                    8, conv ℓ=18), not the authors' erratum (18073 / 307 / 4 /
+                    11). Because VIA-B's repack and prefix run on the
+                    <em>same</em> rings \(R_{n_1,q_1}\) / \(R_{n_2,q_2}\), the
+                    VIA-C findings carry over verbatim: the security drift
+                    (paper-claimed 110 → reviewers' measured ~72–88 bits, A1/A2)
+                    and the tight noise budget apply to VIA-B too, and the
+                    in-repo \(P_{\text{fail}}\) calc now <em>proves</em> the draft
+                    bases miss \(2^{-40}\) (<a href="#a1">A1</a>), with the
+                    \(\mathbb E[s^2]\) bound bug (<a href="#a9">A9</a>) applying to
+                    VIA-B's DMux/CMux identically.
+                    <span class="tag tag-infer">inference</span> Crucially, there
+                    is <strong>no <code>SECURE_B_PARAMS</code></strong> analogue of
+                    the \(\ge120\)-bit VIA-C fix: so VIA-B ships
+                    <em>no</em> certified-secure, certified-correct preset at all.
+                    <span class="tag tag-code">code</span> Clean by contrast:
+                    <code>p=16</code>, <code>n3=2</code>, <code>T=256</code> match
+                    the paper, and the legacy <code>p=256</code> bug is not
+                    inherited.
+                </p>
+                <p class="conf">Confidence: high.</p>
+            </div>
+
+            <div class="finding sev-medium" id="vb3">
+                <div class="f-head">
+                    <span class="sev">medium</span>
+                    <span class="f-title">VB-3 — The paper's repack-noise formula undercounts the implemented depth at the production batch size</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L560-L584" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:560-584 (repack_*_2048_t256 steps list = 10 levels)">primitives/repack.rs</a> &middot; paper Appendix C, step 7</span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span> The repack recursion is
+                    \(\log_2(T\,n_1/n_2)\) levels deep: <strong>10</strong> for
+                    the production T=256 preset (steps <code>keys_4 … keys_2048</code>),
+                    each adding \(2\theta_{ks}\). This faithfully matches the
+                    paper's <em>construction</em> (recurse over the padded count
+                    \(d n/k = T\,n_1/n_2\)). <span class="tag tag-paper">paper</span>
+                    But Appendix C's noise formula writes \(\theta_{rep} =
+                    \theta_{crot} + 2\theta_{ks}\log n_2\) (=9 at \(n_2=512\)),
+                    which equals the true depth only when \(T n_1/n_2 = n_2\)
+                    (T=128). <span class="tag tag-infer">inference</span> At the
+                    headline T=256 the formula undercounts by one
+                    \(2\theta_{ks}\) level (10 vs 9). In magnitude that is
+                    ~11% <em>of the repack key-switch term</em>
+                    \(2\theta_{ks}\log n_2\), and a smaller fraction of
+                    \(\theta_{rep}\) overall, which is dominated by
+                    \(\theta_{crot}\). So the code is right to the construction;
+                    the Appendix-C \(\theta_{rep}\) is the optimistic side, but the
+                    practical shortfall is modest.
+                </p>
+                <p class="conf">Confidence: high on the divergence (depth 10 vs formula's 9, re-verified arithmetically); the materiality is small and the "~11%" applies to the key-switch term only.</p>
+            </div>
+
+            <div class="finding sev-medium" id="vb4">
+                <div class="f-head">
+                    <span class="sev">medium</span>
+                    <span class="f-title">VB-4 — Repack noise omits the key mod-switch and approximate-gadget terms; the §(3) S² concern lands upstream</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L43-L56" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:43-56 (mod_switch_rlev), :134 (θ doc)">primitives/repack.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/encryption/gadget.rs#L11-L15" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/gadget.rs:11-15 (approximate gadget)">primitives/gadget.rs</a> &middot; HackMD Yue §(3)</span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span> The borrowed cascade
+                    keys ship at \(q_1\) and are mod-switched to \(q_2\) inside
+                    repack; that rounding noise is not in the \(\theta_{rep}\)
+                    bound. Repack also reuses the scheme's <em>approximate</em>
+                    gadget decomposition (reconstruction error
+                    \(\approx \mathrm{round}(q/B^\ell)/2\)), which the simple
+                    \(\theta' \le \theta_c + 2\theta_{ks}\) bound omits.
+                    <span class="tag tag-flag">unverified</span> Reviewer Yue
+                    Chen's §(3) "the message should be \(S^2\)" concern targets the
+                    <em>RLWE→RGSW</em> step in query expansion (which VIA-B inherits
+                    from VIA-C, since repack borrows those very keys), and is
+                    explicitly hedged/open: it is <em>not</em> a settled
+                    undercount of the repack's own key-switches (those are the
+                    Lemma-4.1 key-switching bound). The in-repo
+                    <code>via-estimator</code> noise calculator now models the
+                    VIA-C recursion, but <em>not</em> VIA-B's repack chain
+                    (\(\theta_{rep}\)), so these specific terms remain unquantified
+                    in-repo.
+                </p>
+                <p class="conf">Confidence: high that the terms are omitted from the in-code bound; the magnitude is unquantified (the estimator does not yet cover repack).</p>
+            </div>
+
+            <div class="finding sev-medium" id="vb5">
+                <div class="f-head">
+                    <span class="sev">medium</span>
+                    <span class="f-title">VB-5 — The headline response size (1.81 KB, 127×) is not measurable from the code</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/wire/format.rs#L167-L172" target="_blank" rel="noopener" title="crates/via-protocol/src/wire/format.rs:167-172 (PrgCompressed::serialize is todo!())">protocol/wire/format.rs</a></span>
+                </div>
+                <p>
+                    <span class="tag tag-paper">paper</span> VIA-B's headline is a
+                    ~1.81 KB response for a 1 GB database with 256 batched queries
+                    (127× smaller than prior batch PIR; both numbers confirmed in
+                    Table 2 / §5.3).
+                    <span class="tag tag-code">code</span> But the compact wire
+                    serializer (<code>PrgCompressed::serialize</code>) is still
+                    <code>todo!()</code> and there is no ciphertext-level codec, so
+                    the response-size claim cannot be measured here, only inferred
+                    from the answer's structural shape (one RespComp ciphertext at
+                    \(n_2=512\)). Carry-over of VIA-C finding A7.
+                </p>
+                <p class="conf">Confidence: high.</p>
+            </div>
+
+            <div class="finding sev-low" id="vb6">
+                <div class="f-head">
+                    <span class="sev">low</span>
+                    <span class="f-title">VB-6 — The single-repack invariant is stricter than the paper; vectorization is unimplemented (as the paper itself leaves it)</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/presets.rs#L164-L167" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:164-166 (_CHECK: T*N3 <= N2)">protocol/presets.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-server/src/batch.rs#L113-L116" target="_blank" rel="noopener" title="crates/via-server/src/batch.rs:113-116 (record-fit guard)">server/batch.rs</a></span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span> A compile-time invariant
+                    <code>T·N3 ≤ N2</code> ("single-repack record-fit") caps VIA-B
+                    at one repacked output ciphertext.
+                    <span class="tag tag-infer">inference</span> That is stricter
+                    than the per-output-ciphertext packing capacity \(T \le
+                    n_1/n_3\); note this bound is <em>not</em> stated verbatim in
+                    the paper: the paper only says vectorization is needed for
+                    larger batches (and declines to detail it, citing Respire).
+                    The operative packing factor here is the ring-switch ratio
+                    \(D = n_1/n_2 = 4\). <span class="tag tag-paper">paper</span>
+                    The Respire-style vectorization for the multi-output case
+                    (\(T > n_1/n_3\)) is not implemented: a faithful (more
+                    conservative) scope cut, not a divergence. Production T=256
+                    sits exactly at the boundary \(T·N3 = N2 = 512\).
+                </p>
+                <p class="conf">Confidence: high on the code invariant and the boundary arithmetic; the "\(T \le n_1/n_3\)" relation is inference, not a paper quote.</p>
+            </div>
+
+            <div class="finding sev-good" id="vb7">
+                <div class="f-head">
+                    <span class="sev" style="background: var(--code)">verified</span>
+                    <span class="f-title">VB-7 / VB-8 — Two things VIA-B gets right</span>
+                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L408-L434" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:408-434 (from_cascade borrow); :1050 byte-identity test">primitives/repack.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-client/src/batch.rs#L33-L54" target="_blank" rel="noopener" title="crates/via-client/src/batch.rs:33-54 (deinterleave_batch, data-independent)">client/batch.rs</a></span>
+                </div>
+                <p>
+                    <span class="tag tag-code">code</span>
+                    <strong>(VB-7) No new public parameters.</strong> Repack
+                    borrows a zero-copy suffix of the LWE→RLWE conversion cascade
+                    key — a byte-identity test asserts the borrowed keys equal a
+                    dedicated oracle — and for the production cross-type case
+                    (RNS \(q_1\) → single-prime \(q_2\)) it derives the \(q_2\)
+                    keys server-side from already-shipped material. No new
+                    client→server offline payload, matching paper §4.6 Remark.
+                    <strong>(VB-8) Constant-time.</strong> VIA-B adds no
+                    secret-dependent timing path: <code>deinterleave_batch</code>
+                    is a pure strided permutation on public dimensions, and repack
+                    runs on RLWE-uniform ciphertexts and key data with
+                    fixed-length gadget loops (as in the existing VIA-C gates).
+                </p>
+                <p class="conf">Confidence: high (read at source; borrow proven by an in-repo byte-identity equality test).</p>
+            </div>
+
+            <h3>VIA-B build &amp; test</h3>
+            <ul>
+                <li><span class="tag tag-code">code</span> Ran the toy batch suite: <code>via_b_toy_batch_roundtrip</code> + <code>via_b_toy_batch_covers_cells_and_slots</code> — <strong>2/2 pass</strong> (<code>cargo test -p via-integration --features via-b</code>; <code>ViaBToyParams</code>, ternary keys, 2×2 DB).</li>
+                <li><span class="tag tag-code">code</span> The 4×8-grid and paper-scale (T=8 / n3=64) batch e2e tests exist but are <code>#[ignore]</code>d (ternary keys, 2×2 DB).</li>
+                <li><span class="tag tag-flag">unverified</span> The production T=256 / n3=2 path has only <code>#[ignore]</code>d repack "spike" tests on fresh-encrypted inputs: no full-pipeline correctness e2e (VB-1).</li>
+            </ul>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="open-questions">Open questions &amp; uncertainties</h2>
+            <ul>
+                <li>
+                    <strong
+                        >Does the code actually achieve \(2^{-40}\)
+                        correctness?</strong
+                    >
+                    Now computed analytically (<code>via-estimator::noise</code>,
+                    with Yue's \(\mathbb E[s^2]\) residual correction): the
+                    paper's intended <em>Gaussian-key</em> design does not (the
+                    DMux/CMux bound is too aggressive for a large-variance secret;
+                    confirmed empirically: a measured DMux at n4096
+                    (<code>dmux_noise_empirical</code>) shows the residual scales as
+                    \(\mathbb E[s^2]\) to ~1%, so the \(\sigma{=}32\) design carries
+                    \(1519\times\) the ternary noise), but via-rs's <em>ternary</em>
+                    <code>SECURE_PARAMS</code> clears \(2^{-40}\) on a thin,
+                    model-sensitive margin: an optional DMux
+                    \(\ell\!:\!2\to3\) bump widens it (see
+                    <a href="params-concrete.html#correctness">Fix</a>). Still
+                    open: an <em>empirical</em> paper-noise/paper-dimension test
+                    (the analytic budget is no longer the gap).
+                </li>
+                <li>
+                    <strong>Three-way paper↔Python↔Rust drift:</strong> the Rust
+                    cites a Python reference (<code>client.py</code>,
+                    <code>server.py</code>, <code>resp_comp.py</code>) that is
+                    <em>not in this checkout</em>, so only paper↔Rust drift is
+                    checkable here.<sup><a href="#fn18" id="ref18">18</a></sup>
+                </li>
+                <li>
+                    <strong>Reviewer proof issue #3</strong> (the \(S^2\) message
+                    in RLWE→RGSW) remains a paper-proof soundness question that the
+                    code sidesteps by running ternary keys; it would bite if
+                    Gaussian keys were wired (<a href="#a4">A4</a>).
+                </li>
+            </ul>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="validation">Audit-of-audit</h2>
+            <p>
+                Every finding on this page (both the VIA-C findings and the
+                VIA-B follow-up above) was independently re-checked by a separate
                 adversarial pass whose remit was to <em>disconfirm</em>: four
                 fresh reviewers re-read the primary sources &mdash; the
                 <a
@@ -842,7 +1140,7 @@
                 \(\mathbb E[s^2]\) bound bug, promoted from an open question and
                 now confirmed); <a href="#a2">A2</a> and <a href="#a3">A3</a> are
                 <strong>partly resolved</strong> by the <code>via-estimator</code>
-                crate (A3 downgraded high→medium &mdash; the analytic budget now
+                crate (A3 downgraded high→medium: the analytic budget now
                 exists; only an at-scale empirical witness is still missing); and
                 <a href="#a1">A1</a>/<a href="#vb2">VB-2</a> are sharpened (the
                 draft bases are now <em>proven</em> to miss \(2^{-40}\)). The A1–A8
@@ -897,7 +1195,7 @@
                         <td>confirmed &middot; clarified</td>
                         <td>
                             inertness grep-verified; Yue's \(\sigma{=}4960\) is
-                            the <em>plain-VIA</em> figure &mdash; VIA-C keys are
+                            the <em>plain-VIA</em> figure: VIA-C keys are
                             \(\sigma_{1,S}{=}32\) / \(\sigma{=}26\) (see fn 10)
                         </td>
                     </tr>
@@ -933,7 +1231,7 @@
                         <td>confirmed (both hold)</td>
                         <td>
                             <code>ViaCP=16</code>, no <code>MODULUS_PC</code>
-                            (the bug was in the Python reference); decode centring
+                            (the bug was in the authors' C++ <code>owniai/VIA</code>); decode centring
                             is constant-time
                         </td>
                     </tr>
@@ -1004,323 +1302,6 @@
                     </tr>
                 </tbody>
             </table></div>
-
-            <!-- ====================================================================== -->
-            <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="open-questions">Open questions &amp; uncertainties</h2>
-            <ul>
-                <li>
-                    <strong
-                        >Does the code actually achieve \(2^{-40}\)
-                        correctness?</strong
-                    >
-                    Now computed analytically (<code>via-estimator::noise</code>,
-                    with Yue's \(\mathbb E[s^2]\) residual correction): the
-                    paper's intended <em>Gaussian-key</em> design does not (the
-                    DMux/CMux bound is too aggressive for a large-variance secret;
-                    confirmed empirically &mdash; a measured DMux at n4096
-                    (<code>dmux_noise_empirical</code>) shows the residual scales as
-                    \(\mathbb E[s^2]\) to ~1%, so the \(\sigma{=}32\) design carries
-                    \(1519\times\) the ternary noise), but via-rs's <em>ternary</em>
-                    <code>SECURE_PARAMS</code> clears \(2^{-40}\) on a thin,
-                    model-sensitive margin &mdash; an optional DMux
-                    \(\ell\!:\!2\to3\) bump widens it (see
-                    <a href="params-concrete.html#correctness">Fix</a>). Still
-                    open: an <em>empirical</em> paper-noise/paper-dimension test
-                    (the analytic budget is no longer the gap).
-                </li>
-                <li>
-                    <strong>Real security level?</strong> No longer a missing
-                    artifact: the in-repo <code>via-estimator</code> reports
-                    ~77 bits (ternary, binding small ring) for the published set
-                    and &ge;156 for <code>SECURE_PARAMS</code>; the external
-                    reviewers' OpenFHE 72&ndash;88 figures (on C++ owniai/VIA)
-                    remain on their authority. Full reconciliation on
-                    <a href="params-concrete.html">Params &middot; Concrete</a>.
-                </li>
-                <li>
-                    <strong>Three-way paper↔Python↔Rust drift:</strong> the Rust
-                    cites a Python reference (<code>client.py</code>,
-                    <code>server.py</code>, <code>resp_comp.py</code>) that is
-                    <em>not in this checkout</em>, so only paper↔Rust drift is
-                    checkable here.<sup><a href="#fn18" id="ref18">18</a></sup>
-                </li>
-                <li>
-                    <strong>Reviewer proof issue #2</strong> (the \(\mathbb
-                    E[s_i^2]\) term in CMux/DMux noise) is <em>no longer open</em>
-                    &mdash; it is now confirmed, empirically and analytically, and
-                    promoted to a graded finding (<a href="#a9">A9</a>). Issue #3
-                    (the \(S^2\) message in RLWE→RGSW) remains a paper-proof
-                    soundness question that the code sidesteps by running ternary
-                    keys; it would bite if Gaussian keys were wired (<a href="#a4">A4</a>).
-                </li>
-                <li>
-                    <strong>Plain VIA</strong> is still not implemented.
-                    <strong>VIA-B</strong> (batch) has since been implemented
-                    (PR #10) behind the <code>via-b</code> feature — its toy batch
-                    round-trip passes — and is covered by the follow-up below.<sup
-                        ><a href="#fn19" id="ref19">19</a></sup
-                    >
-                </li>
-            </ul>
-
-            <!-- ====================================================================== -->
-            <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="via-b">VIA-B (batch) — follow-up audit</h2>
-            <p>
-                The findings above cover VIA-C at commit <code>9575286</code>.
-                This section covers the <strong>VIA-B</strong> batch variant
-                merged later (upstream PR #10), and its source links are pinned
-                to commit <code>62fe493</code>. Same epistemic tags as above
-                (<span class="tag tag-paper">paper</span> /
-                <span class="tag tag-code">code</span> /
-                <span class="tag tag-infer">inference</span> /
-                <span class="tag tag-flag">unverified</span>). Method: a fresh
-                research + adversarial-review pass over the new code against paper
-                §4.5–4.7 (Fig 9) and Appendix C.
-            </p>
-
-            <h3>What VIA-B adds, and how it answers a batch</h3>
-            <p>
-                <span class="tag tag-code">code</span> VIA-B is a thin batch shell
-                over the VIA-C stack plus one new primitive layer,
-                <strong>homomorphic repacking</strong> (the paper's §4.6;
-                "Layer 7" in the code's own module numbering), all behind the
-                <code>via-b</code> cargo feature (repack also needs
-                <code>alloc</code>: the recursion holds a runtime
-                <code>Vec</code>). The server answers <code>T</code> queries by
-                running the VIA-C prefix (Fig 9 steps 1–6) once per query at the
-                record-ring degree <code>n3</code>, <strong>repacking</strong> the
-                <code>T</code> results into a single ciphertext (the one new
-                step), then running response compression once — so
-                <code>T</code> records cost roughly one answer.
-            </p>
-            <pre class="mermaid">
-flowchart TD
-  Q["client: batch_query yields T compressed VIA-C queries"]
-  Q --> AC["server: answer_through_crot x T  (Fig 9 steps 1-6, at record degree n3)"]
-  AC --> RP["server: Repack to n2  (step 7) - recursive MLWEs-to-RLWE, depth log2(T n1 / n2)"]
-  RP --> RC["server: RespComp x 1  (step 8)"]
-  RC --> RV["client: recover then deinterleave_batch yields T records"]
-  CK["query-compression cascade keys (at q1)"] -. borrowed, mod-switched to q2, no new offline payload .-> RP
-  classDef s fill:#eaf2fb,stroke:#2b5dd1;
-  classDef c fill:#e8f7ee,stroke:#1f9d6b;
-  class AC,RP,RC s;
-  class Q,RV c;
-            </pre>
-            <p class="key">
-                <span class="tag tag-code">code</span> Repack (<code>repack.rs</code>,
-                Layer 7) realizes the paper's MLWEs-to-RLWE conversion: extract
-                each input to an MLWE, then recursively pair-convert
-                (<code>mlwes_to_mlwe</code>, <code>d=2</code>) over
-                \(\log_2(T\,n_1/n_2)\) levels into one RLWE — reusing the VIA-C
-                conversion cascade's own key-switch step (<code>conv_step</code>)
-                and <em>borrowing</em> the query-compression cascade keys, so
-                repacking adds no new public parameters (paper §4.6 Remark). The
-                client's <code>deinterleave_batch</code> is a pure strided
-                permutation that inverts the repack interleave. Construction
-                verdict: <span class="tag tag-code">code</span> faithful to Fig 9
-                / §4.6 for the single-repack case; the paper's vectorization path
-                (\(T > n_1/n_3\)) is not implemented (see VB-6).
-            </p>
-
-            <h3>Findings (VIA-B)</h3>
-
-            <div class="finding sev-critical" id="vb1">
-                <div class="f-head">
-                    <span class="sev">critical</span>
-                    <span class="f-title">VB-1 — Production VIA-B correctness is never end-to-end tested</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-integration/tests/batch_e2e_paper.rs#L43-L46" target="_blank" rel="noopener" title="crates/via-integration/tests/batch_e2e_paper.rs:43-46 (T=8, n3=64, #[ignore])">integration/batch_e2e_paper.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L1307" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:1307 (repack_poly_2048_t256_spike, #[ignore])">primitives/repack.rs</a></span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span> The toy batch
-                    round-trip passes (I ran it: <code>via_b_toy_batch_roundtrip</code>
-                    + <code>…covers_cells_and_slots</code>, 2/2) — but at
-                    <code>ViaBToyParams</code> (n2=16), <strong>ternary</strong>
-                    keys, a 2×2 database. The <em>production</em> configuration
-                    (T=256, n3=2, the paper's Gaussian σ, real DB dimensions) has
-                    <strong>no end-to-end correctness test</strong>: the
-                    paper-scale batch e2e runs T=8 / n3=64 (the record-fit
-                    boundary; "T=256 ≈ 3 h"), ternary keys, 2×2 DB, and is
-                    <code>#[ignore]</code>d; the T=256 path exists only as
-                    <code>#[ignore]</code>d repack "spike" tests on
-                    fresh-encrypted inputs (not the noise-laden answer pipeline).
-                    <span class="tag tag-infer">inference</span> The toy/T=8 tests
-                    cannot exercise the production noise regime — half the repack
-                    depth, ternary keys instead of the paper σ, and no accumulated
-                    first-dimension/CMux noise. So production VIA-B correctness is
-                    asserted structurally, not verified — the same gap as VIA-C
-                    (A3), compounded by the deeper repack.
-                </p>
-                <p class="conf">Confidence: high. <em>Fix:</em> a paper-noise, production-dimension batch correctness test (at least one size), plus an analytic θrep/θans budget.</p>
-            </div>
-
-            <div class="finding sev-high" id="vb2">
-                <div class="f-head">
-                    <span class="sev">high</span>
-                    <span class="f-title">VB-2 — VIA-B inherits VIA-C's draft gadget bases, so the security/noise drift carries over</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/presets.rs#L283-L307" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:283-307 (REALISTIC_B_PARAMS)">protocol/presets.rs</a> &middot; HackMD erratum</span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span> <code>ViaBRealisticParams</code>
-                    / <code>REALISTIC_B_PARAMS</code> reuse the VIA-C
-                    <em>draft</em> Table-6 bases (DMux 55879, CMux 81, ring-switch
-                    8, conv ℓ=18) — not the authors' erratum (18073 / 307 / 4 /
-                    11). Because VIA-B's repack and prefix run on the
-                    <em>same</em> rings \(R_{n_1,q_1}\) / \(R_{n_2,q_2}\), the
-                    VIA-C findings carry over verbatim: the security drift
-                    (paper-claimed 110 → reviewers' measured ~72–88 bits, A1/A2)
-                    and the tight noise budget apply to VIA-B too &mdash; and the
-                    in-repo \(P_{\text{fail}}\) calc now <em>proves</em> the draft
-                    bases miss \(2^{-40}\) (<a href="#a1">A1</a>), with the
-                    \(\mathbb E[s^2]\) bound bug (<a href="#a9">A9</a>) applying to
-                    VIA-B's DMux/CMux identically.
-                    <span class="tag tag-infer">inference</span> Crucially, there
-                    is <strong>no <code>SECURE_B_PARAMS</code></strong> analogue of
-                    the \(\ge120\)-bit VIA-C fix &mdash; so VIA-B ships
-                    <em>no</em> certified-secure, certified-correct preset at all.
-                    <span class="tag tag-code">code</span> Clean by contrast:
-                    <code>p=16</code>, <code>n3=2</code>, <code>T=256</code> match
-                    the paper, and the legacy <code>p=256</code> bug is not
-                    inherited.
-                </p>
-                <p class="conf">Confidence: high.</p>
-            </div>
-
-            <div class="finding sev-medium" id="vb3">
-                <div class="f-head">
-                    <span class="sev">medium</span>
-                    <span class="f-title">VB-3 — The paper's repack-noise formula undercounts the implemented depth at the production batch size</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L560-L584" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:560-584 (repack_*_2048_t256 steps list = 10 levels)">primitives/repack.rs</a> &middot; paper Appendix C, step 7</span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span> The repack recursion is
-                    \(\log_2(T\,n_1/n_2)\) levels deep — <strong>10</strong> for
-                    the production T=256 preset (steps <code>keys_4 … keys_2048</code>),
-                    each adding \(2\theta_{ks}\). This faithfully matches the
-                    paper's <em>construction</em> (recurse over the padded count
-                    \(d n/k = T\,n_1/n_2\)). <span class="tag tag-paper">paper</span>
-                    But Appendix C's noise formula writes \(\theta_{rep} =
-                    \theta_{crot} + 2\theta_{ks}\log n_2\) (=9 at \(n_2=512\)),
-                    which equals the true depth only when \(T n_1/n_2 = n_2\)
-                    (T=128). <span class="tag tag-infer">inference</span> At the
-                    headline T=256 the formula undercounts by one
-                    \(2\theta_{ks}\) level (10 vs 9). In magnitude that is
-                    ~11% <em>of the repack key-switch term</em>
-                    \(2\theta_{ks}\log n_2\) — and a smaller fraction of
-                    \(\theta_{rep}\) overall, which is dominated by
-                    \(\theta_{crot}\). So the code is right to the construction;
-                    the Appendix-C \(\theta_{rep}\) is the optimistic side, but the
-                    practical shortfall is modest.
-                </p>
-                <p class="conf">Confidence: high on the divergence (depth 10 vs formula's 9, re-verified arithmetically); the materiality is small and the "~11%" applies to the key-switch term only.</p>
-            </div>
-
-            <div class="finding sev-medium" id="vb4">
-                <div class="f-head">
-                    <span class="sev">medium</span>
-                    <span class="f-title">VB-4 — Repack noise omits the key mod-switch and approximate-gadget terms; the §(3) S² concern lands upstream</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L43-L56" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:43-56 (mod_switch_rlev), :134 (θ doc)">primitives/repack.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/encryption/gadget.rs#L11-L15" target="_blank" rel="noopener" title="crates/via-primitives/src/encryption/gadget.rs:11-15 (approximate gadget)">primitives/gadget.rs</a> &middot; HackMD Yue §(3)</span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span> The borrowed cascade
-                    keys ship at \(q_1\) and are mod-switched to \(q_2\) inside
-                    repack; that rounding noise is not in the \(\theta_{rep}\)
-                    bound. Repack also reuses the scheme's <em>approximate</em>
-                    gadget decomposition (reconstruction error
-                    \(\approx \mathrm{round}(q/B^\ell)/2\)), which the simple
-                    \(\theta' \le \theta_c + 2\theta_{ks}\) bound omits.
-                    <span class="tag tag-flag">unverified</span> Reviewer Yue
-                    Chen's §(3) "the message should be \(S^2\)" concern targets the
-                    <em>RLWE→RGSW</em> step in query expansion (which VIA-B inherits
-                    from VIA-C, since repack borrows those very keys), and is
-                    explicitly hedged/open — it is <em>not</em> a settled
-                    undercount of the repack's own key-switches (those are the
-                    Lemma-4.1 key-switching bound). The in-repo
-                    <code>via-estimator</code> noise calculator now models the
-                    VIA-C recursion, but <em>not</em> VIA-B's repack chain
-                    (\(\theta_{rep}\)), so these specific terms remain unquantified
-                    in-repo.
-                </p>
-                <p class="conf">Confidence: high that the terms are omitted from the in-code bound; the magnitude is unquantified (the estimator does not yet cover repack).</p>
-            </div>
-
-            <div class="finding sev-medium" id="vb5">
-                <div class="f-head">
-                    <span class="sev">medium</span>
-                    <span class="f-title">VB-5 — The headline response size (1.81 KB, 127×) is not measurable from the code</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/wire/format.rs#L167-L172" target="_blank" rel="noopener" title="crates/via-protocol/src/wire/format.rs:167-172 (PrgCompressed::serialize is todo!())">protocol/wire/format.rs</a></span>
-                </div>
-                <p>
-                    <span class="tag tag-paper">paper</span> VIA-B's headline is a
-                    ~1.81 KB response for a 1 GB database with 256 batched queries
-                    (127× smaller than prior batch PIR; both numbers confirmed in
-                    Table 2 / §5.3).
-                    <span class="tag tag-code">code</span> But the compact wire
-                    serializer (<code>PrgCompressed::serialize</code>) is still
-                    <code>todo!()</code> and there is no ciphertext-level codec, so
-                    the response-size claim cannot be measured here — only inferred
-                    from the answer's structural shape (one RespComp ciphertext at
-                    \(n_2=512\)). Carry-over of VIA-C finding A7.
-                </p>
-                <p class="conf">Confidence: high.</p>
-            </div>
-
-            <div class="finding sev-low" id="vb6">
-                <div class="f-head">
-                    <span class="sev">low</span>
-                    <span class="f-title">VB-6 — The single-repack invariant is stricter than the paper; vectorization is unimplemented (as the paper itself leaves it)</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-protocol/src/presets.rs#L164-L167" target="_blank" rel="noopener" title="crates/via-protocol/src/presets.rs:164-166 (_CHECK: T*N3 <= N2)">protocol/presets.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-server/src/batch.rs#L113-L116" target="_blank" rel="noopener" title="crates/via-server/src/batch.rs:113-116 (record-fit guard)">server/batch.rs</a></span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span> A compile-time invariant
-                    <code>T·N3 ≤ N2</code> ("single-repack record-fit") caps VIA-B
-                    at one repacked output ciphertext.
-                    <span class="tag tag-infer">inference</span> That is stricter
-                    than the per-output-ciphertext packing capacity \(T \le
-                    n_1/n_3\); note this bound is <em>not</em> stated verbatim in
-                    the paper — the paper only says vectorization is needed for
-                    larger batches (and declines to detail it, citing Respire).
-                    The operative packing factor here is the ring-switch ratio
-                    \(D = n_1/n_2 = 4\). <span class="tag tag-paper">paper</span>
-                    The Respire-style vectorization for the multi-output case
-                    (\(T > n_1/n_3\)) is not implemented — a faithful (more
-                    conservative) scope cut, not a divergence. Production T=256
-                    sits exactly at the boundary \(T·N3 = N2 = 512\).
-                </p>
-                <p class="conf">Confidence: high on the code invariant and the boundary arithmetic; the "\(T \le n_1/n_3\)" relation is inference, not a paper quote.</p>
-            </div>
-
-            <div class="finding sev-good" id="vb7">
-                <div class="f-head">
-                    <span class="sev" style="background: var(--code)">verified</span>
-                    <span class="f-title">VB-7 / VB-8 — Two things VIA-B gets right</span>
-                    <span class="loc"><a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-primitives/src/conversion/repack.rs#L408-L434" target="_blank" rel="noopener" title="crates/via-primitives/src/conversion/repack.rs:408-434 (from_cascade borrow); :1050 byte-identity test">primitives/repack.rs</a> &middot; <a class="srcref" href="https://github.com/roynalnaruto/via-rs/blob/62fe493abaf603e606cda54066ef2e49b0b62e34/crates/via-client/src/batch.rs#L33-L54" target="_blank" rel="noopener" title="crates/via-client/src/batch.rs:33-54 (deinterleave_batch, data-independent)">client/batch.rs</a></span>
-                </div>
-                <p>
-                    <span class="tag tag-code">code</span>
-                    <strong>(VB-7) No new public parameters.</strong> Repack
-                    borrows a zero-copy suffix of the LWE→RLWE conversion cascade
-                    key — a byte-identity test asserts the borrowed keys equal a
-                    dedicated oracle — and for the production cross-type case
-                    (RNS \(q_1\) → single-prime \(q_2\)) it derives the \(q_2\)
-                    keys server-side from already-shipped material. No new
-                    client→server offline payload, matching paper §4.6 Remark.
-                    <strong>(VB-8) Constant-time.</strong> VIA-B adds no
-                    secret-dependent timing path: <code>deinterleave_batch</code>
-                    is a pure strided permutation on public dimensions, and repack
-                    runs on RLWE-uniform ciphertexts and key data with
-                    fixed-length gadget loops (as in the existing VIA-C gates).
-                </p>
-                <p class="conf">Confidence: high (read at source; borrow proven by an in-repo byte-identity equality test).</p>
-            </div>
-
-            <h3>VIA-B build &amp; test</h3>
-            <ul>
-                <li><span class="tag tag-code">code</span> Ran the toy batch suite: <code>via_b_toy_batch_roundtrip</code> + <code>via_b_toy_batch_covers_cells_and_slots</code> — <strong>2/2 pass</strong> (<code>cargo test -p via-integration --features via-b</code>; <code>ViaBToyParams</code>, ternary keys, 2×2 DB).</li>
-                <li><span class="tag tag-code">code</span> The 4×8-grid and paper-scale (T=8 / n3=64) batch e2e tests exist but are <code>#[ignore]</code>d (ternary keys, 2×2 DB).</li>
-                <li><span class="tag tag-flag">unverified</span> The production T=256 / n3=2 path has only <code>#[ignore]</code>d repack "spike" tests on fresh-encrypted inputs — no full-pipeline correctness e2e (VB-1).</li>
-            </ul>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
@@ -1399,7 +1380,7 @@ flowchart TD
                         rel="noopener"
                         >Liu et al. (2025)</a
                     >
-                    (local: via-paper.pdf) §5.1, p.16 — "110 bits of classical
+                    (local: via-paper.pdf) §5.1, p.16: "110 bits of classical
                     security … using the lattice estimator [46]."
                     <a href="#ref5">↩</a>
                 </li>
@@ -1485,7 +1466,7 @@ flowchart TD
                     small-ring key σ (the \(p=256\) instantiation); the
                     implemented variant is VIA-C, whose keys are
                     \(\sigma_{1,S}=32\) on the big ring (where DMux/CRot live) and
-                    \(\sigma=26\) on the small ring (where CMux lives) — so for
+                    \(\sigma=26\) on the small ring (where CMux lives): so for
                     VIA-C the missing \(\mathbb E[s_i^2]\) factor would use
                     \(\approx 1024\) / \(\approx 676\), not \(4960^2\). The
                     structural point — non-binary key ⇒ a missing variance factor
@@ -1520,7 +1501,7 @@ flowchart TD
                         rel="noopener"
                         >Liu et al. (2025)</a
                     >
-                    (local: via-paper.pdf) Appendix C.2, p.25-27 — the per-step
+                    (local: via-paper.pdf) Appendix C.2, p.25-27: the per-step
                     variance recursion
                     (θctrl→θdmux→θms→θfirst→θcmux→θcrot→θrep→θans) and condition
                     \(\lVert
@@ -1608,9 +1589,11 @@ flowchart TD
                         >protocol/presets.rs</a
                     >
                     (p=16); grep over the pinned tree finds no
-                    <code>MODULUS_PC</code> — the <code>MODULUS_PC=256</code> bug
-                    the authors flagged (May 11) was in the Python reference, not
-                    this port. <a href="#ref16">↩</a>
+                    <code>MODULUS_PC</code>: the <code>MODULUS_PC=256</code> bug
+                    the authors discussed (May 11) was in their own C++
+                    <code>owniai/VIA</code>, not in this port (nor in the clean
+                    <code>via-spec</code> Python lineage it descends from).
+                    <a href="#ref16">↩</a>
                 </li>
                 <li id="fn17">
                     <a
@@ -1649,15 +1632,6 @@ flowchart TD
                     <code>find … *.py</code> over the tree returns only a CI
                     script — the Python source is not in this checkout.
                     <a href="#ref18">↩</a>
-                </li>
-                <li id="fn19">
-                    grep over crates/{client,server,protocol} at
-                    <code>9575286</code>: pipeline monomorphised against
-                    <code>ViaCPublicParams</code>; no Figure-4 path, no
-                    <code>repack</code>/<code>via_b</code>/MLWEs→RLWE. VIA-B
-                    repacking was subsequently merged in PR #10
-                    (<code>62fe493</code>) and is covered by the follow-up above.
-                    <a href="#ref19">↩</a>
                 </li>
             </ol>
         </div>

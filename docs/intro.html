@@ -84,8 +84,8 @@
 
                 <p>
                     <em>Scope.</em> Moves 0&ndash;3 build
-                    <strong>base VIA</strong> &mdash; the construction every
-                    variant shares &mdash; whose headline is that it needs
+                    <strong>base VIA</strong> (the construction every
+                    variant shares), whose headline is that it needs
                     <strong>no offline phase</strong>: no one-time "hint"
                     download (a big precomputed summary of the database that
                     older single-server schemes make you fetch before your first
@@ -95,26 +95,26 @@
                     machinery on top of VIA-C and is out of scope here.
                 </p>
 
-                <h2>Move 0 — the only obviously-correct scheme</h2>
+                <h2>Move 0: the only obviously-correct scheme</h2>
                 <p>
                     Send the client the entire database. The server learns
                     nothing about \(i\) because the client asked for all of it.
-                    It is correct and perfectly private — and it moves \(O(N)\)
+                    It is correct and perfectly private, and it moves \(O(N)\)
                     bytes, which is hopeless at scale. Everything that follows
                     is an attempt to keep this privacy while making the server
                     do the selecting, without ever seeing what it selected.
                 </p>
 
-                <h2>Move 1 — hand the server an encrypted selector</h2>
+                <h2>Move 1: hand the server an encrypted selector</h2>
                 <p>
                     Represent the request as a <strong>one-hot vector</strong>:
-                    a \(1\) at position \(i\) and \(0\) elsewhere — say
+                    a \(1\) at position \(i\) and \(0\) elsewhere: say
                     \([0,0,1,0]\) to ask for record \(2\) of four. Treat the
                     database as a matrix \(D\) whose rows are the records and
                     multiply the two: the vector-times-matrix product multiplies
                     each record by its bit and adds the results. For the
                     four-record case that is \(0\!\cdot\! r_0 + 0\!\cdot\! r_1 +
-                    1\!\cdot\! r_2 + 0\!\cdot\! r_3 = r_2\) — every record
+                    1\!\cdot\! r_2 + 0\!\cdot\! r_3 = r_2\): every record
                     annihilated except the one asked for. The product is a
                     single record, not an \(N\)-wide blend. But the vector
                     states \(i\) outright, so we must encrypt it with a scheme
@@ -316,14 +316,16 @@
                     example below makes that "room underneath" visible). Anyone
                     holding \(S\) computes \(B - A\cdot S = \Delta m + E\) and
                     reads \(m\) off the top; anyone <em>without</em> \(S\) sees
-                    only the pair \((A, B)\), which — because \(E\) is random —
+                    only the pair \((A, B)\), which (because \(E\) is random)
                     looks exactly like two random numbers, with no test that
                     tells a real ciphertext from noise (cryptographers call this
                     "computationally indistinguishable"). Recovering \(S\) or
                     \(m\) from many such equations <em>is</em> the
                     Learning-With-Errors problem, believed hard even for quantum
                     computers. So "encrypted" means exactly this: trivially
-                    readable with the key, provably noise-like without it.
+                    readable with the key, provably noise-like without it.<sup
+                        ><a href="#fn1" id="ref1">1</a></sup
+                    >
                 </p>
 
                 <p>
@@ -332,7 +334,7 @@
                     about correctness: the server runs every step that follows
                     on these ciphertexts and <em>never holds \(S\)</em>. To it,
                     the query, the half-built selectors, and the final answer
-                    are all just noise. That — not any single gadget below — is
+                    are all just noise. That, not any single gadget below, is
                     what hides which record you wanted; everything else here is
                     about keeping the computation <em>correct</em> without ever
                     lifting that veil.
@@ -344,9 +346,11 @@
                     that drives the entire design: it returns the right answer
                     only while the error stays under half a step, \(|E| <
                     \Delta/2\). Call that inequality the
-                    <strong>noise budget</strong>. And every
-                    <strong>homomorphic</strong> operation — every computation
-                    the server does on ciphertexts — spends some of it, because
+                    <strong>noise budget</strong>.<sup
+                        ><a href="#fn2" id="ref2">2</a></sup
+                    > And every
+                    <strong>homomorphic</strong> operation (every computation
+                    the server does on ciphertexts) spends some of it, because
                     each one makes \(E\) grow.
                 </p>
 
@@ -361,7 +365,7 @@
                         q/p = 32\). A bit \(m=1\) is stored as the value
                         \(\Delta\cdot 1 + E = 32 + E\); decryption asks "is this
                         value nearer \(0\) or nearer \(32\)?" It answers \(1\)
-                        as long as the value stays inside \((16, 48)\) — i.e. as
+                        as long as the value stays inside \((16, 48)\): i.e. as
                         long as \(|E| < \Delta/2 = 16\).
                     </p>
                     <p>
@@ -375,7 +379,7 @@
                         \(3 + 3 + \dots = 3k\). So the error grows with
                         <em>how many terms you sum</em>: eight such terms already
                         push \(E\) to \(8\times 3 = 24\), and the stored value
-                        becomes \(32 + 24 = 56\). (This is not hypothetical — it
+                        becomes \(32 + 24 = 56\). (This is not hypothetical: it
                         is exactly what a one-hot selector does: it sums one term
                         per database row, so a bigger database means more terms
                         and more error.)
@@ -580,14 +584,14 @@
                     </figure>
                     <p>
                         <strong
-                            >Overflow returns the wrong value —
+                            >Overflow returns the wrong value,
                             silently.</strong
                         >
                         At \(E=24\) the value \(56\) has crossed the boundary at
                         \(48\); it is now nearer to \(64\equiv 0\) than to
                         \(32\), so decryption rounds it to \(0\). The bit has
                         silently flipped from \(1\) to \(0\). Nothing raises an
-                        error — the arithmetic is all valid mod \(q\) — so the
+                        error (the arithmetic is all valid mod \(q\)), so the
                         client simply receives the wrong record with no way to
                         tell. That is why noise is <em>the</em> hard constraint,
                         not a nuisance: the same picture holds at realistic
@@ -595,31 +599,33 @@
                         of that). It also exposes Move 1's second flaw: error
                         grows with the number of terms summed, so a length-\(N\)
                         selector flips the bit on any sizable database. Move 1
-                        loses on both counts — \(N\) to upload
+                        loses on both counts: \(N\) to upload
                         <em>and</em> noise that scales with \(N\).
                     </p>
                 </div>
 
                 <h2>
-                    Move 2 — send the index in binary, expand it server-side
+                    Move 2: send the index in binary, expand it server-side
                 </h2>
                 <p>
                     Lay the database out as an \(I\times J\) grid, so a record's
                     address splits into a row \(\alpha\) and a column \(\beta\)
-                    (a third index \(\gamma\) picks a slot inside the record —
-                    Move 3). Move 2 is only about selecting the
+                    (a third index \(\gamma\) picks a slot inside the record,
+                    covered in Move 3). Move 2 is only about selecting the
                     <strong>row</strong>. Here is the trick: instead of sending
                     an \(I\)-entry one-hot vector, the client sends \(\alpha\) in
-                    <em>binary</em> — just \(\log_2 I\) encrypted bits — and the
+                    <em>binary</em> (just \(\log_2 I\) encrypted bits) and the
                     server <strong>rebuilds</strong> the one-hot row selector
                     from those bits itself, using a tree of
-                    <strong>DMux</strong> gates.
+                    <strong>DMux</strong> gates.<sup
+                        ><a href="#fn3" id="ref3">3</a></sup
+                    >
                 </p>
                 <p>
                     A <strong>DMux</strong> ("de-multiplexer") gate takes one
                     ciphertext and one encrypted control bit and emits
                     <em>two</em> ciphertexts: it sends the input down one of the
-                    two outputs and puts \(\text{enc}(0)\) on the other — the bit
+                    two outputs and puts \(\text{enc}(0)\) on the other: the bit
                     decides which side gets the input. Wire \(\log_2 I\) of these
                     into a binary tree, one level per address bit: drop a single
                     \(\text{enc}(1)\) in at the root, and at each level the next
@@ -627,7 +633,7 @@
                     while every other branch fills with \(\text{enc}(0)\). After
                     the last level, the \(I\) leaves are all \(\text{enc}(0)\)
                     except the one at address \(\alpha\), which holds
-                    \(\text{enc}(1)\) — that row of leaves <em>is</em> the
+                    \(\text{enc}(1)\): that row of leaves <em>is</em> the
                     encrypted one-hot selector, rebuilt from \(\log_2 I\) bits.
                 </p>
 
@@ -653,16 +659,17 @@ graph TD
                         subtree, the low bit \(b_0\) picks the left leaf inside
                         it (✓ = the live path); every other branch fills with
                         \(\text{enc}(0)\). The four leaves are the encrypted
-                        one-hot selector \([0,0,1,0]\) — rebuilt by the server
+                        one-hot selector \([0,0,1,0]\): rebuilt by the server
                         from just \(\log_2 4 = 2\) bits.
                     </figcaption>
                 </figure>
 
                 <p>
-                    Now the server holds an encrypted one-hot column: \(I\)
+                    Now the server holds an encrypted one-hot row selector:
+                    \(I\)
                     ciphertexts, all encrypting \(0\) except the \(\alpha\)-th,
                     which encrypts \(1\). Reading out row \(\alpha\) is then
-                    almost mechanical — multiply each database row by its
+                    almost mechanical: multiply each database row by its
                     matching ciphertext and add the results. The database rows
                     are ordinary <em>plaintext</em>, so "plaintext row
                     \(\times\) encrypted bit" is the cheap kind of
@@ -672,7 +679,9 @@ graph TD
                     survives. The server ends up holding an encryption of
                     exactly the row the client asked for, having never learned
                     which one. (VIA calls this the
-                    <strong>first-dimension</strong> step.)
+                    <strong>first-dimension</strong> step.)<sup
+                        ><a href="#fn4" id="ref4">4</a></sup
+                    >
                 </p>
 
                 <figure class="fig">
@@ -1002,41 +1011,42 @@ graph TD
                 </figure>
 
                 <p>
-                    A symmetric tree of <strong>CMux</strong> gates — a CMux is
+                    A symmetric tree of <strong>CMux</strong> gates (a CMux is
                     the mirror image of a DMux: given two ciphertexts and an
                     encrypted control bit, it outputs whichever one the bit
-                    selects — then folds the \(J\) columns of that row down to
+                    selects) then folds the \(J\) columns of that row down to
                     the single target cell. Finally a controlled rotation
                     (<strong>CRot</strong>) cyclically shifts the packed slots
                     so that coefficient-slot \(\gamma\) lands in the readable
-                    position.
+                    position.<sup><a href="#fn5" id="ref5">5</a></sup>
                 </p>
 
                 <p>
                     The payoff is all in the noise. A DMux tree is \(\log_2 I\)
-                    levels deep, and — take this on faith for one more Move;
-                    Move 3 earns it — each level adds only a fixed amount of
+                    levels deep, and (take this on faith for one more Move;
+                    Move 3 earns it) each level adds only a fixed amount of
                     <strong>noise variance</strong>. Swapping a length-\(I\)
                     selector for \(\log_2 I\) control bits turns noise that grew
                     with \(I\) into noise that grows with \(\log_2 I\): the
                     single most important budgeting move in the design. (The
                     earlier "coefficient expansion" technique that VIA replaces
                     built the selector in a way whose noise variance grew
-                    <em>quadratically</em> — exactly the trap Move 2 sidesteps.)
+                    <em>quadratically</em>, exactly the trap Move 2
+                    sidesteps.)<sup><a href="#fn6" id="ref6">6</a></sup>
                 </p>
 
-                <h2>Move 3 — make "multiply by an encrypted bit" cheap</h2>
+                <h2>Move 3: make "multiply by an encrypted bit" cheap</h2>
                 <p>
                     Move 2 leaned on an operation it never justified:
                     multiplying a ciphertext by an <em>encrypted</em> bit,
                     cheaply. The danger case is multiplying two
-                    <em>encrypted</em> values directly — there the two error
+                    <em>encrypted</em> values directly: there the two error
                     terms cross-multiply, so the result's noise is roughly the
                     <em>product</em> of the inputs', and it grows
                     multiplicatively. A tree of such multiplications would blow
                     the budget after a couple of levels (red curve below).
                     (Multiplying an encrypted value by ordinary plaintext, as
-                    the first-dimension step does, is <em>not</em> the problem —
+                    the first-dimension step does, is <em>not</em> the problem:
                     that one is cheap.)
                 </p>
 
@@ -1178,10 +1188,11 @@ graph TD
                     <strong>external product</strong> \(\text{RGSW} \otimes
                     \text{RLWE} \to \text{RLWE}\): it multiplies a ciphertext by
                     an encrypted bit while adding only a fixed amount of noise
-                    (green curve). Two ingredients make it work.
+                    (green curve).<sup><a href="#fn7" id="ref7">7</a></sup> Two
+                    ingredients make it work.
                 </p>
                 <p>
-                    First, <strong>RLWE</strong> — LWE lifted from single
+                    First, <strong>RLWE</strong>: LWE lifted from single
                     numbers up to whole polynomials. Instead of one secret
                     number, the secret is now a degree-\(n\) polynomial (its
                     coefficients taken mod \(q\)); the set of all such
@@ -1189,7 +1200,7 @@ graph TD
                     cryptographers call a <strong>ring</strong>, written
                     \(R_{n,q}\). The practical win is packing and speed: one
                     RLWE ciphertext carries \(n\) message values at once, and
-                    two of them multiply far faster than you'd expect — the
+                    two of them multiply far faster than you'd expect: the
                     schoolbook way of multiplying two degree-\(n\) polynomials
                     costs about \(n^2\) steps, while a classic
                     fast-multiplication trick (the
@@ -1203,8 +1214,8 @@ graph TD
                     keeps the multiplication's noise additive. Rather than
                     multiply by one big mod-\(q\) value (big value &rarr; big
                     noise), the gadget writes that value in a small base \(B\)
-                    as \(\ell\) little "digits" — the same idea as storing a big
-                    integer as an array of machine words — and multiplies digit
+                    as \(\ell\) little "digits" (the same idea as storing a big
+                    integer as an array of machine words) and multiplies digit
                     by digit. Because every partial product is small, so is the
                     noise each contributes. (VIA uses an
                     <em>approximate</em> gadget decomposition: it drops the
@@ -1212,21 +1223,23 @@ graph TD
                     error that is simply folded into the noise budget, in
                     exchange for speed.) With RGSW and the external product in
                     hand, the DMux and CMux gates of Move 2 are exactly the
-                    additive-noise gates the trees needed — settling the IOU
-                    from Move 2.
+                    additive-noise gates the trees needed: settling the IOU
+                    from Move 2.<sup><a href="#fn8" id="ref8">8</a></sup>
                 </p>
 
-                <h2>Move 4 — stop shipping big gate-keys</h2>
+                <h2>Move 4: stop shipping big gate-keys</h2>
                 <p>
-                    RGSW ciphertexts are large — they are bundles of many RLWE
+                    RGSW ciphertexts are large: they are bundles of many RLWE
                     ciphertexts. Transmitting the control bits as RGSW (the
                     "gate-keys" the trees consume) re-inflates the query we
                     worked to shrink. The fix, in the variant called
                     <strong>VIA-C</strong>: the client sends only tiny LWE
                     ciphertexts of the index bits, and the server rebuilds the
                     full RGSW gate-keys itself, in two homomorphic re-encoding
-                    steps — an <strong>LWE→RLWE conversion</strong> followed by
-                    an <strong>RLWE→RGSW conversion</strong>.
+                    steps: an <strong>LWE→RLWE conversion</strong> followed by
+                    an <strong>RLWE→RGSW conversion</strong>.<sup
+                        ><a href="#fn9" id="ref9">9</a></sup
+                    >
                 </p>
 
                 <figure class="fig">
@@ -1257,7 +1270,7 @@ graph LR
                     <em>without decrypting it</em>, re-expressing the same
                     hidden value under new parameters. A conversion just changes
                     a ciphertext's shape (LWE → RLWE → RGSW) while preserving
-                    what it hides — which is why the server can rebuild
+                    what it hides, which is why the server can rebuild
                     gate-keys it could never have read.
                 </p>
                 <p>
@@ -1265,21 +1278,23 @@ graph LR
                     numbers (\(\ell\) is the gadget digit-count from Move 3).
                     Two costs come with this. First, the conversion and
                     switching keys are themselves a one-time setup payload the
-                    client supplies up front, so VIA-C — unlike base VIA, which
-                    sends nothing ahead of time — does reintroduce a modest
+                    client supplies up front, so VIA-C (unlike base VIA, which
+                    sends nothing ahead of time) does reintroduce a modest
                     amount of <em>offline</em> communication; the zero-offline
                     headline stays base VIA's. Second, supplying keys that
-                    encrypt key material asks for one extra, mild assumption —
+                    encrypt key material asks for one extra, mild assumption,
                     <strong>circular security</strong>: that it stays safe to
                     encrypt a secret under a key related to that same secret,
                     which is exactly what these conversion keys do (base VIA,
-                    sending no keys, doesn't need it). What VIA-C buys for these
+                    sending no keys, doesn't need it).<sup
+                        ><a href="#fn10" id="ref10">10</a></sup
+                    > What VIA-C buys for these
                     two costs is a dramatically smaller cost on every query that
                     follows.
                 </p>
 
                 <h2>
-                    Move 5 — pay for the conversions, then balance the whole
+                    Move 5: pay for the conversions, then balance the whole
                     ledger
                 </h2>
                 <p>
@@ -1287,11 +1302,12 @@ graph LR
                     careless LWE→RLWE step would bankrupt the budget on its own.
                     VIA's central technical contribution is a conversion whose
                     <strong>noise variance</strong> grows only as \(O(n\log
-                    n)\), where the prior method's grew as \(O(n^3)\) — and that
+                    n)\), where the prior method's grew as \(O(n^3)\), and that
                     frugality is exactly what makes Move 4 affordable rather
                     than ruinous. (<em>Why</em> the new method is so much
                     quieter is the paper's main result and beyond our scope
-                    here; take it as an asserted result, not one we prove.)
+                    here; take it as an asserted result, not one we
+                    prove.)<sup><a href="#fn11" id="ref11">11</a></sup>
                 </p>
                 <p>
                     With every step's cost bounded, correctness reduces to one
@@ -1301,10 +1317,12 @@ graph LR
                     the client finally rounds? VIA keeps the answer "yes" with a
                     <strong>descending modulus chain</strong> \(q_1 > q_2 > q_3
                     > q_4\). A modulus switch rescales a ciphertext to a smaller
-                    modulus and, in doing so, scales its noise down too —
+                    modulus and, in doing so, scales its noise down too:
                     shrinking the data and buying back budget at once. A ring
                     switch likewise compresses the answer into a smaller ring
-                    before it travels back.
+                    before it travels back.<sup
+                        ><a href="#fn12" id="ref12">12</a></sup
+                    >
                 </p>
 
                 <figure class="fig">
@@ -1416,8 +1434,8 @@ graph LR
                         </g>
                     </svg>
                     <figcaption>
-                        The noise ledger. Error climbs as the server works — the
-                        first-dimension sum is the steepest rise — but
+                        The noise ledger. Error climbs as the server works (the
+                        first-dimension sum is the steepest rise), but
                         well-timed modulus and ring switches knock it back down,
                         so the final value lands <em>just</em> under
                         \(\Delta/2\) and the record decrypts correctly.
@@ -1426,8 +1444,8 @@ graph LR
 
                 <p>
                     And travel back it does: the server returns this final,
-                    compressed ciphertext, and the client — the only party
-                    holding \(S\) — decrypts it with the very same "round to the
+                    compressed ciphertext, and the client (the only party
+                    holding \(S\)) decrypts it with the very same "round to the
                     nearest \(\Delta\)" rule from Move 1. That last rounding is
                     the reason the whole budget had to stay under \(\Delta/2\)
                     in the first place.
@@ -1436,10 +1454,10 @@ graph LR
                 <h2>Why it all holds together</h2>
                 <p>
                     Each primitive is the forced answer to the previous step's
-                    flaw — the one-hot selector, the binary index plus DMux
+                    flaw (the one-hot selector, the binary index plus DMux
                     tree, the RGSW external product, the LWE→RLWE→RGSW
                     conversion, and the low-noise conversion with its modulus
-                    ledger — and the chain ends with the right record decrypted,
+                    ledger), and the chain ends with the right record decrypted,
                     just under budget. Privacy, meanwhile, was secured back in
                     Move 1 and never spent: because every value the server
                     touches is a ciphertext it cannot read, it processes the
@@ -1447,10 +1465,266 @@ graph LR
                     under the RLWE hardness assumption and its module variant
                     MLWE (plus the circular-security assumption that Move 4
                     introduced), the query is provably indistinguishable from
-                    random. VIA is simply what you get when you keep fixing the
-                    problem your last fix created — without ever letting the
+                    random.<sup><a href="#fn13" id="ref13">13</a></sup> VIA is
+                    simply what you get when you keep fixing the
+                    problem your last fix created, without ever letting the
                     server see.
                 </p>
+
+                <h2 id="footnotes">Footnotes</h2>
+                <p class="legend">
+                    <span
+                        ><span class="tag tag-paper">paper</span> stated in
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        ></span
+                    >
+                    <span
+                        ><span class="tag tag-code">code</span> observed in
+                        <code>via-rs</code> (pinned to commit
+                        <code>9575286</code>)</span
+                    >
+                </p>
+                <ol class="footnotes">
+                    <li id="fn1">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §2.2 (Lattice-Based Homomorphic Encryption), p.5 — RLWE
+                        is parameterised by \((n,q,\chi_S,\chi_E)\) with
+                        \(\{(A,A\!\cdot\!S+E)\}\approx_c\{(A,R)\}\); encryption
+                        \(c=(A,AS+E+M)\), \(M=\Delta m\), \(\Delta=\lceil
+                        q/p\rceil\), decryption \(\lfloor(B-AS)/\Delta\rceil\).
+                        The intro introduces this in its single-number (LWE)
+                        form first and lifts it to polynomials (RLWE) in Move 3.
+                        <a href="#ref1">↩</a>
+                    </li>
+                    <li id="fn2">
+                        <span class="tag tag-infer">inference</span> The
+                        \(|E|<\Delta/2\) decode condition is the direct
+                        consequence of rounding \(\lfloor(B-AS)/\Delta\rceil\)
+                        (fn 1): the nearest-multiple-of-\(\Delta\) rule recovers
+                        \(m\) iff the additive error has not crossed the
+                        half-step boundary. <a href="#ref2">↩</a>
+                    </li>
+                    <li id="fn3">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §3.1 (The VIA Protocol), p.8 — "VIA substitutes
+                        coefficient expansion techniques with DMux for generating
+                        the encrypted one-hot vector." The address is split into
+                        a row \(\alpha\) and column \(\beta\) over an \(I\times
+                        J\) grid (p.8). <a href="#ref3">↩</a>
+                    </li>
+                    <li id="fn4">
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-client/src/decompose.rs#L29-L61"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-client/src/decompose.rs:29-61"
+                            >client/decompose.rs</a
+                        >
+                        — index split \(\texttt{idx}=\gamma(IJ)+\alpha J+\beta\)
+                        into \((\alpha,\beta,\gamma)=\)(row, column, slot);
+                        \(\alpha\) drives DMux (MSB-first), \(\beta\)/\(\gamma\)
+                        LSB-first. The first-dimension plaintext×ciphertext
+                        inner product is
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-server/src/first_dim.rs#L1-L10"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-server/src/first_dim.rs:1-10"
+                            >server/first_dim.rs</a
+                        >. <a href="#ref4">↩</a>
+                    </li>
+                    <li id="fn5">
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/gates/mux.rs#L1-L13"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/gates/mux.rs:1-13"
+                            >primitives/gates/mux.rs</a
+                        >
+                        (CMux/DMux + trees, built on the RGSW external product)
+                        and
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/gates/rotate.rs#L135-L141"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/gates/rotate.rs:135-141"
+                            >primitives/gates/rotate.rs</a
+                        >
+                        (<code>crot</code>, RGSW-controlled rotation). Paper
+                        §4.3/§4.4, p.9. <a href="#ref5">↩</a>
+                    </li>
+                    <li id="fn6">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §3.1, p.8 — DMux introduces "only logarithmic noise
+                        variance in the one-hot vector length", whereas
+                        conventional ciphertext-compression (coefficient
+                        expansion) approaches "exhibit at least quadratic noise
+                        growth." <a href="#ref6">↩</a>
+                    </li>
+                    <li id="fn7">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §2.2, p.6 — external product \(\boxdot:
+                        \mathrm{RGSW}_S(M_1)\times\mathrm{RLWE}_S(M_2)\to
+                        \mathrm{RLWE}_S(M_1M_2)\) (the intro writes \(\otimes\)).
+                        Implemented in
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/rgsw.rs#L110-L120"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/encryption/rgsw.rs:110-120"
+                            >primitives/encryption/rgsw.rs</a
+                        >. <a href="#ref7">↩</a>
+                    </li>
+                    <li id="fn8">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §2.2, p.6 — "approximate gadget decomposition proposed
+                        in [40]: for gadget parameters \((\ell,B)\)". Code:
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/encryption/gadget.rs#L1-L16"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/encryption/gadget.rs:1-16"
+                            >primitives/encryption/gadget.rs</a
+                        >
+                        — keeps the top \(L\) digits, "≈" hiding a reconstruction
+                        error bounded by \(\mathrm{round}(q/B^L)/2\) absorbed
+                        into noise. <a href="#ref8">↩</a>
+                    </li>
+                    <li id="fn9">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §4 (Query compression, Figure 6), p.13 — the client
+                        encrypts the control/select/rotation bits as LWE
+                        ciphertexts (\(O(\log N)\) elements of \(\mathbb
+                        Z_{q_1}\)); the server runs LWE→RLWE then forms the RGSW
+                        gate-keys. Code:
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/conversion/cascade.rs#L1-L8"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/conversion/cascade.rs:1-8"
+                            >conversion/cascade.rs</a
+                        >
+                        (LWE→RLWE) and
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-primitives/src/gates/convert.rs#L1-L7"
+                            target="_blank"
+                            rel="noopener"
+                            title="crates/via-primitives/src/gates/convert.rs:1-7"
+                            >gates/convert.rs</a
+                        >
+                        (RLWE→RGSW). <a href="#ref9">↩</a>
+                    </li>
+                    <li id="fn10">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §3.1, p.9 — VIA's security holds "if the encryption
+                        system is secure along with a 'circular security'
+                        assumption"; VIA-B's relies on circular / key-dependent
+                        message security (§C.1). Base VIA, which ships no keys,
+                        does not need it. <a href="#ref10">↩</a>
+                    </li>
+                    <li id="fn11">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §1, p.2 and §4.2 (Lemma 4.2), p.12 — the new LWE-to-RLWE
+                        conversion "introduces only \(O(n\log n)\) noise
+                        variance" (\(\theta'\le\theta_c+2\theta_{ks}\log n\)),
+                        versus the prior method of [28] whose noise variance is
+                        \(O(n^3)\) (cubic in the polynomial degree, §4.1, p.11). <span class="tag tag-flag">unverified</span>
+                        the \(O(n\log n)\) figure is the paper's asserted result,
+                        re-derived noise budgets live in
+                        <code>via-estimator</code>, not on this page. <a
+                            href="#ref11"
+                            >↩</a
+                        >
+                    </li>
+                    <li id="fn12">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §3.1, p.8 — moduli \(q_1>q_2>q_3>q_4>p\); modulus
+                        switching is applied before first-dimensional folding
+                        (p.8), and response compression uses ring switching
+                        (§4.3). <a href="#ref12">↩</a>
+                    </li>
+                    <li id="fn13">
+                        <span class="tag tag-paper">paper</span>
+                        <a
+                            href="https://eprint.iacr.org/2025/2074"
+                            target="_blank"
+                            rel="noopener"
+                            >Liu et al. (2025)</a
+                        >
+                        §3.1, p.9 — query indistinguishability under the
+                        RLWE/MLWE assumption plus circular security. This is the
+                        paper's <em>claim</em>; this page deliberately states no
+                        concrete security-bit figure — the in-repo source of
+                        trust for any such number is <code>via-estimator</code>.
+                        <a href="#ref13">↩</a>
+                    </li>
+                </ol>
             </section>
         </div>
     </body>

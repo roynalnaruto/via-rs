@@ -490,7 +490,7 @@
                             bg: C.clientBg,
                             info: [
                                 "(α,β,γ) → { LWE@q1(bit) }  (≈ ℓ·log N elts)",
-                                "where privacy lives — semantic security hides i",
+                                "where privacy lives: semantic security hides i",
                             ],
                         },
                         {
@@ -543,7 +543,7 @@
                             bg: C.cryptoBg,
                             info: [
                                 "RGSW(μ) ⊡ RLWE(m) → RLWE(μ·m)",
-                                "additive noise — why depth stays in budget",
+                                "additive noise: why depth stays in budget",
                                 "needs gadget decomposition + RLev/RGSW",
                             ],
                         },
@@ -621,7 +621,7 @@
                             color: C.msg,
                             bg: C.msgBg,
                             info: [
-                                "≈ ℓ·log N elements of Z(q1)  — Õ(log N)",
+                                "≈ ℓ·log N elements of Z(q1): Õ(log N)",
                                 "the carrier of privacy",
                             ],
                         },
@@ -632,7 +632,7 @@
                             color: C.msg,
                             bg: C.msgBg,
                             info: [
-                                "(mask @ q3, body @ q4) over R(n2) — ≈ constant",
+                                "(mask @ q3, body @ q4) over R(n2): ≈ constant",
                                 "VIA-B: T interleaved records",
                             ],
                         },
@@ -820,7 +820,7 @@
                     N("rlwe", "RLWE / MLWE", "base encryption", 150, 380, 200, ...cr, ["Enc(s,m) = (a, a·s+e+Δm)", "decrypt-and-round while |e| < Δ/2"]),
                     N("gad", "Gadget decomposition", "approximate, base B len ℓ", 430, 380, 220, ...cr, ["x → ℓ small base-B digits; reconstruct ≈ x", "(B,ℓ) is the master noise knob"]),
                     N("rgsw", "RLev / RGSW", "for multiplication", 280, 296, 240, ...cr, ["RLev = ℓ RLWEs at gadget powers", "RGSW = ( RLev(μ), RLev(μ·s) )"]),
-                    N("ext", "External product  ⊡", "RGSW × RLWE → RLWE", 250, 212, 300, ...cr, ["RGSW(μ) ⊡ RLWE(m) → RLWE(μ·m)", "ADDITIVE noise — the keystone of the whole scheme"]),
+                    N("ext", "External product  ⊡", "RGSW × RLWE → RLWE", 250, 212, 300, ...cr, ["RGSW(μ) ⊡ RLWE(m) → RLWE(μ·m)", "ADDITIVE noise: the keystone of the whole scheme"]),
                     N("sw", "Switching", "key · mod · ring", 40, 120, 200, ...cr, ["key-switch, modulus-switch, ring-switch", "change key / modulus / ring, preserve message"]),
                     N("gate", "Gates", "DMux · CMux · CRot", 300, 120, 200, ...cr, ["route / select / rotate by an encrypted bit", "each is one external product"]),
                     N("conv", "Conversion", "LWE→RLWE · RLWE→RGSW", 560, 120, 220, ...cr, ["LWE→RLWE: O(n log n) packing", "RLWE→RGSW: upgrade a bit to drive gates"]),
@@ -866,7 +866,7 @@
                     { id: "samp", label: "Sample secret keys", sub: "s, S1, S2 ← χ_S", x: 50, y: 110, w: 190, h: 50, color: C.client, bg: C.clientBg, info: ["secret keys for the big ring (S1) and small ring (S2)", "distributions χ_S, χ_E set the security ↔ noise balance (see Parameters)"] },
                     { id: "derive", label: "Derive public keys pp", sub: "cascade · ring-switch · RLWE→RGSW", x: 50, y: 195, w: 190, h: 58, color: C.client, bg: C.clientBg, info: ["cascade keys for LWE→RLWE", "ring-switch key S1→S2", "RLWE→RGSW key = RLevₛ(s²)  ← key-dependent"] },
                     { id: "store", label: "Store pp", sub: "reused for all queries", x: 580, y: 195, w: 190, h: 50, color: C.server, bg: C.serverBg, info: ["pp is independent of any index i", "reused across every Query (no per-query offline cost)"] },
-                    { id: "kdm", label: "circular / KDM assumption", sub: "pp encrypts functions of s under s", x: 250, y: 300, w: 300, h: 50, color: C.state, bg: C.stateBg, info: ["RLWE→RGSW key is RLevₛ(s²); cascade key-switches between related keys", "paper assumes circular/KDM explicitly (§3.2, App C.1) — but the reduction only discharges MLWE"] },
+                    { id: "kdm", label: "circular / KDM assumption", sub: "pp encrypts functions of s under s", x: 250, y: 300, w: 300, h: 50, color: C.state, bg: C.stateBg, info: ["RLWE→RGSW key is RLevₛ(s²); cascade key-switches between related keys", "paper assumes circular/KDM explicitly (§3.1 Security para, App C.1) — but the reduction only discharges MLWE"] },
                 ];
                 const edges = [
                     { from: "samp", to: "derive", color: C.client, style: "solid" },
@@ -977,7 +977,7 @@
                                     ["ciphertexts", "≈ ℓ·log N LWE samples"],
                                     ["modulus", "q1 (≈ 2⁷⁵ for VIA-C)"],
                                     ["encodes", "bits of (α row, β col, γ slot)"],
-                                    ["size", "Õ(log N)  — the headline metric"],
+                                    ["size", "Õ(log N): the headline metric"],
                                 ]}
                             />
                             <Card
@@ -996,7 +996,7 @@
                                 rows={[
                                     ["cascade keys", "for LWE→RLWE, @ q1"],
                                     ["ring-switch key", "S1 → S2"],
-                                    ["RLWE→RGSW key", "RLevₛ(s²)  — key-dependent"],
+                                    ["RLWE→RGSW key", "RLevₛ(s²): key-dependent"],
                                     ["property", "index-independent; reused for all i"],
                                 ]}
                             />
@@ -1060,7 +1060,7 @@
                     detail: [
                         "Beyond MLWE, VIA-C/B need a circular-security / key-dependent-message (KDM) assumption. Plain semantic security only hides messages that are independent of the secret key — and VIA's offline keys are not.",
                         "The RLWE→RGSW conversion key is RLevₛ(s²) — an encryption of s² under s — and the LWE→RLWE cascade key-switches between related keys. So pp encrypts functions of the secret under the secret, which standard MLWE does not cover.",
-                        "The paper names this assumption explicitly (§3.2, Appendix C.1), but its security reduction only discharges MLWE at each step — the KDM assumption is declared, not formally used. Treat it as load-bearing. Plain VIA, having no conversion keys, does not need it.",
+                        "The paper names this assumption explicitly (the Security paragraph ending §3.1 for VIA, Appendix C.1 for VIA-B), but its security reduction only discharges MLWE at each step — the KDM assumption is declared, not formally used. Treat it as load-bearing. Plain VIA, having no conversion keys, does not need it.",
                     ],
                 },
                 {

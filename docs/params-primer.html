@@ -37,7 +37,7 @@
             </div>
         </header>
         <div class="wrap" role="main">
-            <h1 class="page-title">Parameters &mdash; the big picture</h1>
+            <h1 class="page-title">Parameters</h1>
             <nav class="subnav" aria-label="Parameters section">
                 <span class="subnav-item sn-primer current" aria-current="page">Primer</span>
                 <a class="subnav-item sn-spec" href="params.html">Spec</a>
@@ -54,45 +54,26 @@
             </p>
             <ul>
                 <li>
-                    <strong>Secure</strong> &mdash; every lattice instance the
+                    <strong>Secure:</strong> every lattice instance the
                     scheme exposes is hard (\(\ge\) your bit target). Binary: 119
                     bits is not &ldquo;almost 120,&rdquo; it is a fail. VIA exposes
                     <em>two</em> instances (a big ring and a small ring); the
                     <em>weaker</em> one is the score.
                 </li>
                 <li>
-                    <strong>Correct</strong> &mdash; decryption succeeds with
+                    <strong>Correct:</strong> decryption succeeds with
                     overwhelming probability (failure \(\le 2^{-40}\)),
                     <em>after</em> noise propagates through the whole
                     DMux&rarr;first-dimension&rarr;CMux&rarr;convert pipeline.
                 </li>
             </ul>
             <p>
-                These two pull in <strong>opposite directions</strong> &mdash; a
+                These two pull in <strong>opposite directions</strong>: a
                 bigger modulus buys correctness headroom but <em>costs</em>
                 security; a wide-Gaussian secret buys security but <em>blows</em>
                 the noise budget. Clearing both at once, at a real database size,
                 is the whole game of parameter selection.
             </p>
-            <p>
-                Only once a set is valid does <strong>performance</strong> &mdash;
-                query size, response size, server compute &mdash; become
-                meaningful. Performance is a <em>profile you compare</em>, never a
-                check you pass.
-            </p>
-
-            <figure class="fig" aria-label="Two checks then a profile">
-                <p style="font-family:'SF Mono',Consolas,monospace;font-size:1.02rem;line-height:1.9;margin:8px 0;">
-                    [ Secure&nbsp;&#10003; ] &nbsp;<strong>AND</strong>&nbsp; [ Correct&nbsp;&#10003; ]
-                    &nbsp;&rarr;&nbsp; <strong>valid scheme</strong>
-                    &nbsp;&rarr;&nbsp; &#10216;&nbsp;performance profile&nbsp;&#10217;
-                </p>
-                <figcaption>
-                    Two checks, then a profile. A scheme that fails either check has
-                    no meaningful performance number &mdash; there is nothing to
-                    compare yet.
-                </figcaption>
-            </figure>
 
             <!-- ============================================================ -->
             <p>
@@ -101,10 +82,12 @@
                 is only honest <em>at a valid point</em>. VIA&rsquo;s headline
                 figures are quoted at \(n_1{=}2048\) parameters that
                 <strong>fail the security check</strong> on the keys actually
-                shipped &mdash; our estimator puts the binding ring at
-                \(\approx\!77\) bits, not the advertised 110. Re-priced at a
-                genuinely \(\ge 120\)-bit point (\(n_1{=}4096\)), the profile is
-                <strong>~2&times; across compute, key size, and response</strong>.
+                shipped: our estimator puts the binding ring at
+                \(\approx\!77\) bits, not the advertised 110
+                (derived under <a href="params-concrete.html#gap">Fix</a>).
+                Re-priced at a genuinely \(\ge 120\)-bit point (\(n_1{=}4096\)),
+                the profile is <strong>~2&times; across compute, key size, and
+                response</strong> (measured under <a href="params-bench.html">Cost</a>).
             </p>
             <p>
                 <strong>TLDR:</strong> VIA&rsquo;s true profile is roughly

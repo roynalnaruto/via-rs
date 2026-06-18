@@ -23,12 +23,12 @@
   <div class="hero">
     <h1>VIA — Communication-Efficient Single-Server PIR</h1>
     <div class="meta">A pure-Rust implementation of the VIA family &middot; paper: <a href="https://eprint.iacr.org/2025/2074" target="_blank" rel="noopener">Liu, Wang &amp; Zhang (2025)</a></div>
-    <p class="lead">Private Information Retrieval lets a client fetch the <em>i</em>-th record of a server-held database while keeping <em>i</em> hidden from the server &mdash; from a single server, with no non-collusion assumption. VIA does this with a logarithmic-depth <strong>DMux tree</strong> for query expansion and (in VIA-C) a low-noise <strong>LWE&rarr;RLWE conversion</strong> for query compression.</p>
+    <p class="lead">Private Information Retrieval lets a client fetch the <em>i</em>-th record of a server-held database while keeping <em>i</em> hidden from the server, from a single server, with no non-collusion assumption. VIA does this with a logarithmic-depth <strong>DMux tree</strong> for query expansion and (in VIA-C) a low-noise <strong>LWE&rarr;RLWE conversion</strong> for query compression.</p>
   </div>
   <div class="cards">
     <a class="card" href="intro.html">
       <h2>Intro to VIA</h2>
-      <p>A from-first-principles explanation &mdash; no PIR or cryptography background assumed. What the noise budget is, why the DMux tree wins, how the query is compressed, and <em>why each step works</em>, built up as a chain of forced moves with worked examples and schematics.</p>
+      <p>A from-first-principles explanation: no PIR or cryptography background assumed. What the noise budget is, why the DMux tree wins, how the query is compressed, and <em>why each step works</em>, built up as a chain of forced moves with worked examples and schematics.</p>
     </a>
     <a class="card" href="architecture.html">
       <h2>Architecture</h2>
@@ -36,15 +36,15 @@
     </a>
     <a class="card" href="implementation.html">
       <h2>Implementation details</h2>
-      <p>The <code>via-rs</code> codebase as built: an architecture map of the five crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and the build/test status.</p>
+      <p>The <code>via-rs</code> codebase as built: an architecture map of the crates and the layered primitive stack, a primitive&rarr;paper cross-reference, and the build/test status.</p>
     </a>
     <a class="card" href="params-primer.html">
       <h2>Parameters</h2>
-      <p>A parameter set is <em>valid</em> only if it clears two gates &mdash; <strong>secure</strong> and <strong>correct</strong> &mdash; at once; performance is then the profile at which it does. Five tabs: <em>Primer</em> (that model), <em>Spec</em>, <em>Gaps</em> (where the published params fail a gate), <em>Fix</em> (a derived, estimator-backed &ge;120-bit set), and <em>Cost</em> (its ~2&times; performance profile).</p>
+      <p>A parameter set is <em>valid</em> only if it clears two checks (<strong>secure</strong> and <strong>correct</strong>) at once; performance is then the profile at which it does. Five tabs: <em>Primer</em> (that model), <em>Spec</em>, <em>Gaps</em> (where the published params fail a check), <em>Fix</em> (a derived, estimator-backed &ge;120-bit set), and <em>Cost</em> (its ~2&times; performance profile).</p>
     </a>
     <a class="card" href="audit.html">
       <h2>Audit</h2>
-      <p>A severity-ranked correctness/security audit of VIA-C and VIA-B &mdash; paper-vs-code parameter and noise-budget divergences, each finding adversarially re-validated against the paper and the code pinned to a commit, with source links and citations.</p>
+      <p>A severity-ranked correctness/security audit of VIA-C and VIA-B: paper-vs-code parameter and noise-budget divergences, each finding adversarially re-validated against the paper and the code pinned to a commit, with source links and citations.</p>
     </a>
   </div>
   <p class="foot-note">Scope: <strong>VIA-C</strong> and <strong>VIA-B</strong> are implemented (VIA-B behind the <code>via-b</code> cargo feature); plain VIA is not yet implemented. See the <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">repository</a> and its README for build &amp; test instructions.</p>
