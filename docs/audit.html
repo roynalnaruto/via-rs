@@ -136,9 +136,17 @@
                     distributions and database dimensions</strong
                 >, and the "realistic" Gaussian key distribution declared in the
                 presets is <em>inert</em> &mdash; every test actually runs
-                ternary keys. On the credit side, two suspected issues are
-                <em>refuted</em>: the VIA-C plaintext modulus is correctly
-                \(p=16\), and the secret-dependent decode step is constant-time.
+                ternary keys. The follow-up parameterization work adds a
+                scheme-level finding (<a href="#a9">A9</a>): the paper's DMux/CMux
+                noise bound omits the secret \(\mathbb E[s^2]\) factor, so its
+                intended Gaussian-key parameters fail \(2^{-40}\) &mdash; now
+                confirmed empirically and analytically in-repo. A derived
+                \(\ge120\)-bit <code>SECURE_PARAMS</code> preset now clears
+                security with margin (estimator-gated), though its correctness
+                margin is thin and ternary-dependent. On the credit side, two
+                suspected issues are <em>refuted</em>: the VIA-C plaintext modulus
+                is correctly \(p=16\), and the secret-dependent decode step is
+                constant-time.
             </p>
             <div class="callout">
                 <strong>Scope.</strong> This page audits <em>implementation /
@@ -255,13 +263,28 @@
                     therefore ships a parameter set whose correctness the authors
                     do <em>not</em> claim meets the \(2^{-40}\) target.
                 </p>
+                <p>
+                    <span class="tag tag-code">code</span>
+                    <strong>Update:</strong> this is no longer just a
+                    paper-vs-code base mismatch &mdash; the in-repo
+                    <code>via-estimator</code> now <em>proves</em> the shipped
+                    draft bases miss \(2^{-40}\) (test
+                    <code>draft_gadgets_fail_correctness</code>) and reproduces the
+                    authors' \(-43.4\) only with the erratum bases. And it shows
+                    that simply rebasing is <em>not</em> sufficient at the secure
+                    dimensions: the binding lever is the DMux / <code>L_QUERY</code>
+                    gadget <em>length</em> \(\ell\!:\!2\to3\), not the base
+                    (see <a href="#a9">A9</a> and
+                    <a href="params-concrete.html#correctness">Params &middot;
+                    Concrete</a>).
+                </p>
                 <p class="conf">
                     Confidence: high — bases read directly from code and
                     cross-checked against both the printed table and the erratum;
                     line numbers and Table-6 page (p.23) re-verified.
-                    <em>Fix:</em> adopt the erratum bases (and re-run a noise
-                    estimate); add a comment distinguishing "Table 6 as printed"
-                    from "Table 6 corrected."
+                    <em>Fix:</em> adopt the erratum bases <em>and</em> the
+                    DMux \(\ell\!\to\!3\) bump; gate on the in-repo
+                    \(P_{\text{fail}}\) calc.
                 </p>
             </div>
 
@@ -340,13 +363,14 @@
                 </p>
             </div>
 
-            <div class="finding sev-high" id="a3">
+            <div class="finding sev-medium" id="a3">
                 <div class="f-head">
-                    <span class="sev">high</span
+                    <span class="sev">medium</span
                     ><span class="f-title"
-                        >A3 — No correctness test under the paper's noise
-                        distributions or database dimensions; the \(2^{-40}\)
-                        claim is unverified in code</span
+                        >A3 — No <em>empirical</em> correctness test at the
+                        paper's noise distributions and database dimensions (the
+                        analytic \(2^{-40}\) budget now exists; an at-scale
+                        end-to-end witness does not)</span
                     >
                     <span class="loc"
                         ><a
@@ -469,12 +493,14 @@
                         ><a href="#fn9" id="ref9">9</a></sup
                     >
                     So the preset's security/noise story is decorative. This is
-                    the implementation face of reviewer issue #2: the paper's
-                    TFHE-derived CMux/DMux noise lemmas (C.1/C.2) assume a binary
-                    key and omit the \(\mathbb E[s_i^2]\) factor; the code neither
-                    uses the paper's Gaussian key nor models that factor.<sup
-                        ><a href="#fn10" id="ref10">10</a></sup
-                    >
+                    the implementation face of reviewer issue #2 &mdash; the
+                    \(\mathbb E[s_i^2]\) factor the paper's CMux/DMux lemmas omit,
+                    now a confirmed correctness bug in its own right
+                    (<a href="#a9">A9</a>).<sup><a href="#fn10" id="ref10">10</a></sup> The twist that finding exposes: the
+                    inert preset is a <em>lucky</em> bug here &mdash; the ternary
+                    keys it silently falls back to are precisely what keeps the
+                    noise budget closeable, where the paper's intended Gaussian
+                    \(\sigma{=}32\) key would <em>break</em> it.
                 </p>
                 <p class="conf">
                     Confidence: high on inertness (grep-verified); the
@@ -698,6 +724,87 @@
                 <p class="conf">Confidence: high (read at source).</p>
             </div>
 
+            <div class="finding sev-high" id="a9">
+                <div class="f-head">
+                    <span class="sev">high</span
+                    ><span class="f-title"
+                        >A9 — The paper's DMux/CMux noise bound omits the secret
+                        \(\mathbb E[s^2]\) factor, so its intended Gaussian-key
+                        parameters fail \(2^{-40}\) (Yue's bug, now confirmed
+                        in-repo)</span
+                    >
+                    <span class="loc"
+                        ><a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/6ddafdb7a0fbb86bb297618e3618394c31585cdc/crates/via-primitives/tests/dmux_noise_empirical.rs"
+                            target="_blank"
+                            rel="noopener"
+                            >dmux_noise_empirical.rs</a
+                        >
+                        ·
+                        <a
+                            class="srcref"
+                            href="https://github.com/roynalnaruto/via-rs/blob/6ddafdb7a0fbb86bb297618e3618394c31585cdc/crates/via-estimator/src/lib.rs#L334"
+                            target="_blank"
+                            rel="noopener"
+                            >via-estimator/src/lib.rs</a
+                        >
+                        · paper Lemmas C.1/C.2, p.24 ·
+                        <a href="https://github.com/0xalizk/via-rs/issues/3" target="_blank" rel="noopener">issue #3</a></span
+                    >
+                </div>
+                <p>
+                    <span
+                        class="tag tag-paper"
+                        title="Liu et al. (2025), Appendix C, Lemmas C.1/C.2, p.24"
+                        >paper</span
+                    >
+                    The DMux/CMux external-product noise bound (Lemmas C.1/C.2)
+                    charges the approximate-decomposition residual as
+                    \(\sim n\,q^2/B^{2\ell}\) &mdash; with <strong>no</strong>
+                    secret-key factor &mdash; yet the paper's <em>own</em>
+                    conversion (C.3) and ring-switch ([45]) lemmas <em>do</em>
+                    carry an \(\mathbb E[s^2]\) factor on the same kind of term.
+                    Yue flagged this internal inconsistency
+                    (<a href="https://github.com/0xalizk/via-rs/issues/3" target="_blank" rel="noopener">issue #3</a>):
+                    the bound holds only for a small/binary secret and is too
+                    aggressive for the paper's intended Gaussian \(\sigma{=}32\)
+                    key.
+                </p>
+                <p>
+                    <span class="tag tag-code">code</span> We settled it both
+                    ways. <strong>Empirically</strong>
+                    (<code>dmux_noise_empirical</code>): a real DMux at
+                    \(n_1{=}4096\), swept over secrets, shows the residual scales
+                    as \(\mathbb E[s^2]\) to ~1% &mdash; the \(\sigma{=}32\) secret
+                    carries <strong>1519&times;</strong> the ternary noise and
+                    exceeds the paper's own \(\times1\) budget by ~1000&times;.
+                    <strong>Analytically</strong>
+                    (<code>via-estimator</code>, toggle
+                    <code>yue_residual_correction</code>): with the factor
+                    restored, the paper's Gaussian design fails \(2^{-40}\) even
+                    with erratum bases (test
+                    <code>yue_correction_breaks_paper_gaussian</code>).
+                    <span class="tag tag-infer">inference</span> Consequence,
+                    and the reason <a href="#a4">A4</a> matters: via-rs runs
+                    <em>ternary</em> keys (\(\mathbb E[s^2]{=}\tfrac23<1\)), which
+                    <em>shrink</em> the residual &mdash; so the substitution that
+                    weakens security is exactly what keeps correctness closeable.
+                </p>
+                <p class="conf">
+                    Confidence: high &mdash; empirical (\(\pm\)~1%) and analytic
+                    agreement, both CI-gated. This is a <em>paper/scheme</em>
+                    correctness finding (the bound, not via-rs code per se); it was
+                    previously buried in this page's open questions and is promoted
+                    here. <em>Fix (for any Gaussian-key instantiation):</em>
+                    re-derive the CMux/DMux bound with the \(\mathbb E[s^2]\)
+                    factor and re-select parameters; for via-rs's ternary
+                    <code>SECURE_PARAMS</code>, see the thin-margin caveat on
+                    <a href="params-concrete.html#correctness">Params &middot;
+                    Concrete</a>.
+                </p>
+            </div>
+
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
             <h2 id="validation">Audit-of-audit &mdash; adversarial validation</h2>
@@ -727,6 +834,21 @@
                 page number, and one cross-finding \(\sigma\) mislabel), and
                 they are folded into the findings themselves.
             </p>
+            <div class="callout">
+                <strong>Re-audit (HEAD <code>6ddafdb</code>).</strong> A later
+                pass, after the parameterization work, revisited every finding
+                against the new in-repo tooling. Net changes, folded in above:
+                <a href="#a9">A9</a> is <strong>new</strong> (the
+                \(\mathbb E[s^2]\) bound bug, promoted from an open question and
+                now confirmed); <a href="#a2">A2</a> and <a href="#a3">A3</a> are
+                <strong>partly resolved</strong> by the <code>via-estimator</code>
+                crate (A3 downgraded high→medium &mdash; the analytic budget now
+                exists; only an at-scale empirical witness is still missing); and
+                <a href="#a1">A1</a>/<a href="#vb2">VB-2</a> are sharpened (the
+                draft bases are now <em>proven</em> to miss \(2^{-40}\)). The A1–A8
+                source links stay pinned to <code>9575286</code>; A9 and the
+                tooling links pin to <code>6ddafdb</code>.
+            </div>
             <div class="tscroll"><table>
                 <thead>
                     <tr>
@@ -750,17 +872,18 @@
                     </tr>
                     <tr>
                         <td><a href="#a2">A2</a> security_param</td>
-                        <td>confirmed</td>
+                        <td>confirmed &middot; partly resolved</td>
                         <td>
                             <code>u32</code>, read only in asserts/Debug;
                             <code>128</code> exceeds even the paper's own 110.
                             Now cross-checked by <code>via-estimator</code>
-                            (~77 bits on the shipped ternary keys)
+                            (~77 bits on the shipped ternary keys); residual defect
+                            is that the constant is still hand-typed, not derived
                         </td>
                     </tr>
                     <tr>
                         <td><a href="#a3">A3</a> no paper-noise test</td>
-                        <td>confirmed</td>
+                        <td>confirmed &middot; downgraded to medium</td>
                         <td>
                             lines exact; the cited
                             \(\sigma_{1,S}{=}32,\sigma_{1,E}{=}1024,\sigma{=}26\)
@@ -812,6 +935,14 @@
                             <code>ViaCP=16</code>, no <code>MODULUS_PC</code>
                             (the bug was in the Python reference); decode centring
                             is constant-time
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#a9">A9</a> E[s²] bound bug</td>
+                        <td>new &middot; confirmed</td>
+                        <td>
+                            promoted from open-question #2; empirical
+                            (1519× at σ=32) and analytic agreement, both CI-gated
                         </td>
                     </tr>
                     <tr>
@@ -915,14 +1046,13 @@
                     checkable here.<sup><a href="#fn18" id="ref18">18</a></sup>
                 </li>
                 <li>
-                    <strong>Reviewer proof issues #2/#3</strong> (\(\mathbb
-                    E[s_i^2]\) term in CMux/DMux noise; \(S^2\) message in
-                    RLWE→RGSW) are <em>paper-proof</em> soundness questions; the
-                    code sidesteps them only because it runs ternary keys and
-                    models no noise — they would bite if Gaussian keys were wired
-                    (A4). Note the \(\sigma=4960\) those discussions cite is the
-                    plain-VIA figure; the VIA-C keys are \(\sigma_{1,S}{=}32\) /
-                    \(\sigma{=}26\) (fn 10).
+                    <strong>Reviewer proof issue #2</strong> (the \(\mathbb
+                    E[s_i^2]\) term in CMux/DMux noise) is <em>no longer open</em>
+                    &mdash; it is now confirmed, empirically and analytically, and
+                    promoted to a graded finding (<a href="#a9">A9</a>). Issue #3
+                    (the \(S^2\) message in RLWE→RGSW) remains a paper-proof
+                    soundness question that the code sidesteps by running ternary
+                    keys; it would bite if Gaussian keys were wired (<a href="#a4">A4</a>).
                 </li>
                 <li>
                     <strong>Plain VIA</strong> is still not implemented.
@@ -1040,7 +1170,15 @@ flowchart TD
                     <em>same</em> rings \(R_{n_1,q_1}\) / \(R_{n_2,q_2}\), the
                     VIA-C findings carry over verbatim: the security drift
                     (paper-claimed 110 → reviewers' measured ~72–88 bits, A1/A2)
-                    and the tight noise budget apply to VIA-B too.
+                    and the tight noise budget apply to VIA-B too &mdash; and the
+                    in-repo \(P_{\text{fail}}\) calc now <em>proves</em> the draft
+                    bases miss \(2^{-40}\) (<a href="#a1">A1</a>), with the
+                    \(\mathbb E[s^2]\) bound bug (<a href="#a9">A9</a>) applying to
+                    VIA-B's DMux/CMux identically.
+                    <span class="tag tag-infer">inference</span> Crucially, there
+                    is <strong>no <code>SECURE_B_PARAMS</code></strong> analogue of
+                    the \(\ge120\)-bit VIA-C fix &mdash; so VIA-B ships
+                    <em>no</em> certified-secure, certified-correct preset at all.
                     <span class="tag tag-code">code</span> Clean by contrast:
                     <code>p=16</code>, <code>n3=2</code>, <code>T=256</code> match
                     the paper, and the legacy <code>p=256</code> bug is not
@@ -1098,10 +1236,13 @@ flowchart TD
                     from VIA-C, since repack borrows those very keys), and is
                     explicitly hedged/open — it is <em>not</em> a settled
                     undercount of the repack's own key-switches (those are the
-                    Lemma-4.1 key-switching bound). No in-repo estimator exists to
-                    quantify any of this.
+                    Lemma-4.1 key-switching bound). The in-repo
+                    <code>via-estimator</code> noise calculator now models the
+                    VIA-C recursion, but <em>not</em> VIA-B's repack chain
+                    (\(\theta_{rep}\)), so these specific terms remain unquantified
+                    in-repo.
                 </p>
-                <p class="conf">Confidence: high that the terms are omitted from the in-code bound; the magnitude is unquantified (no noise model).</p>
+                <p class="conf">Confidence: high that the terms are omitted from the in-code bound; the magnitude is unquantified (the estimator does not yet cover repack).</p>
             </div>
 
             <div class="finding sev-medium" id="vb5">
