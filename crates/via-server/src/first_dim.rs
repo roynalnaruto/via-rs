@@ -18,8 +18,10 @@
 //!
 //! The columns are independent, so under `feature = "alloc"` (where `std` is
 //! linked) the `J`-loop is split across `available_parallelism()` worker
-//! threads via [`std::thread::scope`] (no extra dependency); the `no_std` build
-//! keeps the serial loop. Results are identical and assembled in column order.
+//! threads via [`std::thread::scope`] (no extra dependency) — but only once the
+//! MAC work (`≈ I·J·N`) clears a threshold, so small/toy calls (and any narrow
+//! query) keep the serial loop and don't pay the thread-spawn cost. The `no_std`
+//! build is always serial. Results are identical and assembled in column order.
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
@@ -54,7 +56,8 @@ use crate::prepared_db::PreparedDb;
 /// onto a 2-D grid `(thread_j, thread_coeff)`. The per-coefficient kernel
 /// boundary already exists in `via-primitives` (the eval-form `Mul`, ultimately
 /// `negacyclic_mul_slice` for the schoolbook backing); a batched GPU FirstDim
-/// would wrap this whole function. The CPU path is sequential.
+/// would wrap this whole function. The CPU path fans the `j`-loop across worker
+/// threads above a work threshold (see the module docs), serial below.
 ///
 /// # Constant-time: No
 ///
@@ -96,14 +99,24 @@ where
     };
 
     // Columns are independent — fan the J-loop across worker threads under
-    // `alloc` (= std linked); fall back to a serial loop for `no_std`.
+    // `alloc` (= std linked), but only once there is enough work to amortize the
+    // thread-spawn cost; fall back to the serial loop otherwise and for `no_std`.
     #[cfg(feature = "alloc")]
     {
+        // Spawning `workers` threads (each with a large stack, below) costs tens
+        // of µs per worker — a net loss when the MAC work is tiny. Only
+        // parallelize once that work (≈ I·J·N pointwise multiply-accumulates) is
+        // large enough to dwarf the spawn cost. Empirically the n=8 toy grid
+        // (work 2^5) is ~18× slower parallelized and must stay serial, while the
+        // paper/secure grids (n≥2048, work ≥ 2^18) win from the fan-out (~2× at
+        // the CI bench grid I=8, J=16).
+        const PAR_MIN_WORK: usize = 1 << 16;
+        let work = i_len.saturating_mul(j_len).saturating_mul(N1);
         let workers = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
             .min(j_len);
-        if workers > 1 {
+        if workers > 1 && work >= PAR_MIN_WORK {
             let column = &column;
             let chunk = j_len.div_ceil(workers);
             // Workers don't inherit the caller's (large) stack, and the eval-form
