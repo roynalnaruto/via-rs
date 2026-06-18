@@ -1,0 +1,19 @@
+[package]
+name        = "via-estimator"
+version     = "0.1.0"
+edition     = "2024"
+description = "In-repo lattice-security estimator + Appendix-C noise/correctness calculator for the VIA presets. Dev/audit tooling: not part of the no_std runtime."
+
+# This is std-only audit tooling (floats, printing). It reads the *shipped*
+# `via_protocol` presets so the numbers it reports are about the same constants
+# the code runs. Run the driver with `cargo run -p via-estimator`; the
+# `#[test]`s gate CI on the security_param / 2^-40 claims.
+
+[dependencies]
+via-protocol = { workspace = true, default-features = false }
+
+[features]
+default = []
+
+[lints]
+workspace = true

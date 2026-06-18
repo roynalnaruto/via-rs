@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Parameters</title>
+        <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false },
+                    ],
+                })
+            "
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html"
+                    >VIA &middot; Documentation</a
+                >
+                <nav>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params.html" class="on">Params</a>
+                    <a href="audit.html">Audit</a>
+                    <a
+                        href="https://github.com/roynalnaruto/via-rs"
+                        target="_blank"
+                        rel="noopener"
+                        >Repo &#8599;</a
+                    >
+                </nav>
+            </div>
+        </header>
+        <div class="wrap" role="main">
+            <h1 class="page-title">
+                Parameters &mdash; paper vs reality
+            </h1>
+            <nav class="subnav" aria-label="Parameters section">
+                <a class="subnav-item sn-spec" href="params.html">Spec</a>
+                <span class="subnav-item sn-gaps current" aria-current="page">Gaps</span>
+                <a class="subnav-item sn-fix" href="params-concrete.html">Fix</a>
+                <a class="subnav-item sn-cost" href="params-bench.html">Cost</a>
+            </nav>
+            <p class="subnav-desc">
+                Where the parameters in <a href="params.html">Spec</a> diverge from
+                what is true: the published values were corrected by an erratum, the
+                claimed security is higher than anyone has measured, and the
+                DMux/CMux noise bound &mdash; per
+                <a href="https://github.com/0xalizk/via-rs/issues/3" target="_blank" rel="noopener">Yue&rsquo;s feedback</a>
+                &mdash; doesn&rsquo;t hold for the paper&rsquo;s own key distribution.
+                Every value is tagged by where it comes from; the
+                <a href="params-concrete.html">Fix</a> page closes these.
+            </p>
+            <div class="navlegend">
+            <p class="toc" id="toc">
+                <a href="#glance">At a glance</a>
+                <a href="#correctness">Correctness budget</a>
+                <a href="#security">Security target</a>
+                <a href="#caveats">Caveats for implementers</a>
+            </p>
+            <p class="legend">
+                <span
+                    ><span
+                        class="tag tag-paper"
+                        title="Stated in the paper (Liu et al. 2025); hover/cite gives the §/page."
+                        >paper</span
+                    >
+                    stated in the paper</span
+                >
+                <span
+                    ><span
+                        class="tag tag-code"
+                        title="Observed in via-rs; refs link to the exact source line."
+                        >code</span
+                    >
+                    observed in <code>via-rs</code></span
+                >
+                <span
+                    ><span class="tag tag-infer">inference</span> LLM
+                    reasoning</span
+                >
+                <span
+                    ><span class="tag tag-flag">unverified</span> could not
+                    confirm</span
+                >
+            </p>
+            </div>
+            <!-- ====================================================================== -->
+            <h2 id="glance">The contested values, at a glance</h2>
+            <p>
+                Where the three sources disagree, that disagreement <em>is</em>
+                the finding. The rest of this section gives the full numbers;
+                this table is the map.
+            </p>
+            <div class="tscroll"><table>
+                <thead>
+                    <tr>
+                        <th scope="col">Parameter (VIA-C)</th>
+                        <th scope="col"><span class="tag tag-paper">paper</span></th>
+                        <th scope="col"><span class="tag tag-code">code</span></th>
+                        <th scope="col">Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a></th>
+                        <th scope="col">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Gadget bases (DMux/CMux/rs)</td>
+                        <td>55879 / 81 / 8 (Table 6)</td>
+                        <td>55879 / 81 / 8</td>
+                        <td>
+                            <strong>18073 / 307 / 4</strong> (authors' erratum)
+                        </td>
+                        <td>
+                            code = paper's <em>draft</em>; erratum needed for
+                            \(2^{-40}\) &mdash;
+                            <a href="audit.html#a1">A1</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Plaintext modulus \(p\)</td>
+                        <td>16</td>
+                        <td>16</td>
+                        <td>
+                            authors' erratum notes a legacy
+                            <code>MODULUS_PC=256</code> in their C++ impl
+                            (owniai/VIA) &mdash; an author self-disclosure, not a
+                            reviewer finding
+                        </td>
+                        <td>
+                            code correct; the bug isn't in this port &mdash;
+                            <a href="audit.html#a8">A8</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Security level</td>
+                        <td>110 bits (lattice estimator)</td>
+                        <td>asserts 128 (no estimator)</td>
+                        <td>~88 / ~72 (authors' C++ impl)</td>
+                        <td>
+                            three-way mismatch &mdash;
+                            <a href="audit.html#a2">A2</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Decode threshold</td>
+                        <td>\((q_3-q_4)/p \approx 2.6\times10^5\)</td>
+                        <td>\(q_4/p\Rightarrow \Delta/2 = 128\)</td>
+                        <td>Yue: \(q_4/p\) is the correct one</td>
+                        <td>
+                            code conservative; paper proves a different margin
+                            &mdash; <a href="audit.html#a5">A5</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Key distribution</td>
+                        <td>Gaussian \(\sigma_{1,S}{=}32,\ \sigma{=}26\)</td>
+                        <td>Gaussian declared but <em>inert</em> → ternary</td>
+                        <td>
+                            non-binary key needs an \(\mathbb E[s_i^2]\) factor
+                        </td>
+                        <td>
+                            preset decorative; lemmas assume binary &mdash;
+                            <a href="audit.html#a4">A4</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Plain-VIA \(q_1\)</td>
+                        <td>\(268369921^2\) (prime square)</td>
+                        <td>two distinct primes \(\approx 2^{57}\)</td>
+                        <td>—</td>
+                        <td>
+                            a square isn't RNS-splittable &mdash;
+                            <a href="audit.html#a6">A6</a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table></div>
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="correctness">The correctness budget</h2>
+            <p>
+                <span class="tag tag-paper">paper</span> The target is a
+                decryption-failure rate \(\le 2^{-40}\) (§5.1, and Appendix C.2,
+                p.27). Correctness holds as long as the final accumulated error
+                stays under the decode threshold; the paper's stated condition
+                (App C.2, p.27) is
+            </p>
+            <p style="text-align: center">
+                \(\lVert E_{\text{final}}\rVert_\infty \le \lfloor
+                (q_3-q_4)/p\rceil/2 - 1\), &nbsp; with &nbsp; \(\Pr[\text{fail}]
+                \le \operatorname{erfc}\!\big(\tfrac{\lfloor(q_3-q_4)/p\rceil/2-1}{\sqrt{2\,\theta_{\text{ans}}}}\big)\).
+            </p>
+            <p>
+                The error variance \(\theta_{\text{ans}}\) is built up by a
+                per-stage recursion (App C.2, pp.26&ndash;27) that mirrors the
+                pipeline. Each stage adds its own term; the load-bearing ones:
+            </p>
+            <div class="tscroll"><table>
+                <thead>
+                    <tr>
+                        <th scope="col">Stage</th>
+                        <th scope="col">Variance update</th>
+                        <th scope="col">What it adds</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>DMux tree</td>
+                        <td>\(\theta_{dmux} = \theta_{ctrl} + \theta_{DMux}\log I\)</td>
+                        <td>one term per tree level → \(\log I\)</td>
+                    </tr>
+                    <tr>
+                        <td>Mod-switch \(q_1\!\to\!q_2\)</td>
+                        <td>\(\theta_{ms} = \theta_{dmux}\,q_2^2/q_1^2 + (1{+}n_1\theta_{1,S})/12\)</td>
+                        <td>scales noise down, adds rounding</td>
+                    </tr>
+                    <tr>
+                        <td>First dimension</td>
+                        <td>\(\theta_{first} = I\,n_1\,\theta_{ms}\,p^2/4\)</td>
+                        <td>
+                            <strong>the dominant blow-up</strong> — scales with
+                            \(I\,n_1\,p^2\)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CMux tree</td>
+                        <td>\(\theta_{cmux} = \theta_{first} + \theta_{CMux}\log J\)</td>
+                        <td>one term per level → \(\log J\)</td>
+                    </tr>
+                    <tr>
+                        <td>CRot</td>
+                        <td>\(\theta_{crot}^2 = \theta_{cmux} + \theta_{CRot}\log(n_1/n_3)\)</td>
+                        <td>rotation to the slot</td>
+                    </tr>
+                    <tr>
+                        <td>Repack (VIA-B)</td>
+                        <td>\(\theta_{rep} = \theta_{crot} + 2\theta_{ks}\log n_2\)</td>
+                        <td>
+                            \(\log n_2\) key-switch levels (see
+                            <a href="audit.html#vb3">VB-3</a>)
+                        </td>
+                    </tr>
+                </tbody>
+            </table></div>
+            <p>
+                Two things make this budget the crux for an implementer:
+            </p>
+            <p>
+                <strong>1. The shipped bases don't certify \(2^{-40}\).</strong>
+                Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a> With the
+                <em>erratum</em> bases the authors compute \(\log_2
+                P_{\text{fail}}\approx-43.4\) (32 GiB), clearing the target.
+                <span class="tag tag-code">code</span> But the code ships the
+                <em>draft</em> bases (55879 / 81 / 8) — larger bases mean a larger
+                \(q^2/(12 B^{2\ell})\) gadget-noise term — so the very
+                computation that meets \(2^{-40}\) does not apply to the shipped
+                parameters (<a href="audit.html#a1">A1</a>).
+            </p>
+            <p>
+                <strong>2. The code and the paper measure against different
+                thresholds.</strong>
+                <span class="tag tag-code">code</span> Decryption rescales the
+                answer to \(q_4\) and decodes there, so the effective margin is
+                \(\Delta/2 = (q_4/p)/2 = (4096/16)/2 = 128\).
+                <span class="tag tag-paper">paper</span> The Appendix-C condition
+                above evaluates to \(\lfloor(8380417-4096)/16\rceil/2-1 =
+                261759 \approx 2.6\times10^5\) — about \(2000\times\) larger.
+                Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a> Yue Chen argues the
+                \(q_4/p\) form (what the code does) is the correct one, citing
+                <a
+                    href="https://eprint.iacr.org/2022/368.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    >SpiralPIR</a
+                >
+                Thm 2.11 and
+                <a
+                    href="https://eprint.iacr.org/2022/949.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    >SimplePIR</a
+                >
+                Thm C.1. <span class="tag tag-infer">inference</span> So the code
+                is on the conservative (likely-correct) side, but the paper's
+                proof certifies a margin the code does not use — and whether the
+                real noise stays under \(128\) at the paper's \(\sigma\) and
+                database size is <strong>never tested</strong> (every test runs
+                ternary keys on a 2×2 DB; <a href="audit.html#a3">A3</a>,
+                <a href="audit.html#vb1">VB-1</a>).
+            </p>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="security">The security target</h2>
+            <p>
+                Security rests on the hardness of the underlying RLWE/MLWE
+                instances. Hardness is governed by the triple \((n, q, \sigma)\):
+                it rises with the ring dimension \(n\) and with the relative
+                noise \(\sigma/q\) — so, for fixed \(n\) and \(\sigma\),
+                <em>raising \(q\) lowers security</em>. That is the same lever
+                that buys correctness headroom, which is why the two targets
+                pull against each other.
+                <span class="tag tag-paper">paper</span> Crucially, VIA has
+                <strong>more than one instance</strong> to satisfy: the big ring
+                \(\mathcal R_{n_1,q_1}\) and the small ring are separate
+                assumptions (the MLWE/LWE parameters are aligned to the big
+                ring), and <em>each</em> must independently clear the target
+                (§5.1, p.16).
+            </p>
+            <p>
+                Here the three sources give three different numbers for the same
+                quantity:
+            </p>
+            <div class="tscroll"><table>
+                <thead>
+                    <tr>
+                        <th scope="col">Source</th>
+                        <th scope="col">Security level</th>
+                        <th scope="col">How obtained</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-paper">paper</span> §5.1, p.16</td>
+                        <td>110 bits (classical)</td>
+                        <td>
+                            the
+                            <a
+                                href="https://github.com/malb/lattice-estimator"
+                                target="_blank"
+                                rel="noopener"
+                                >lattice estimator</a
+                            >
+                            [46], on the paper's parameters
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Security <a href="https://hackmd.io/W9Mo60zLTa6YFQBKsJ8QGg" target="_blank" rel="noopener">review</a> Yue et al.,
+                            May 7
+                        </td>
+                        <td>~88 (big ring) / ~72 (small ring)</td>
+                        <td>
+                            OpenFHE estimator, on the authors' C++
+                            implementation (<a
+                                href="https://github.com/owniai/VIA"
+                                target="_blank"
+                                rel="noopener"
+                                >owniai/VIA</a
+                            >) — <em>not</em> via-rs
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="tag tag-code">code</span>
+                            <a
+                                href="https://github.com/roynalnaruto/via-rs/blob/957528620c1770dccb6fd642f7759d2dd3010050/crates/via-protocol/src/presets.rs#L164"
+                                target="_blank"
+                                rel="noopener"
+                                title="crates/via-protocol/src/presets.rs:164"
+                                >presets.rs:164</a
+                            >
+                        </td>
+                        <td>128 (asserted)</td>
+                        <td>
+                            a hard-coded <code>u32</code>, read only by
+                            asserts/Debug — <strong>no estimator in the repo</strong>
+                        </td>
+                    </tr>
+                </tbody>
+            </table></div>
+            <p>
+                <span class="tag tag-infer">inference</span> Read through our own
+                estimator &mdash; the only number we treat as authoritative
+                (<a href="params-concrete.html">Fix</a>) &mdash; the 110 is a
+                <em>claim to be checked</em>, not a fact: on the paper's Gaussian
+                parameters <code>via-estimator</code> gives \(\approx\!95\text{–}96\)
+                bits (the reviewers and malb put those same params nearer 110; we
+                read our conservative ~95 as a floor, not a contradiction). On the
+                <strong>ternary keys via-rs actually runs</strong> it gives
+                \(\approx\!77\) bits (binding small ring). The reviewers' OpenFHE
+                run on the authors' C++
+                <a href="https://github.com/owniai/VIA" target="_blank" rel="noopener">owniai/VIA</a>
+                got 88/72 &mdash; a third, separate artifact.
+                <span class="tag tag-flag">unverified</span> Those 88/72 figures
+                are on the reviewers' authority, were not re-run here, and the
+                88/72-vs-big/small mapping is a positional reading of the review
+                note. The hazard this page exists to flag: the code asserts
+                <code>128</code> &mdash; higher than even the paper's claimed 110,
+                and ~50 bits above what our estimator measures on the shipped
+                ternary keys &mdash; with no derivation behind it
+                (<a href="audit.html#a2">A2</a>): a reader trusts a constant no
+                tool ever produced.
+            </p>
+            <p>
+                <strong>For an implementer:</strong> treat the security level as
+                <em>derived</em>, never asserted. Run an estimator on your exact
+                \((n, q, \sigma)\) for every ring and every variant you ship, and
+                gate CI on it — the one number you must not hard-code is the one
+                that says you are safe. <span class="tag tag-code">code</span>
+                via-rs now does this: the <code>via-estimator</code> crate
+                (<code>cargo run -p via-estimator</code>) reports a calibrated
+                core-SVP estimate per ring on the <em>shipped</em> presets and
+                gates CI &mdash; so the hard-coded <code>security_param</code> is
+                cross-checked against a real estimate rather than trusted. See the
+                <a href="params-concrete.html">Fix</a> page for the derived
+                &ge;120-bit set.
+            </p>
+
+            <!-- ====================================================================== -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="caveats">Caveats for implementers</h2>
+            <p>
+                If you are porting or re-instantiating VIA, these are the traps
+                the three sources together expose &mdash; each links to where it
+                bites in the audit.
+            </p>
+            <ol class="caveats">
+                <li>
+                    <strong>The published Table 6 gadget bases are
+                    <em>draft</em> values.</strong> Use the authors'
+                    erratum bases, not the ones printed in the paper (and shipped
+                    in the code); the \(2^{-40}\) correctness claim only holds
+                    with the corrected, <em>smaller</em> bases. The gadget base
+                    is the dominant noise lever, so this is not cosmetic.
+                    (<a href="audit.html#a1">Audit A1</a>,
+                    <a href="audit.html#vb2">VB-2</a>.)
+                </li>
+                <li>
+                    <strong>Do not trust a hard-coded security level &mdash;
+                    derive it.</strong> Run a lattice estimator on
+                    <em>your</em> exact \((n, q, \sigma)\) for <em>every</em>
+                    ring and <em>every</em> variant; both the big and the small
+                    ring are independent LWE instances and both must clear your
+                    target. Don't take the paper's 110 as given: our own
+                    <code>via-estimator</code> gives \(\approx\!95\text{–}96\) bits
+                    on the paper's Gaussian params and \(\approx\!77\) on the
+                    ternary keys via-rs ships (the reviewers measured ~88/72 on the
+                    authors' separate C++ build).
+                    (<a href="audit.html#a2">Audit A2</a>.)
+                </li>
+                <li>
+                    <strong>The final-ring budget is small; pick the
+                    conservative decode threshold and test against it.</strong>
+                    Decode against \(\Delta/2 = (q_4/p)/2\), not a \((q_3-q_4)/p\)
+                    budget, and add an assertion that the accumulated noise
+                    actually stays under it. (<a href="audit.html#a5">Audit
+                    A5</a>.)
+                </li>
+                <li>
+                    <strong>Wire the key/error distributions through from the
+                    parameters.</strong> A preset that <em>declares</em> Gaussian
+                    keys but <em>samples</em> ternary is a silent footgun: the
+                    security and noise story becomes decorative. And if you do use
+                    large-\(\sigma\) keys, re-derive the CMux/DMux noise &mdash;
+                    the TFHE-style lemmas assume a binary key and omit an
+                    \(\mathbb E[s_i^2]\) factor. (<a href="audit.html#a4">Audit
+                    A4</a>.)
+                </li>
+                <li>
+                    <strong>Parameters are per-database-size.</strong> \(I\) and
+                    \(J\) set how many noisy terms are summed, so a set that
+                    decrypts correctly at 1&nbsp;GB can fail at 32&nbsp;GB.
+                    Validate at your <em>target</em> dimensions with the
+                    <em>real</em> \(\sigma\), not on a toy 2×2 database with
+                    ternary keys. (<a href="audit.html#a3">Audit A3</a>,
+                    <a href="audit.html#vb1">VB-1</a>.)
+                </li>
+                <li>
+                    <strong>Respect the algebra.</strong> Rings are powers of
+                    two for the NTT, and a modulus that the paper writes as a
+                    prime <em>square</em> cannot be CRT-split into RNS channels
+                    &mdash; substitute two distinct NTT-friendly primes of the
+                    same size. (<a href="audit.html#a6">Audit A6</a>.)
+                </li>
+                <li>
+                    <strong>VIA-B inherits every VIA-C parameter caveat</strong>
+                    (its repack and prefix run on the same rings) and adds one:
+                    the repack recursion is \(\log_2(T\,n_1/n_2)\) levels deep,
+                    which the paper's \(\theta_{rep}\) noise formula slightly
+                    undercounts at the production batch size. (<a
+                        href="audit.html#vb3"
+                        >VB-3</a
+                    >.)
+                </li>
+            </ol>
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+        </div>
+    </body>
+</html>

@@ -20,6 +20,11 @@ build *FLAGS:
 test *FLAGS:
     cargo test {{FLAGS}}
 
+# Print the lattice-security + Appendix-C correctness audit table for the
+# shipped presets (the audit trail behind the docs' security/2^-40 claims).
+estimate:
+    cargo run -p via-estimator
+
 # Type-check under every variant feature set — guards against via-c regression
 # when via-b is introduced, and asserts the via-b surface compiles.
 check-variants:

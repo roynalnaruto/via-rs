@@ -63,6 +63,7 @@
                 Audit &mdash; VIA-C &amp; VIA-B correctness &amp; security
             </h1>
 
+            <div class="navlegend">
             <p class="legend">
                 <span
                     ><span
@@ -91,13 +92,14 @@
             </p>
 
             <p class="toc" id="toc">
-                <a href="#summary">Summary</a> &middot;
-                <a href="#audit">VIA-C findings</a> &middot;
-                <a href="#validation">Audit-of-audit</a> &middot;
-                <a href="#open-questions">Open questions</a> &middot;
-                <a href="#via-b">VIA-B follow-up</a> &middot;
+                <a href="#summary">Summary</a>
+                <a href="#audit">VIA-C findings</a>
+                <a href="#validation">Audit-of-audit</a>
+                <a href="#open-questions">Open questions</a>
+                <a href="#via-b">VIA-B follow-up</a>
                 <a href="#footnotes">Footnotes</a>
             </p>
+            </div>
 
             <h2 id="summary">Summary</h2>
             <div class="callout">
@@ -138,6 +140,19 @@
                 <em>refuted</em>: the VIA-C plaintext modulus is correctly
                 \(p=16\), and the secret-dependent decode step is constant-time.
             </p>
+            <div class="callout">
+                <strong>Scope.</strong> This page audits <em>implementation /
+                code quality</em> &mdash; what the Rust does, where it diverges
+                from the paper, what is tested, and what is constant-time. The
+                <em>parameter</em> question (paper vs reality: the security and
+                correctness numbers, the modulus chain, the draft-vs-erratum
+                gadgets) now lives in the
+                <a href="params.html">Params</a> section, where it is backed by
+                the in-repo <code>via-estimator</code> crate. Where a finding
+                below is fundamentally about parameters (A1, A2, A5), it links
+                across to the reconciled, estimator-backed treatment there rather
+                than duplicating it.
+            </div>
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
@@ -286,9 +301,7 @@
                         >code</a
                     >
                     The field is stored as a plain <code>u32</code> and read
-                    nowhere except for printing/asserts — there is
-                    <strong>no lattice-hardness estimator in the repo</strong
-                    >.<sup><a href="#fn4" id="ref4">4</a></sup>
+                    nowhere except for printing/asserts.<sup><a href="#fn4" id="ref4">4</a></sup>
                     <span
                         class="tag tag-paper"
                         title="Liu et al. (2025), §5.1, p.16 — &quot;110 bits of classical security … using the lattice estimator.&quot; [fn 5]"
@@ -304,13 +317,26 @@
                     asserting a <em>higher</em> number (128) than the paper's own
                     claim, with no derivation, is a config hazard.
                 </p>
+                <p>
+                    <span class="tag tag-code">code</span>
+                    <strong>Update:</strong> there is now an in-repo estimator
+                    &mdash; the <code>via-estimator</code> crate (added during this
+                    audit) runs a calibrated core-SVP estimate on the
+                    <em>shipped</em> presets and gates CI. On the ternary keys the
+                    code actually uses, it reports <strong>~77 bits</strong>
+                    (binding small ring) for <code>REALISTIC_PARAMS</code> &mdash;
+                    so the asserted <code>128</code> is not merely underived but
+                    wrong by ~50 bits. The full parameter-security reconciliation
+                    (paper vs review vs this estimate) now lives on the
+                    <a href="params-concrete.html">Params &middot; Concrete</a>
+                    page; what remains here, as a <em>code</em>-quality defect, is
+                    the hard-coded, unvalidated constant itself.
+                </p>
                 <p class="conf">
-                    Confidence: high that the number is unbacked in-repo
-                    (grep-verified: read only in the constructor, <code>Debug</code>,
-                    and a display test); the 72&ndash;88 figure I report on the
-                    reviewers' authority (not re-run here — no toolchain).
-                    <em>Fix:</em> wire a CI check against the lattice estimator;
-                    treat <code>security_param</code> as derived, not asserted.
+                    Confidence: high. <em>Fix (partially done):</em>
+                    <code>via-estimator</code> now gates CI on a real estimate; the
+                    remaining step is to <em>derive</em> <code>security_param</code>
+                    from it rather than carry a separate hard-coded constant.
                 </p>
             </div>
 
@@ -363,15 +389,31 @@
                         title="crates/via-integration/tests/client_server_e2e_paper.rs (+ benches)"
                         >code</a
                     >
-                    There is also no Appendix-C noise recursion, no
-                    \(P_{\text{fail}}\) computation, and all benches are
-                    toy-scale.<sup><a href="#fn7" id="ref7">7</a></sup>
+                    All benches are toy-scale.<sup><a href="#fn7" id="ref7">7</a></sup>
+                </p>
+                <p>
+                    <span class="tag tag-code">code</span>
+                    <strong>Update:</strong> the missing analytic budget now
+                    exists &mdash; <code>via-estimator::noise</code> implements the
+                    Appendix-C \(P_{\text{fail}}\) recursion (validated: it
+                    reproduces the authors' \(-43.4\) exactly at the paper's
+                    \(n_1{=}2048\)) and gates CI. With Yue's correction &mdash; the
+                    DMux/CMux residual scales with \(\mathbb E[s^2]\), which
+                    Lemmas C.1/C.2 omit &mdash; it shows the paper's intended
+                    <em>Gaussian-key</em> design fails \(2^{-40}\) outright (the
+                    bound was too aggressive), while via-rs's <em>ternary</em> keys
+                    make <code>SECURE_PARAMS</code> clear it on a thin margin
+                    (details on
+                    <a href="params-concrete.html#correctness">Params &middot;
+                    Concrete</a>). What is still missing is an <em>empirical</em>
+                    end-to-end correctness test at paper noise/dimensions; the
+                    analytic gap is closed.
                 </p>
                 <p class="conf">
-                    Confidence: high. <em>Fix:</em> add a paper-noise,
-                    paper-dimension correctness test (run by default at least at
-                    one DB size) and an analytic noise-budget unit test mirroring
-                    Appendix C.
+                    Confidence: high. <em>Fix (partially done):</em> analytic
+                    noise budget added (<code>via-estimator</code>); still need a
+                    paper-noise, paper-dimension empirical correctness test run by
+                    default at &ge;1 DB size.
                 </p>
             </div>
 
@@ -710,9 +752,10 @@
                         <td><a href="#a2">A2</a> security_param</td>
                         <td>confirmed</td>
                         <td>
-                            <code>u32</code>, read only in asserts/Debug; no
-                            estimator; <code>128</code> exceeds even the paper's
-                            own 110
+                            <code>u32</code>, read only in asserts/Debug;
+                            <code>128</code> exceeds even the paper's own 110.
+                            Now cross-checked by <code>via-estimator</code>
+                            (~77 bits on the shipped ternary keys)
                         </td>
                     </tr>
                     <tr>
@@ -721,8 +764,9 @@
                         <td>
                             lines exact; the cited
                             \(\sigma_{1,S}{=}32,\sigma_{1,E}{=}1024,\sigma{=}26\)
-                            are the genuine VIA-C distributions; no
-                            \(P_{\text{fail}}\) code anywhere
+                            are the genuine VIA-C distributions. Analytic
+                            \(P_{\text{fail}}\) now in <code>via-estimator</code>;
+                            empirical paper-noise test still absent
                         </td>
                     </tr>
                     <tr>
@@ -839,15 +883,29 @@
                         >Does the code actually achieve \(2^{-40}\)
                         correctness?</strong
                     >
-                    Unknown — no realistic-noise test and no in-code budget. With
-                    the draft bases (A1) and the \(q_4\)-based threshold (A5), the
-                    paper's own analysis does not certify the shipped parameters.
+                    Now computed analytically (<code>via-estimator::noise</code>,
+                    with Yue's \(\mathbb E[s^2]\) residual correction): the
+                    paper's intended <em>Gaussian-key</em> design does not (the
+                    DMux/CMux bound is too aggressive for a large-variance secret;
+                    confirmed empirically &mdash; a measured DMux at n4096
+                    (<code>dmux_noise_empirical</code>) shows the residual scales as
+                    \(\mathbb E[s^2]\) to ~1%, so the \(\sigma{=}32\) design carries
+                    \(1519\times\) the ternary noise), but via-rs's <em>ternary</em>
+                    <code>SECURE_PARAMS</code> clears \(2^{-40}\) on a thin,
+                    model-sensitive margin &mdash; an optional DMux
+                    \(\ell\!:\!2\to3\) bump widens it (see
+                    <a href="params-concrete.html#correctness">Fix</a>). Still
+                    open: an <em>empirical</em> paper-noise/paper-dimension test
+                    (the analytic budget is no longer the gap).
                 </li>
                 <li>
-                    <strong>Real security level?</strong> The repo asserts 128
-                    with no derivation; the reviewers' 72&ndash;88 figure was not
-                    re-run here (no toolchain). A lattice-estimator pass on the
-                    exact code moduli/σ is the missing artifact.
+                    <strong>Real security level?</strong> No longer a missing
+                    artifact: the in-repo <code>via-estimator</code> reports
+                    ~77 bits (ternary, binding small ring) for the published set
+                    and &ge;156 for <code>SECURE_PARAMS</code>; the external
+                    reviewers' OpenFHE 72&ndash;88 figures (on C++ owniai/VIA)
+                    remain on their authority. Full reconciliation on
+                    <a href="params-concrete.html">Params &middot; Concrete</a>.
                 </li>
                 <li>
                     <strong>Three-way paper↔Python↔Rust drift:</strong> the Rust
@@ -1185,11 +1243,12 @@ flowchart TD
                         title="crates/via-protocol/src/params.rs:116"
                         >protocol/params.rs</a
                     >
-                    (<code>security_param: u32</code>); grep over the pinned tree
-                    finds it read only in the constructor, the
-                    <code>Debug</code> impl, and a display test — no
-                    lattice/estimator code (only criterion
-                    <code>estimates.json</code> timing artifacts).
+                    (<code>security_param: u32</code>); at the pinned tree it was
+                    read only in the constructor, the <code>Debug</code> impl, and
+                    a display test, with no lattice/estimator code. An in-repo
+                    estimator (the <code>via-estimator</code> crate) has since been
+                    added; <code>security_param</code> is still a separate
+                    hard-coded constant rather than derived from it.
                     <a href="#ref4">↩</a>
                 </li>
                 <li id="fn5">

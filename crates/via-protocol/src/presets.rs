@@ -270,7 +270,11 @@ pub const REALISTIC_PARAMS: PIRParams = PIRParams::new(
 /// - **ternary** keys (mandatory: Gaussian σ=32 fails the q4 decode), so the
 ///   σ fields are `None`.
 /// - `security_param = 120` — and unlike [`REALISTIC_PARAMS`]' unbacked 128,
-///   this is witnessed by an external lattice-estimator run (≥174-bit min).
+///   this is gated in-repo by the `via-estimator` crate: its
+///   `secure_meets_120_bits` test asserts the calibrated core-SVP estimate over
+///   both exposed rings is ≥ this field (≈156-bit min, ternary; an independent
+///   malb run gives ≈174). So the constant is cross-checked against a real
+///   estimate, not just asserted. Run `cargo run -p via-estimator` for the table.
 pub const SECURE_PARAMS: PIRParams = PIRParams::new(
     4096,
     1024,

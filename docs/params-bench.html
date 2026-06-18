@@ -38,13 +38,20 @@
         </header>
         <div class="wrap" role="main">
             <h1 class="page-title">Parameters &mdash; the 120-bit performance profile</h1>
-            <p class="toc">
-                Params section:
-                <a href="params.html">Abstract</a> &middot;
-                <a href="params-concrete.html">Concrete</a> &middot;
-                <strong>Benchmarks (this page)</strong>
+            <nav class="subnav" aria-label="Parameters section">
+                <a class="subnav-item sn-spec" href="params.html">Spec</a>
+                <a class="subnav-item sn-gaps" href="params-gaps.html">Gaps</a>
+                <a class="subnav-item sn-fix" href="params-concrete.html">Fix</a>
+                <span class="subnav-item sn-cost current" aria-current="page">Cost</span>
+            </nav>
+            <p class="subnav-desc">
+                What the &ge;120-bit instantiation actually costs &mdash;
+                compute, key size, and communication measured against the
+                paper&rsquo;s advertised numbers. Short version: roughly
+                <strong>2&times;</strong> across the board.
             </p>
 
+            <div class="navlegend">
             <p class="legend">
                 <span><span class="tag tag-paper">paper</span> stated in the paper</span>
                 <span><span class="tag tag-code">code</span> measured on <code>via-rs</code></span>
@@ -53,32 +60,31 @@
             </p>
 
             <p>
-                The <a href="params-concrete.html">concrete page</a> derives a
-                &ge;120-bit instantiation that is forced to \(n_1{=}4096,\
-                n_2{=}1024,\ q_4{=}2^{15}\). The question this page answers: does
-                that change the performance profile the paper advertises &mdash;
-                and by how much? Short answer
-                <span class="tag tag-infer">inference</span>: <strong>yes, by
-                roughly 2&times; across compute, key size, and response size.</strong>
-                The paper&rsquo;s headline numbers describe an ~87&ndash;101-bit
-                operating point; a real 120-bit point is about twice as expensive.
+                A genuine 120-bit operating point forces \(n_1{=}4096,\
+                n_2{=}1024,\ q_4{=}2^{15}\) (derived under
+                <a href="params-concrete.html">Fix</a>). The paper&rsquo;s
+                headline figures describe an ~87&ndash;101-bit operating point;
+                this page re-prices them at a real 120 bits
+                <span class="tag tag-infer">inference</span> &mdash; about twice
+                as expensive across compute, key size, and response size.
             </p>
 
             <p class="toc" id="toc">
-                <a href="#what">What the paper claims</a> &middot;
-                <a href="#measured">Measured: compute &amp; key size</a> &middot;
-                <a href="#sizes">Derived: query &amp; response</a> &middot;
-                <a href="#verdict">Verdict</a> &middot;
+                <a href="#what">What the paper claims</a>
+                <a href="#measured">Measured: compute &amp; key size</a>
+                <a href="#sizes">Derived: query &amp; response</a>
+                <a href="#verdict">Verdict</a>
                 <a href="#repro">Reproducing</a>
             </p>
+            </div>
 
             <!-- ============================================================ -->
             <h2 id="what">What the paper advertises</h2>
             <p>
                 <span class="tag tag-paper">paper</span> VIA-C&rsquo;s performance
-                figures (§5.2, Table&nbsp;3) are reported at \(n_1=2048,\ n_2=512\)
+                figures (§5.2, Table&nbsp;1, p.18) are reported at \(n_1=2048,\ n_2=512\)
                 &mdash; the parameters the paper also labels 110-bit. As the
-                <a href="params-concrete.html">concrete page</a> shows, that ring
+                <a href="params-concrete.html">Fix page</a> shows, that ring
                 size delivers ~110 bits only under the paper&rsquo;s Gaussian
                 secret, and the <code>via-rs</code> implementation
                 (ternary) is ~87&ndash;101 bits there. So the advertised throughput,
@@ -213,15 +219,20 @@
                 deployment budget, the right figures to use are these, not the
                 paper&rsquo;s &mdash; and the gap is a direct, quantified
                 consequence of the security shortfall the
-                <a href="params-concrete.html">concrete page</a> closes.
+                <a href="params-concrete.html">Fix page</a> closes.
             </p>
             <p>
-                One lever could widen the correctness margin at extra cost: raising
-                the CMux gadget length \(\ell\!:\!2\to3\) (the binding
-                \(q_2\)-survival term sits at \(2^{-42}\), ~2 bits past target).
-                That adds one polynomial multiply per CMux level and enlarges the
-                gate keys &mdash; a further, optional, correctness-for-performance
-                trade on top of the 2&times; above.
+                One <em>optional</em> change buys correctness margin: as the
+                <a href="params-concrete.html#correctness">Fix page</a> shows
+                (re-derived in <code>via-estimator</code>), the shipped secure
+                preset clears \(2^{-40}\) with ternary keys, but on a thin,
+                model-sensitive margin. Raising the <strong>DMux /
+                <code>L_QUERY</code> gadget length \(\ell\!:\!2\to3\)</strong>
+                widens it enormously for one extra query gadget digit &mdash; a
+                modest additive cost on top of the 2&times; above, not a doubling.
+                (The paper&rsquo;s intended <em>Gaussian-key</em> design does
+                <em>not</em> clear \(2^{-40}\) at all &mdash; Yue&rsquo;s noise-bound
+                bug; via-rs only escapes it by running ternary keys.)
             </p>
 
             <!-- ============================================================ -->
@@ -244,10 +255,29 @@ cargo test -p via-integration --release \
     --test client_server_e2e_secure -- --ignored</code></pre>
             <p>
                 The security and correctness numbers behind the
-                <a href="params-concrete.html">concrete page</a> are produced by a
-                lattice-estimator driver and an Appendix-C noise-budget calculator;
-                both are reproducible and are the audit trail for the
-                <code>security_param = 120</code> claim.
+                <a href="params-concrete.html">Fix page</a> are produced by
+                the in-repo <code>via-estimator</code> crate (a calibrated
+                core-SVP lattice estimate + the Appendix-C noise calculator),
+                which reads the shipped presets and gates CI:
+            </p>
+            <pre><code># full security + correctness audit table
+cargo run -p via-estimator
+
+# CI gate (calibration anchors, preset security, noise budget)
+cargo test -p via-estimator
+
+# empirical: DMux output-noise scales with E[s^2] (Yue's bug, measured @ n4096)
+cargo test -p via-primitives --release --features alloc \
+    --test dmux_noise_empirical -- --ignored --nocapture
+
+# empirical: LWE->RLWE conversion noise budget @ secure params (Yue's test #1)
+cargo test -p via-primitives --release --features alloc \
+    --test conversion_noise_secure -- --ignored --nocapture</code></pre>
+            <p>
+                It is the reproducible audit trail for the
+                <code>security_param = 120</code> claim &mdash; and the tool that
+                reproduced Yue&rsquo;s noise-bound bug (the paper&rsquo;s Gaussian
+                design fails \(2^{-40}\); ternary via-rs clears it).
             </p>
             <p class="totop"><a href="#toc">&#8593;</a></p>
         </div>
