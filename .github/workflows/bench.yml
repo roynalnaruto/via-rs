@@ -61,6 +61,11 @@ jobs:
             # against the first_dim parallelism regression that slipped through).
             cargo clean -p via-primitives -p via-protocol -p via-client -p via-server -p via-integration
             cargo bench --bench pipeline_toy -- --save-baseline base
+            # Also baseline paper/04_first_dim at the asymmetric grid (I=8, J=16),
+            # where the parallel fan-out is meant to win — so the comparison and
+            # the serial/parallel diagnostic cover both grids. `|| true` keeps a
+            # missing/older paper bench from aborting the comparison.
+            VIA_BENCH_ROWS=8 VIA_BENCH_COLS=16 cargo bench --bench pipeline_paper -- 04_first_dim --save-baseline base || true
             git checkout --quiet "$PR_REF"
             echo "HAVE_BASE=1" >> "$GITHUB_ENV"
           else
@@ -80,11 +85,20 @@ jobs:
           # crates so the bench binary reflects this commit's code, not a stale
           # artifact restored from the target/ cache.
           cargo clean -p via-primitives -p via-protocol -p via-client -p via-server -p via-integration
+          # VIA_FIRSTDIM_DEBUG makes first_dim print its chosen path once per
+          # process; tee the output so we can surface it below. Bench both the
+          # toy grid (expected serial) and paper/04_first_dim at I=8, J=16
+          # (expected parallel).
           if [ "${HAVE_BASE:-0}" = "1" ]; then
-            cargo bench --bench pipeline_toy -- --baseline-lenient base
+            VIA_FIRSTDIM_DEBUG=1 cargo bench --bench pipeline_toy -- --baseline-lenient base 2>&1 | tee bench_branch.log
+            VIA_FIRSTDIM_DEBUG=1 VIA_BENCH_ROWS=8 VIA_BENCH_COLS=16 cargo bench --bench pipeline_paper -- 04_first_dim --baseline-lenient base 2>&1 | tee -a bench_branch.log
           else
-            cargo bench --bench pipeline_toy
+            VIA_FIRSTDIM_DEBUG=1 cargo bench --bench pipeline_toy 2>&1 | tee bench_branch.log
+            VIA_FIRSTDIM_DEBUG=1 VIA_BENCH_ROWS=8 VIA_BENCH_COLS=16 cargo bench --bench pipeline_paper -- 04_first_dim 2>&1 | tee -a bench_branch.log
           fi
+          echo "::group::first_dim path (serial vs parallel)"
+          grep -F '[first_dim]' bench_branch.log || echo "(no [first_dim] debug lines captured)"
+          echo "::endgroup::"
 
       # VIA-B batch per-phase bench (informational; the base-baseline +
       # regression-comment logic above is pipeline_toy-specific).

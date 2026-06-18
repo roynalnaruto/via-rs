@@ -116,7 +116,20 @@ where
             .map(|n| n.get())
             .unwrap_or(1)
             .min(j_len);
-        if workers > 1 && work >= PAR_MIN_WORK {
+        let go_parallel = workers > 1 && work >= PAR_MIN_WORK;
+        // Diagnostic: print the chosen path once per process when
+        // VIA_FIRSTDIM_DEBUG is set (used by the bench CI to report serial vs
+        // parallel for the toy and paper grids).
+        if std::env::var_os("VIA_FIRSTDIM_DEBUG").is_some() {
+            static DBG: std::sync::Once = std::sync::Once::new();
+            DBG.call_once(|| {
+                eprintln!(
+                    "[first_dim] i={i_len} j={j_len} N1={N1} work={work} PAR_MIN_WORK={PAR_MIN_WORK} workers={workers} -> {}",
+                    if go_parallel { "PARALLEL" } else { "serial" }
+                );
+            });
+        }
+        if go_parallel {
             let column = &column;
             let chunk = j_len.div_ceil(workers);
             // Workers don't inherit the caller's (large) stack, and the eval-form
