@@ -36,10 +36,12 @@ pre{overflow-x:auto;}
   a.srcref{white-space:normal;}
   .toc a{white-space:normal;}
 }
-.card{display:block;border:1px solid var(--line);border-radius:12px;padding:22px 24px;background:linear-gradient(180deg,#fbfdff,#fff);transition:border-color .15s,box-shadow .15s,transform .15s;}
-.card:hover{border-color:#bcd0f5;box-shadow:0 6px 22px rgba(43,93,209,0.10);transform:translateY(-2px);text-decoration:none;}
-.card h2{margin:0 0 8px;font-size:1.25rem;color:var(--accent);}
-.card p{margin:0;color:var(--fg);font-size:0.95rem;}
+.card{display:block;border:1px solid var(--line);border-radius:0;padding:22px 24px;background:#fbfdff;transition:background-color .15s,border-color .15s,box-shadow .15s,transform .15s;}
+.card:hover{background-color:var(--accent);border-color:var(--accent);box-shadow:0 8px 24px rgba(43,93,209,0.25);transform:translateY(-2px);text-decoration:none;}
+.card h2{margin:0 0 8px;font-size:1.25rem;color:var(--accent);transition:color .15s;}
+.card p{margin:0;color:var(--fg);font-size:0.95rem;transition:color .15s;}
+.card:hover h2,.card:hover p,.card:hover em,.card:hover strong{color:#fff;}
+.card:hover code{background:rgba(255,255,255,0.18);color:#fff;}
 .foot-note{color:var(--muted);font-size:0.9rem;border-top:1px solid var(--line);padding-top:16px;margin-top:30px;}
 h2{font-size:1.45rem;margin:46px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);}
 h3{font-size:1.3rem;margin:38px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);}
