@@ -8,8 +8,9 @@
 //! it exists only to confirm the protocol and the noise budget close at
 //! paper-scale ring dimensions and moduli.
 //!
-//! `#[ignore]` — heavy: the n2048 RNS cascade key is ~24.75 MB and the
-//! schoolbook O(n²) pipeline at n=2048 runs for minutes. Run with:
+//! `#[ignore]` — heavy: the n2048 RNS cascade key is ~24.75 MB and the n=2048
+//! NTT pipeline (first-dim is multi-threaded; the conversion/gate chain is
+//! serial) is minutes in debug, seconds in release. Run with:
 //!
 //! ```text
 //! cargo test -p via-integration --release -- --ignored

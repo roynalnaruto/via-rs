@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Parameters: primer</title>
+        <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}]})"
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html">VIA &middot; Documentation</a>
+                <nav>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params-primer.html" class="on">Params</a>
+                    <a href="audit.html">Audit</a>
+                    <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
+                </nav>
+            </div>
+        </header>
+        <div class="wrap" role="main">
+            <h1 class="page-title">Parameters</h1>
+            <nav class="subnav" aria-label="Parameters section">
+                <span class="subnav-item sn-primer current" aria-current="page">Primer</span>
+                <a class="subnav-item sn-spec" href="params.html">Spec</a>
+                <a class="subnav-item sn-gaps" href="params-gaps.html">Gaps</a>
+                <a class="subnav-item sn-fix" href="params-concrete.html">Fix</a>
+                <a class="subnav-item sn-cost" href="params-bench.html">Cost</a>
+            </nav>
+
+            <!-- ============================================================ -->
+            <p id="model">
+                A VIA parameter set is <strong>valid</strong> only if it clears
+                two independent <strong>pass/fail checks</strong> at your target
+                database size:
+            </p>
+            <ul>
+                <li>
+                    <strong>Secure:</strong> every lattice instance the
+                    scheme exposes is hard (\(\ge\) your bit target). Binary: 119
+                    bits is not &ldquo;almost 120,&rdquo; it is a fail. VIA exposes
+                    <em>two</em> instances (a big ring and a small ring); the
+                    <em>weaker</em> one is the score.
+                </li>
+                <li>
+                    <strong>Correct:</strong> decryption succeeds with
+                    overwhelming probability (failure \(\le 2^{-40}\)),
+                    <em>after</em> noise propagates through the whole
+                    DMux&rarr;first-dimension&rarr;CMux&rarr;convert pipeline.
+                </li>
+            </ul>
+            <p>
+                These two pull in <strong>opposite directions</strong>: a
+                bigger modulus buys correctness headroom but <em>costs</em>
+                security; a wide-Gaussian secret buys security but <em>blows</em>
+                the noise budget. Clearing both at once, at a real database size,
+                is the whole game of parameter selection.
+            </p>
+
+            <!-- ============================================================ -->
+            <p>
+                <strong>The catch:</strong>
+                <span class="tag tag-infer">inference</span> A performance number
+                is only honest <em>at a valid point</em>. VIA&rsquo;s headline
+                figures are quoted at \(n_1{=}2048\) parameters that
+                <strong>fail the security check</strong> on the keys actually
+                shipped: our estimator puts the binding ring at
+                \(\approx\!77\) bits, not the advertised 110
+                (derived under <a href="params-concrete.html#gap">Fix</a>).
+                Re-priced at a genuinely \(\ge 120\)-bit point (\(n_1{=}4096\)),
+                the profile is <strong>~2&times; across compute, key size, and
+                response</strong> (measured under <a href="params-bench.html">Cost</a>).
+            </p>
+            <p>
+                <strong>TLDR:</strong> VIA&rsquo;s true profile is roughly
+                <strong>twice</strong> its advertised one.
+            </p>
+        </div>
+    </body>
+</html>

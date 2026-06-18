@@ -533,6 +533,40 @@ lwe_to_rlwe_cascade! {
     ],
 }
 
+// --- ≥120-bit "secure" RNS instantiation (n₁ = 4096, depth 18) ------------
+//
+// The query-compression cascade key for the n1=4096 secure parameter set
+// (docs/params-concrete.html). One more fold than n2048 (12 steps,
+// log2(4096)=12), so the key is ~2× larger (~50 MB) — heap-only, `alloc`-gated.
+#[cfg(feature = "alloc")]
+lwe_to_rlwe_cascade! {
+    n = 4096,
+    ring = PolyRns,
+    mod_param = B,
+    mod_bound = crate::algebra::rns::basis::RnsBasis,
+    levels = L,
+    key = LweToRlweKeyRnsN4096,
+    gen = gen_lwe_to_rlwe_key_rns_n4096,
+    gen_boxed = gen_lwe_to_rlwe_key_rns_n4096_boxed,
+    cast = lwe_to_rlwe_rns_n4096,
+    eval_key = LweToRlweKeyRnsN4096Eval,
+    cast_eval = lwe_to_rlwe_rns_n4096_eval,
+    steps = [
+        (keys_2, 4096, 1, 2048, 2),
+        (keys_4, 2048, 2, 1024, 4),
+        (keys_8, 1024, 4, 512, 8),
+        (keys_16, 512, 8, 256, 16),
+        (keys_32, 256, 16, 128, 32),
+        (keys_64, 128, 32, 64, 64),
+        (keys_128, 64, 64, 32, 128),
+        (keys_256, 32, 128, 16, 256),
+        (keys_512, 16, 256, 8, 512),
+        (keys_1024, 8, 512, 4, 1024),
+        (keys_2048, 4, 1024, 2, 2048),
+        (keys_4096, 2, 2048, 1, 4096),
+    ],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

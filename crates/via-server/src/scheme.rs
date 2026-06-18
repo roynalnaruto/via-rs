@@ -37,8 +37,9 @@ use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::algebra::rns::basis::RnsBasis;
 use via_primitives::algebra::zq::modulus::Modulus;
 use via_primitives::conversion::{
-    CascadeKey, LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN2048, lwe_to_rlwe_n8_eval,
-    lwe_to_rlwe_n64_eval, lwe_to_rlwe_rns_n2048_eval,
+    CascadeKey, LweToRlweKeyN8, LweToRlweKeyN64, LweToRlweKeyRnsN2048, LweToRlweKeyRnsN4096,
+    lwe_to_rlwe_n8_eval, lwe_to_rlwe_n64_eval, lwe_to_rlwe_rns_n2048_eval,
+    lwe_to_rlwe_rns_n4096_eval,
 };
 use via_primitives::encryption::MLWECiphertext;
 use via_primitives::encryption::types::RLWECiphertext;
@@ -87,13 +88,21 @@ pub trait ServerScheme<const N1: usize, const N2: usize> {
     /// unsupported `T` is a compile error. `q2` and the gadget `base` (= `pp.ck_base`)
     /// are supplied by the server for the per-answer q1→q2 repack-key derivation.
     /// `via-b` only.
+    ///
+    /// Defaults to `unimplemented!` so a **VIA-C-only** scheme family (one whose
+    /// `server_scheme_*!` invocation omits the `repack` arm, e.g. the secure
+    /// n1=4096 family) compiles under `via-b` without instantiating batch repack
+    /// trees it does not use; VIA-B families override this with the real match.
     #[cfg(feature = "via-b")]
     fn repack<const T: usize>(
         rotateds: &[RLWECiphertext<N1, Self::R2>],
         k: &Self::K,
         q2: <Self::R2 as RingPoly<N1>>::Modulus,
         base: u64,
-    ) -> RLWECiphertext<N1, Self::R2>;
+    ) -> RLWECiphertext<N1, Self::R2> {
+        let _ = (rotateds, k, q2, base);
+        unimplemented!("VIA-B repack is not instantiated for this scheme family")
+    }
 }
 
 /// Zero-sized carrier selecting a [`ServerScheme`] at the type level: the
@@ -270,4 +279,12 @@ server_scheme_rns! {
         (256, repack_poly_2048_t256, repack_keys_poly_2048_t256_from_rns_cascade_boxed),
     ],
     repack_ntt = [4, 8, 16, 32, 64, 128, 256, 512, 1024],
+}
+
+// Secure ≥120-bit RNS cascade family (q1 = two-prime RNS, n1 = 4096, n2 = 1024).
+// VIA-C only — no `repack` arm (VIA-B repack trees are not instantiated at n4096).
+server_scheme_rns! {
+    n1 = 4096, n2 = 1024,
+    cascade_key = LweToRlweKeyRnsN4096, cascade = lwe_to_rlwe_rns_n4096_eval,
+    eval_degrees = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
 }

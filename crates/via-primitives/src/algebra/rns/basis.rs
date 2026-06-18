@@ -312,6 +312,11 @@ pub mod paper {
     /// Used by the LWE-to-RLWE cascade outputs and the query-encryption
     /// layer.
     pub type ViaCQ1Rns = ConstRnsBasis<137438822401, 274810798081>;
+
+    /// VIA-C ≥120-bit "secure" $q_1 = 173\,964\,607\,489 \cdot 173\,964\,656\,641
+    /// \approx 2^{74.68}$ — two NTT-friendly primes ($\equiv 1 \pmod{8192}$) for
+    /// the $n_1 = 4096$ secure instantiation. See [`super::super::super::zq::modulus::paper::ViaSecQ1P0`].
+    pub type ViaSecQ1Rns = ConstRnsBasis<173964607489, 173964656641>;
 }
 
 #[cfg(test)]

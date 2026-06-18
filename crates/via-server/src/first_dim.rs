@@ -14,14 +14,48 @@
 //! For NTT-friendly `q2` this is `O(N)` pointwise muls (the speed-up); for the
 //! non-NTT fallback (`DynModulus`/`PowerOfTwoModulus`) `Eval = Self`, the
 //! transforms are the identity, and the pointwise `Mul` degenerates to the
-//! existing schoolbook `negacyclic_mul_slice` — same result, same cost. A future
-//! *batched* GPU FirstDim would wrap this whole function.
+//! existing schoolbook `negacyclic_mul_slice` — same result, same cost.
+//!
+//! The columns are independent, so under `feature = "alloc"` (where `std` is
+//! linked) the `J`-loop is split across `available_parallelism()` worker
+//! threads via [`std::thread::scope`] (no extra dependency) — but only once the
+//! MAC work (`≈ I·J·N`) clears a threshold, so small/toy calls (and any narrow
+//! query) keep the serial loop and don't pay the thread-spawn cost. The `no_std`
+//! build is always serial. Results are identical and assembled in column order.
 
 use alloc::vec::Vec;
 use via_primitives::algebra::ring::{RingPoly, RingPolyEval};
 use via_primitives::encryption::types::RLWECiphertext;
 
 use crate::prepared_db::PreparedDb;
+
+/// Print the chosen FirstDim path (serial vs parallel) once per process, but
+/// only when `VIA_FIRSTDIM_DEBUG` is set. The env probe is cached so the hot
+/// path stays free of any syscall when the flag is unset (the common case);
+/// the bench CI sets the flag to report the path for the toy and paper grids.
+#[cfg(feature = "alloc")]
+fn firstdim_debug_path(
+    i: usize,
+    j: usize,
+    n1: usize,
+    work: usize,
+    par_min: usize,
+    workers: usize,
+    parallel: bool,
+) {
+    use std::sync::{Once, OnceLock};
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    if !*ENABLED.get_or_init(|| std::env::var_os("VIA_FIRSTDIM_DEBUG").is_some()) {
+        return;
+    }
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        eprintln!(
+            "[first_dim] i={i} j={j} N1={n1} work={work} PAR_MIN_WORK={par_min} workers={workers} -> {}",
+            if parallel { "PARALLEL" } else { "serial" }
+        );
+    });
+}
 
 /// Compute the `J` FirstDim output ciphertexts at `q2`.
 ///
@@ -50,7 +84,8 @@ use crate::prepared_db::PreparedDb;
 /// onto a 2-D grid `(thread_j, thread_coeff)`. The per-coefficient kernel
 /// boundary already exists in `via-primitives` (the eval-form `Mul`, ultimately
 /// `negacyclic_mul_slice` for the schoolbook backing); a batched GPU FirstDim
-/// would wrap this whole function. The CPU path is sequential.
+/// would wrap this whole function. The CPU path fans the `j`-loop across worker
+/// threads above a work threshold (see the module docs), serial below.
 ///
 /// # Constant-time: No
 ///
@@ -61,7 +96,8 @@ pub fn first_dim<const N1: usize, R2>(
     prepared: &PreparedDb<N1, R2>,
 ) -> Vec<RLWECiphertext<N1, R2>>
 where
-    R2: RingPoly<N1> + RingPolyEval<N1>,
+    R2: RingPoly<N1> + RingPolyEval<N1> + Send + Sync,
+    R2::Eval: Send + Sync,
 {
     let (i_len, j_len) = (prepared.num_rows(), prepared.num_cols());
     assert_eq!(
@@ -78,23 +114,73 @@ where
         .map(|ct| (R2::to_eval(ct.mask), R2::to_eval(ct.body)))
         .collect();
 
-    let mut results = Vec::with_capacity(j_len);
-    for j in 0..j_len {
-        // Seed both accumulators from i=0 (I ≥ 1: num_rows is a power of two ≥ 1
-        // by the answer-path guard, and ≥ 1 for the direct callers), then MAC
-        // i=1..I — pointwise in eval form.
+    // One output column: MAC the I cells against the selection, pointwise in
+    // eval form. Seed from i=0 (I ≥ 1 by the asserts above), then MAC i=1..I.
+    let column = |j: usize| -> RLWECiphertext<N1, R2> {
         let mut acc_mask = prepared.cell(0, j) * sel[0].0;
         let mut acc_body = prepared.cell(0, j) * sel[0].1;
         for (i, &(sel_mask, sel_body)) in sel.iter().enumerate().skip(1) {
             acc_mask += prepared.cell(i, j) * sel_mask;
             acc_body += prepared.cell(i, j) * sel_body;
         }
-        results.push(RLWECiphertext::new(
-            R2::from_eval(acc_mask),
-            R2::from_eval(acc_body),
-        ));
+        RLWECiphertext::new(R2::from_eval(acc_mask), R2::from_eval(acc_body))
+    };
+
+    // Columns are independent — fan the J-loop across worker threads under
+    // `alloc` (= std linked), but only once there is enough work to amortize the
+    // thread-spawn cost; fall back to the serial loop otherwise and for `no_std`.
+    #[cfg(feature = "alloc")]
+    {
+        // Spawning workers costs tens of µs each, and the available_parallelism()
+        // probe is itself a syscall (cgroup parsing can cost ~tens of µs in a
+        // container) — both a net loss when the MAC work is tiny. So gate on the
+        // cheap work estimate (≈ I·J·N multiply-accumulates) FIRST and keep the
+        // small-work path syscall-free: only consult available_parallelism() once
+        // the work clears the threshold. The n=8 toy grid (work 2^5) stays serial;
+        // paper/secure grids (n≥2048, work ≥ 2^18) fan out (~2× at I=8, J=16).
+        const PAR_MIN_WORK: usize = 1 << 16;
+        let work = i_len.saturating_mul(j_len).saturating_mul(N1);
+        let workers = if work >= PAR_MIN_WORK {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(j_len)
+        } else {
+            1
+        };
+        let go_parallel = workers > 1;
+        firstdim_debug_path(i_len, j_len, N1, work, PAR_MIN_WORK, workers, go_parallel);
+        if go_parallel {
+            let column = &column;
+            let chunk = j_len.div_ceil(workers);
+            // Workers don't inherit the caller's (large) stack, and the eval-form
+            // ring ops put sizeable temporaries on the stack at paper/secure n —
+            // give each a generous stack (overridable via VIA_FIRSTDIM_STACK_MB).
+            let stack = std::env::var("VIA_FIRSTDIM_STACK_MB")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(64)
+                << 20;
+            let mut results: Vec<RLWECiphertext<N1, R2>> = Vec::with_capacity(j_len);
+            std::thread::scope(|s| {
+                let handles: Vec<_> = (0..j_len)
+                    .step_by(chunk)
+                    .map(|lo| {
+                        let hi = (lo + chunk).min(j_len);
+                        std::thread::Builder::new()
+                            .stack_size(stack)
+                            .spawn_scoped(s, move || (lo..hi).map(column).collect::<Vec<_>>())
+                            .expect("spawn first_dim worker")
+                    })
+                    .collect();
+                for h in handles {
+                    results.extend(h.join().expect("first_dim worker thread panicked"));
+                }
+            });
+            return results;
+        }
     }
-    results
+    (0..j_len).map(column).collect()
 }
 
 #[cfg(test)]

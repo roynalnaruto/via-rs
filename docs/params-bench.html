@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VIA — Parameters: the 120-bit performance profile</title>
+        <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+            crossorigin="anonymous"
+        />
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            crossorigin="anonymous"
+            onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}]})"
+        ></script>
+    </head>
+    <body>
+        <header class="site">
+            <div class="site-inner">
+                <a class="brand" href="index.html">VIA &middot; Documentation</a>
+                <nav>
+                    <a href="intro.html">Intro</a>
+                    <a href="architecture.html">Arch</a>
+                    <a href="implementation.html">Impl</a>
+                    <a href="params-primer.html" class="on">Params</a>
+                    <a href="audit.html">Audit</a>
+                    <a href="https://github.com/roynalnaruto/via-rs" target="_blank" rel="noopener">Repo &#8599;</a>
+                </nav>
+            </div>
+        </header>
+        <div class="wrap" role="main">
+            <h1 class="page-title">Parameters</h1>
+            <nav class="subnav" aria-label="Parameters section">
+                <a class="subnav-item sn-primer" href="params-primer.html">Primer</a>
+                <a class="subnav-item sn-spec" href="params.html">Spec</a>
+                <a class="subnav-item sn-gaps" href="params-gaps.html">Gaps</a>
+                <a class="subnav-item sn-fix" href="params-concrete.html">Fix</a>
+                <span class="subnav-item sn-cost current" aria-current="page">Cost</span>
+            </nav>
+            <p class="subnav-desc">
+                What the &ge;120-bit instantiation actually costs:
+                compute, key size, and communication measured against the
+                paper&rsquo;s advertised numbers. Short version: roughly
+                <strong>2&times;</strong> across the board.
+            </p>
+
+            <div class="navlegend">
+            <p class="legend">
+                <span><span class="tag tag-paper">paper</span> stated in the paper</span>
+                <span><span class="tag tag-code">code</span> measured on <code>via-rs</code></span>
+                <span><span class="tag tag-infer">inference</span> derived / projected</span>
+                <span><span class="tag tag-flag">unverified</span> not measured here</span>
+            </p>
+
+            <p>
+                A genuine 120-bit operating point forces \(n_1{=}4096,\
+                n_2{=}1024,\ q_4{=}2^{15}\) (derived under
+                <a href="params-concrete.html">Fix</a>). The paper&rsquo;s
+                headline figures describe a sub-120-bit operating point (our
+                estimator: ~77&ndash;89 bits on the as-shipped ternary keys; malb
+                ~87&ndash;101);
+                this page re-prices them at a real 120 bits
+                <span class="tag tag-infer">inference</span> &mdash; about twice
+                as expensive across compute, key size, and response size.
+            </p>
+
+            <p class="toc" id="toc">
+                <a href="#what">What the paper claims</a>
+                <a href="#measured">Measured: compute &amp; key size</a>
+                <a href="#sizes">Derived: query &amp; response</a>
+                <a href="#verdict">Verdict</a>
+                <a href="#repro">Reproducing</a>
+            </p>
+            </div>
+
+            <!-- ============================================================ -->
+            <h2 id="what">What the paper advertises</h2>
+            <p>
+                <span class="tag tag-paper">paper</span> VIA-C&rsquo;s performance
+                figures (§5.2, Table&nbsp;1, p.18) are reported at \(n_1=2048,\ n_2=512\)
+                &mdash; the parameters the paper also labels 110-bit. As the
+                <a href="params-concrete.html">Fix page</a> shows, that ring
+                size delivers ~110 bits only under the paper&rsquo;s Gaussian
+                secret, and the <code>via-rs</code> implementation
+                (ternary) is ~77&ndash;89 bits there by our estimator (malb
+                ~87&ndash;101). So the advertised throughput,
+                key sizes, and response sizes all belong to a <em>sub</em>-120-bit
+                operating point. Re-pricing them at a genuine 120 bits means
+                re-pricing them at \(n_1=4096\).
+            </p>
+            <p>
+                The cost levers that move when \((n_1,n_2,q_4)\) go
+                \((2048,512,2^{12}) \to (4096,1024,2^{15})\), and how each scales
+                <span class="tag tag-infer">inference</span>:
+            </p>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Quantity</th><th scope="col">Scales as</th><th scope="col">Factor</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>Per-polynomial NTT / <code>gadget_product</code></td><td>\(O(n\log n)\)</td><td>\(\tfrac{4096\cdot12}{2048\cdot11}=2.18\times\)</td></tr>
+                    <tr><td>Large-ring objects (query, conv key, gate keys)</td><td>\(O(n_1)\) coeffs</td><td>\(2\times\)</td></tr>
+                    <tr><td>Response (small-ring ctxt at \(q_4\))</td><td>\(n_2\log_2 q_4\)</td><td>\(\tfrac{1024\cdot15}{512\cdot12}=2.5\times\)</td></tr>
+                </tbody>
+            </table></div>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="measured">Measured</h2>
+            <p>
+                <span class="tag tag-code">code</span> Two measurements on the
+                actual <code>via-rs</code> primitives, comparing the published
+                \(n{=}2048\) ring against the secure \(n{=}4096\) ring at the
+                paper&rsquo;s conversion depth \(L{=}18\) on the \(q_1\)-RNS backend
+                (release build, this machine; ratios are the portable part):
+            </p>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Metric</th>
+                    <th scope="col">\(n=2048\) (paper)</th>
+                    <th scope="col">\(n=4096\) (120-bit)</th>
+                    <th scope="col">Ratio</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>eval-backed <code>gadget_product</code> (multiplicative core)</td><td>6159 &micro;s/op</td><td>13341 &micro;s/op</td><td><strong>2.17&times;</strong></td></tr>
+                    <tr><td>LWE&rarr;RLWE conversion cascade key</td><td>24.75 MB</td><td>54.00 MB</td><td><strong>2.18&times;</strong></td></tr>
+                </tbody>
+            </table></div>
+            <p>
+                <span class="tag tag-infer">inference</span> The
+                <code>gadget_product</code> ratio (2.17&times;) lands almost exactly
+                on the \(O(n\log n)\) prediction (2.18&times;), confirming the
+                compute hit is the expected NTT scaling with no hidden super-linear
+                term. The cascade-key measurement also doubles as a correctness
+                check on the integration: the \(n{=}2048\) key reproduces the
+                repository&rsquo;s documented 24.75&nbsp;MB exactly, so the
+                \(n{=}4096\) instantiation (one extra cascade fold &rarr; 54&nbsp;MB)
+                is structurally sound.
+            </p>
+            <p>
+                <span class="tag tag-code">code</span> The end-to-end pipeline at
+                \(n{=}4096\) is exercised and <strong>recovers correctly</strong>
+                on a \(2\times2\) database
+                (<code>client_server_e2e_secure</code>) &mdash; confirming the
+                integration and the decode, not throughput at scale.
+                <span class="tag tag-flag">unverified</span> Wall-clock is
+                machine-dependent and not asserted in-repo; the test header notes
+                the single-threaded n=4096 NTT pipeline &ldquo;runs for minutes.&rdquo;
+            </p>
+            <p>
+                <span class="tag tag-code">code</span> A larger end-to-end run with
+                the parallel <code>first_dim</code> at \(n_1{=}2048\),
+                \(I{=}32,\ J{=}4096\) (\(2^{17}\) cells, a ~2&nbsp;GB
+                eval-form prepared DB) recovers the right record; it
+                witnesses the multi-threaded first-dimension at real database
+                width, short of the 32&nbsp;GiB noise budget.
+                <span class="tag tag-flag">unverified</span> The specific
+                wall-clock and host figures (run time, core count, RAM ceiling)
+                are machine-dependent and not asserted in-repo.
+            </p>
+            <div class="callout">
+                <strong>Not measured here</strong>
+                <span class="tag tag-flag">unverified</span>: full
+                <em>database-scale</em> throughput (the 32&nbsp;GiB
+                \(I{=}2^{11},J{=}2^{14}\) configuration). The in-tree
+                <code>first_dim</code> runs the <strong>eval/NTT</strong> path
+                (the DB is forward-NTT'd once into a <code>PreparedDb</code>, then
+                a pointwise multiply-accumulate &mdash; \(O(N)\), not \(O(n^2)\))
+                and is now <strong>multi-threaded</strong> (the independent columns
+                are fanned across <code>available_parallelism()</code> scoped
+                workers). The remaining limit at full scale is <em>memory</em>:
+                the prepared matrix for 32&nbsp;GiB is ~1&nbsp;TB of RAM, so that
+                size needs server-class hardware regardless of speed. The honest
+                performance statement here is the per-op <em>ratio</em>, which is
+                build- and machine-independent.
+            </div>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="sizes">Derived</h2>
+            <p>
+                <span class="tag tag-infer">inference</span> VIA&rsquo;s headline
+                metric is communication, so the size deltas matter as much as
+                compute:
+            </p>
+            <ul>
+                <li>
+                    <strong>Query</strong> (the \(O(\log N)\) compressed LWE
+                    ciphertexts of the index bits, at \(q_1\) on the large ring):
+                    \(\sim\!2\times\) &mdash; each ciphertext carries \(n_1\)
+                    coefficients and \(n_1\) doubles, while \(\log_2 q_1\) is
+                    essentially unchanged (\(2^{74.7}\) vs \(2^{75}\)).
+                </li>
+                <li>
+                    <strong>Response</strong> (the small-ring answer ciphertext at
+                    \(q_4\)): \(n_2\log_2 q_4 = 1024\cdot15\) vs \(512\cdot12\)
+                    &rarr; <strong>2.5&times;</strong>. Both factors move: \(n_2\)
+                    doubles for small-ring security, and \(q_4\) grows
+                    \(2^{12}\!\to\!2^{15}\) to keep the decode correct at the larger
+                    \(n_1\).
+                </li>
+                <li>
+                    <strong>Offline (conversion key)</strong>: 24.75&nbsp;MB &rarr;
+                    54&nbsp;MB as measured: the dominant one-time
+                    server-side transfer in VIA-C.
+                </li>
+            </ul>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="verdict">Verdict</h2>
+            <p>
+                <span class="tag tag-infer">inference</span> Pulling it together:
+            </p>
+            <div class="tscroll"><table>
+                <thead><tr>
+                    <th scope="col">Axis</th><th scope="col">120-bit vs paper&rsquo;s advertised point</th><th scope="col">Basis</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td>Online compute</td><td>~2.2&times;</td><td>measured (kernel)</td></tr>
+                    <tr><td>Conversion key (offline)</td><td>2.18&times;</td><td>measured</td></tr>
+                    <tr><td>Query size</td><td>~2&times;</td><td>derived</td></tr>
+                    <tr><td>Response size</td><td>2.5&times;</td><td>derived</td></tr>
+                </tbody>
+            </table></div>
+            <p>
+                So the paper&rsquo;s VIA-C numbers <strong>do not describe a
+                120-bit scheme</strong> &mdash; reaching 120 bits roughly doubles
+                every cost axis. VIA&rsquo;s asymptotic story is untouched (still
+                \(\tilde O(\log N)\) communication, still no offline phase beyond
+                the conversion key); what changes is the concrete constant, by
+                about \(2\times\). For a reader deciding whether VIA-C fits a
+                deployment budget, the right figures to use are these, not the
+                paper&rsquo;s &mdash; and the gap is a direct, quantified
+                consequence of the security shortfall the
+                <a href="params-concrete.html">Fix page</a> closes.
+            </p>
+            <p>
+                One <em>optional</em> change buys correctness margin: as the
+                <a href="params-concrete.html#correctness">Fix page</a> shows
+                (re-derived in <code>via-estimator</code>), the shipped secure
+                preset clears \(2^{-40}\) with ternary keys, but on a thin,
+                model-sensitive margin. Raising the <strong>DMux /
+                <code>L_QUERY</code> gadget length \(\ell\!:\!2\to3\)</strong>
+                widens it enormously for one extra query gadget digit &mdash; a
+                modest additive cost on top of the 2&times; above, not a doubling.
+                (The paper&rsquo;s intended <em>Gaussian-key</em> design does
+                <em>not</em> clear \(2^{-40}\) at all &mdash; Yue&rsquo;s noise-bound
+                bug; via-rs only escapes it by running ternary keys.)
+            </p>
+
+            <!-- ============================================================ -->
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+            <h2 id="repro">Reproducing</h2>
+            <p>
+                <span class="tag tag-code">code</span> The measured numbers come
+                from a timing/size test added alongside the secure preset:
+            </p>
+            <pre><code># compute ratio (eval-backed gadget_product, n2048 vs n4096)
+cargo test -p via-primitives --release --features alloc \
+    --test secure_scaling -- --ignored --nocapture
+
+# cascade key sizes (size_of, cheap)
+cargo test -p via-primitives --release --features alloc \
+    --test secure_scaling cascade_key_sizes -- --nocapture
+
+# n=4096 end-to-end correctness (recovers the right record, ~17s release)
+cargo test -p via-integration --release \
+    --test client_server_e2e_secure -- --ignored</code></pre>
+            <p>
+                The security and correctness numbers behind the
+                <a href="params-concrete.html">Fix page</a> are produced by
+                the in-repo <code>via-estimator</code> crate (a calibrated
+                core-SVP lattice estimate + the Appendix-C noise calculator),
+                which reads the shipped presets and gates CI:
+            </p>
+            <pre><code># full security + correctness audit table
+cargo run -p via-estimator
+
+# CI gate (calibration anchors, preset security, noise budget)
+cargo test -p via-estimator
+
+# empirical: DMux output-noise scales with E[s^2] (Yue's bug, measured @ n4096)
+cargo test -p via-primitives --release --features alloc \
+    --test dmux_noise_empirical -- --ignored --nocapture
+
+# empirical: LWE->RLWE conversion noise budget @ secure params (Yue's test #1)
+cargo test -p via-primitives --release --features alloc \
+    --test conversion_noise_secure -- --ignored --nocapture</code></pre>
+            <p>
+                It is the reproducible audit trail for the
+                <code>security_param = 120</code> claim &mdash; and the tool that
+                reproduced Yue&rsquo;s noise-bound bug (the paper&rsquo;s Gaussian
+                design fails \(2^{-40}\); ternary via-rs clears it).
+            </p>
+            <p class="totop"><a href="#toc">&#8593;</a></p>
+        </div>
+    </body>
+</html>

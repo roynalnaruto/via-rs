@@ -471,6 +471,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "via-estimator"
+version = "0.1.0"
+dependencies = [
+ "via-protocol",
+]
+
+[[package]]
 name = "via-integration"
 version = "0.1.0"
 dependencies = [

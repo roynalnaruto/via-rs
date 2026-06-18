@@ -49,7 +49,7 @@
                     <a href="implementation.html" class="on"
                         >Impl</a
                     >
-                    <a href="params.html">Params</a>
+                    <a href="params-primer.html">Params</a>
                     <a href="audit.html">Audit</a>
                     <a
                         href="https://github.com/roynalnaruto/via-rs"
@@ -62,9 +62,10 @@
         </header>
         <div class="wrap" role="main">
             <h1 class="page-title">
-                Implementation details &mdash; architecture &amp; analysis
+                Implementation details
             </h1>
 
+            <div class="navlegend">
             <p class="legend">
                 <span
                     ><span
@@ -92,13 +93,12 @@
                 >
             </p>
 
-            <p class="toc" id="toc" style="margin-top: 28px">
-                <a href="#construction">Construction</a> &middot;
-                <a href="#architecture">Architecture</a> &middot;
-                <a href="#build">Build &amp; test</a> &middot;
-                <a href="#footnotes">Footnotes</a> &middot;
-                <a href="audit.html">Audit &#8599;</a>
+            <p class="toc" id="toc">
+                <a href="#construction">Construction</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#build">Build &amp; test</a>
             </p>
+            </div>
             <h2 id="summary">Summary</h2>
             <p>
                 VIA is a lattice (RLWE/MLWE) single-server PIR family whose
@@ -124,7 +124,7 @@
                 &rarr; switching &rarr; gates &rarr; conversion) maps faithfully
                 to the paper's §2&ndash;§5, and a real
                 <code>Query&rarr;Answer&rarr;Recover</code> round-trip passes at
-                both toy and (release-only) paper-scale parameters &mdash;
+                both toy and (release-only) paper-scale parameters:
                 verified here, 693/693 tests green.<sup
                     ><a href="#fn3" id="ref3">3</a></sup
                 >
@@ -136,7 +136,7 @@
             </p>
 
             <p>
-                This page describes the codebase <em>as built</em> &mdash; the
+                This page describes the codebase <em>as built</em>: the
                 construction it implements, its crate/layer architecture, the
                 primitive&rarr;paper map, and the build/test status. The
                 correctness and security <strong>audit</strong> &mdash;
@@ -150,7 +150,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="construction">The scheme — variants &amp; construction</h2>
+            <h2 id="construction">The scheme</h2>
             <div class="tscroll"><table>
                 <thead>
                     <tr>
@@ -241,7 +241,7 @@
 
             <!-- ====================================================================== -->
             <p class="totop"><a href="#toc">&#8593;</a></p>
-            <h2 id="architecture">Architecture — as built</h2>
+            <h2 id="architecture">Architecture</h2>
 
             <h3>Crate &amp; layer dependency graph</h3>
             <pre class="mermaid">
@@ -431,7 +431,7 @@ flowchart TD
                     >code</a
                 >
                 Built and run on Rust stable 1.96.0.
-                <code>cargo test --workspace</code> &mdash;
+                <code>cargo test --workspace</code>:
                 <strong>693 passed, 0 failed, 4 ignored</strong>.<sup
                     ><a href="#fn25" id="ref25">9</a></sup
                 >
@@ -510,6 +510,21 @@ flowchart TD
                     ternary keys on a 2×2 DB, so it does
                     <strong>not</strong> witness the \(2^{-40}\) noise-budget
                     claim at paper σ/dimensions (A3).
+                </li>
+                <li>
+                    <span class="tag tag-infer">inference</span> The crate
+                    graph above is the layout at the audited commit
+                    <code>9575286</code> (five workspace crates). A sixth crate,
+                    <code>via-estimator</code> (a calibrated core-SVP lattice
+                    estimate plus the Appendix-C noise/\(P_\text{fail}\)
+                    calculator), was added afterwards and is now the in-repo
+                    source of trust for the security-bit and \(2^{-40}\)
+                    correctness numbers used on the
+                    <a href="params-primer.html">Parameters</a> and
+                    <a href="audit.html">Audit</a> pages
+                    (<code>cargo run -p via-estimator</code>).<sup
+                        ><a href="#fn28" id="ref28">13</a></sup
+                    >
                 </li>
             </ul>
 
@@ -670,6 +685,22 @@ flowchart TD
                 <li id="fn27">
                     via-rs/fuzz/fuzz_targets/{zq,rns,sampling,switching,encryption,gates,conversion,ring,protocol}
                     and fuzz/Cargo.toml target list. <a href="#ref27">↩</a>
+                </li>
+                <li id="fn28">
+                    <a
+                        class="srcref"
+                        href="https://github.com/roynalnaruto/via-rs/blob/6ddafdb/crates/via-estimator/src/main.rs"
+                        target="_blank"
+                        rel="noopener"
+                        title="crates/via-estimator/src/main.rs (tooling pin 6ddafdb)"
+                        >estimator/main.rs</a
+                    >
+                    — the <code>via-estimator</code> crate postdates the audited
+                    commit <code>9575286</code> (so it is absent from the crate
+                    graph above, which is pinned to that commit); per the
+                    workspace source-of-trust rule it is the authoritative
+                    in-repo derivation for every security-bit and
+                    \(2^{-40}\)-correctness figure. <a href="#ref28">↩</a>
                 </li>
             </ol>
         </div>

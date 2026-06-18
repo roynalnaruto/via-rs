@@ -465,6 +465,32 @@ pub mod paper {
     pub type ViaCQ4 = PowerOfTwoModulus<12>;
     /// VIA-C / VIA-B plaintext modulus $p = 16 = 2^4$.
     pub type ViaCP = PowerOfTwoModulus<4>;
+
+    // --- VIA-C ≥120-bit "secure" instantiation (n1=4096, n2=1024) -----------
+    //
+    // Derived to clear ≥120-bit classical security on BOTH exposed lattice
+    // instances (large ring and the ring-switch-key small ring) under TERNARY
+    // keys, while keeping the Appendix-C noise budget ≤ 2^-40 decoded at q4.
+    // Lattice-estimator (malb/lattice-estimator, classical core-SVP, bdd/usvp):
+    // large ring n4096/q1≈2^74.7 → 214.5 bits; small ring n1024/q3≈2^23 → 174.5
+    // bits. See docs/params-concrete.html for the full derivation.
+
+    /// Secure $q_1$ first RNS prime, $173964607489 \approx 2^{37.34}$.
+    /// NTT-friendly for $n_1 = 4096$ ($q \equiv 1 \pmod{2 n_1 = 8192}$).
+    pub type ViaSecQ1P0 = ConstModulus<173964607489>;
+    /// Secure $q_1$ second RNS prime, $173964656641 \approx 2^{37.34}$.
+    /// NTT-friendly for $n_1 = 4096$; product $\approx 2^{74.68}$.
+    pub type ViaSecQ1P1 = ConstModulus<173964656641>;
+    /// Secure $q_2 = 17175674881 \approx 2^{34}$ (reused; $\equiv 1 \pmod{2048}$
+    /// so NTT-friendly for $n_2 = 1024$).
+    pub type ViaSecQ2 = ConstModulus<17175674881>;
+    /// Secure $q_3 = 8380417 \approx 2^{23}$ (reused; $\equiv 1 \pmod{2048}$).
+    pub type ViaSecQ3 = ConstModulus<8380417>;
+    /// Secure $q_4 = 2^{15}$ — enlarged from VIA-C's $2^{12}$ so the final
+    /// $q_3\!\to\!q_4$ mod-switch rounding clears $\Delta/2$ at $n_1 = 4096$.
+    pub type ViaSecQ4 = PowerOfTwoModulus<15>;
+    /// Secure plaintext modulus $p = 16 = 2^4$ (unchanged).
+    pub type ViaSecP = PowerOfTwoModulus<4>;
 }
 
 #[cfg(test)]
